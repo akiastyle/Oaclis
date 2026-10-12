@@ -11,6 +11,9 @@ for tool in cargo python3 ssh ssh-keygen rsync; do
     chmod +x "$test_dir/bin/$tool"
 done
 export HOME="$test_dir/home" PATH="$test_dir/bin:$PATH"
+bash "$test_dir/repo/scripts/install.sh" --unconfigured >/dev/null
+[[ -x "$HOME/.local/bin/oaclis" ]]
+[[ ! -e "$HOME/.config/oaclis/role" ]]
 bash "$test_dir/repo/scripts/install.sh" client >/dev/null
 [[ $(cat "$HOME/.config/oaclis/role") == client ]]
 [[ -x "$HOME/.local/bin/oaclis" ]]

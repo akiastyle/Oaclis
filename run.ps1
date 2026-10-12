@@ -1,4 +1,4 @@
-# Prerequisite checks only. No compilation or application startup.
+# Windows checks; an explicitly selected WSL prepares and installs Oaclis.
 param([switch]$Check, [string]$Distro)
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Su macOS/Linux usare bash run.sh.' }
@@ -46,7 +46,7 @@ if ([string]::IsNullOrWhiteSpace($Distro)) {
 }
 if ($Distro -notin $distros) { throw 'Distribuzione non presente. Scegliere un nome riportato sopra.' }
 if (-not $Check) {
-    $reply = Read-Host "Eseguire i controlli e la preparazione in WSL ($Distro)? [s/N]"
+    $reply = Read-Host "Preparare e installare Oaclis in WSL ($Distro)? [s/N]"
     if ($reply -notin @('s', 'S')) { Write-Host 'Operazione annullata.'; return }
 }
 # Convert the repository path instead of assuming it is in a particular user's home.

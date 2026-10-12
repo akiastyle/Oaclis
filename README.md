@@ -29,7 +29,7 @@ La porta Oaclis resta **23232** in tutte le combinazioni. La sua pubblicazione, 
 
 ## Avvio della preparazione
 
-Dopo aver scaricato la repository, il primo comando da eseguire dipende dall’ambiente. I due script preparano solo i prerequisiti: non compilano, non installano Oaclis, non lo avviano e non modificano rete o SSH. Le installazioni delle dipendenze richiedono una conferma esplicita.
+Dopo aver scaricato la repository, il primo comando da eseguire dipende dall’ambiente. In modalità normale, `run.sh` prepara i prerequisiti e poi compila e installa automaticamente Oaclis in `~/.local/bin/oaclis`, senza un’altra conferma. `run.ps1` richiama lo stesso percorso solo quando si sceglie WSL. Non avviano Oaclis e non modificano rete o SSH; non assegnano un nuovo ruolo master/client. Un ruolo già configurato resta conservato. Le installazioni delle dipendenze richiedono una conferma esplicita.
 
 ### macOS / Linux / WSL / container Docker
 
@@ -39,7 +39,7 @@ Nel terminale del sistema o del container, dalla cartella `Oaclis`:
 bash run.sh
 ```
 
-Per eseguire soltanto i controlli, senza installare nulla:
+Per eseguire soltanto i controlli, senza installazioni, compilazione o scritture nei settings:
 
 ```bash
 bash run.sh --check

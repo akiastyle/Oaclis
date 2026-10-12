@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepare prerequisites only: compilation and application startup are separate steps.
+# Prepare prerequisites, compile and install. Application startup remains separate.
 set -euo pipefail
 case "${1:-}" in ''|--check) ;; *) echo 'Uso: bash run.sh [--check]' >&2; exit 2;; esac
 check_only=${1:-}
@@ -57,7 +57,12 @@ finish() {
         if ! prepare_codex; then echo 'Preparazione Codex non riuscita; Oaclis può proseguire senza Codex.'; fi
     fi
     save_scenario
-    echo 'Prerequisiti Oaclis presenti. Oaclis non è stato compilato o avviato.'
+    if [[ "$check_only" == --check ]]; then
+        echo 'Prerequisiti Oaclis presenti. Oaclis non è stato compilato o avviato.'
+    else
+        bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/install.sh" --unconfigured
+        echo 'Oaclis compilato e installato. Avvio e configurazione master/client restano separati.'
+    fi
 }
 if [[ ${#missing[@]} -eq 0 ]]; then finish; exit 0; fi
 if [[ "$check_only" == --check ]]; then exit 1; fi
@@ -91,5 +96,5 @@ if ! command -v cargo >/dev/null || ! command -v rustc >/dev/null || [[ " ${miss
         sh "$rust_setup" -y --default-toolchain stable
     fi
 fi
-finish
 bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/run.sh" --check
+finish
