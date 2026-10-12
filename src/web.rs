@@ -134,13 +134,19 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     let token = fs::read_to_string("/proc/sys/kernel/random/uuid")?
         .trim()
         .to_owned();
-    let server = Server::http("127.0.0.1:23232").map_err(io::Error::other)?;
+    let server = Server::http("0.0.0.0:23232").map_err(io::Error::other)?;
+    let peers = crate::peers::start(home.clone());
     let job = Arc::new(Mutex::new(json!({"status":"idle"})));
     let connections = Arc::new(Mutex::new(json!({})));
     let analyses = Arc::new(Mutex::new(std::collections::HashSet::<String>::new()));
     println!("Oaclis UI: http://localhost:23232");
     for mut request in server.incoming_requests() {
-        if !trusted(&request) {
+        if request.method() == &Method::Get && request.url() == "/peer/hello" {
+            let packet = crate::peers::hello(&peers);
+            answer(request, if packet.is_null() { 503 } else { 200 }, packet.to_string(), "application/json");
+            continue;
+        }
+        if !request.remote_addr().is_some_and(|address| address.ip().is_loopback()) || !trusted(&request) {
             answer(request, 403, "Host non consentito".into(), "text/plain");
             continue;
         }
@@ -199,6 +205,10 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
         }
         let result = (|| -> io::Result<Value> {
             match (request.method(), url.as_str()) {
+                (&Method::Get, "/api/peers") => Ok(crate::peers::snapshot(&peers)),
+                (&Method::Post, "/api/peers/approve") => crate::peers::approve(&peers, &home, &body(&mut request)?),
+                (&Method::Post, "/api/peers/network") => crate::peers::network(&peers),
+                (&Method::Post, "/api/peers/restore") => crate::peers::restore(&peers, &home),
                 (&Method::Post, "/api/terminal") => {
                     let v = body(&mut request)?;
                     let id = v["device_id"].as_str().ok_or_else(|| invalid("Dispositivo richiesto"))?;
@@ -212,7 +222,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     json!({"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
                 ),
                 (&Method::Get, "/api/status") => Ok(
-                    json!({"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap()}),
+                    json!({"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers)}),
                 ),
                 (&Method::Get, "/api/links") => {
                     environment::database(&config, "", "links-get", None)
@@ -239,6 +249,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         if id == "master" { return Err(invalid("Il dispositivo locale non può essere eliminato")); }
                         let mut ds = devices::load(config.join("devices.json"))?;
                         let device = ds.iter().find(|d| d.id == id).ok_or_else(|| invalid("Dispositivo non trovato"))?.clone();
+                        crate::peers::forget(&peers, &home, id)?;
                         let mut rs = rules::load(config.join("rules.json"))?;
                         rs.retain(|r| r.device_id != id);
                         ds.retain(|d| d.id != id);

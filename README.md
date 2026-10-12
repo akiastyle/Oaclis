@@ -73,6 +73,24 @@ bash scripts/install.sh master
 
 L’installer compila il binario in modalità release, lo installa in `~/.local/bin/oaclis` e crea `~/.config/oaclis/role` solo se non esiste. Non cambia impostazioni, chat o chiavi esistenti. Su una macchina già configurata non basta passare un altro ruolo per cambiarlo.
 
+### Collegamento automatico: percorso da usare dopo l’installazione
+
+Avviare SSH (passaggio 4 sotto), poi Oaclis **su entrambi i dispositivi**:
+
+```bash
+~/.local/bin/oaclis serve
+```
+
+Aprire `http://localhost:23232` su ciascuno e premere **+** nella toolbar: il pannello cerca gli altri Oaclis. Su WSL premere **Configura rete WSL** e accettare la richiesta amministrativa Windows su ciascun computer. Vengono configurati soltanto gli inoltri SSH `2222 → 22`, controllo `23232 → 23232` e le regole firewall Oaclis TCP/UDP limitate alla sottorete locale. Il ponte di discovery Windows parte con Oaclis e termina quando l’app non risponde più; non si aggiungono servizi o attività pianificate.
+
+Quando compare l’altro dispositivo, confrontare il codice mostrato nelle due UI e premere **Il codice coincide · Accetta su entrambe**. Una sola accettazione lascia il collegamento in attesa. Dopo la seconda, Oaclis autorizza le chiavi pubbliche dedicate, salva l’identità host SSH e aggiunge il dispositivo alla mappa; il controllo SSH della mappa verifica poi l’accesso operativo. Le chiavi private restano sul dispositivo che le ha generate. Non vengono copiati chat, file o credenziali durante l’abbinamento.
+
+Gli annunci LAN sono firmati con Ed25519 e scadono; il codice confrontato lega le due identità. Nome e IP rilevati prima della conferma non sono da soli prova dell’identità. L’autorizzazione resta salvata dopo il riavvio. **Rifiuta** nasconde il dispositivo, recuperabile con **Mostra dispositivi rifiutati**. Eliminando un dispositivo abbinato dalla mappa si revoca la pubblica aggiunta da Oaclis, senza toccare altre chiavi o chat.
+
+Discovery: **UDP 23232** mediante broadcast IPv4 nella LAN; HTTP di annuncio: **TCP 23232**, solo `/peer/hello` accessibile dalla rete. UI e API operative restano riservate al loopback e alla sessione locale. In Linux nativo, consentire UDP/TCP 23232 e SSH nel firewall della sola rete prevista. Reti isolate, VLAN e Wi-Fi con isolamento client possono impedire il broadcast; resta l’aggiunta manuale per indirizzo. Questa versione non implementa discovery IPv6.
+
+In WSL NAT, dopo un cambio IP riaprire il pannello e ripetere **Configura rete WSL** con gli IP rilevati al riavvio dell’app. Se Windows nega l’elevazione o il bridge non può essere avviato, usare le verifiche manuali seguenti. In questa versione la configurazione rete WSL usa NAT/portproxy: il percorso mirrored resta manuale.
+
 ### 4. Avviare e verificare SSH — terminale Ubuntu
 
 ```bash
@@ -175,7 +193,7 @@ Dal **PowerShell dell’altro computer**, verificare anche l’accesso LAN, usan
 Test-NetConnection 192.168.1.167 -Port 2222
 ```
 
-Se Windows → WSL funziona ma la porta LAN no, verificare portproxy, `iphlpsvc` e firewall. Non disabilitare globalmente i firewall. Gli IP possono cambiare al riavvio: ripetere il rilevamento e aggiornare mapping/regola. La porta **2222** inoltra SSH verso **22**; **23232** è la porta della UI Oaclis e attualmente resta locale, non va esposta con questa procedura.
+Se Windows → WSL funziona ma la porta LAN no, verificare portproxy, `iphlpsvc` e firewall. Non disabilitare globalmente i firewall. Gli IP possono cambiare al riavvio: ripetere il rilevamento e aggiornare mapping/regola. La porta **2222** inoltra SSH verso **22**; **23232** è la porta Oaclis. Il percorso manuale qui sopra configura soltanto SSH: per la discovery usare **Configura rete WSL** nel pannello **+**, che prepara anche TCP/UDP 23232.
 
 ### 6. Verificare l’identità e autorizzare SSH — terminali Ubuntu
 
@@ -286,7 +304,7 @@ Il ruolo esistente viene conservato anche sul master. La reinstallazione non can
 
 Su KDell sono stati verificati download da GitHub, installazione con Rust/Cargo 1.93.1, ruolo client, avvio in tmux, risposta HTTP, CSS e catalogo delle chat. I controlli e il ripristino del portproxy dopo riavvio sono stati provati durante la configurazione delle due WSL; il firewall va verificato su ciascun Windows.
 
-Questi sono passaggi manuali documentati: l’installer attuale **non configura SSH, portproxy o firewall**. Scoperta LAN, wizard di primo avvio e accettazione reciproca fra due Oaclis restano da implementare. Il ruolo client distingue attualmente il marchio; la UI locale è la stessa. Il percorso completo appena documentato non è stato ripetuto da zero su un nuovo Windows.
+L’installer compila e installa; la rete Windows viene configurata dal pulsante **Configura rete WSL**, con elevazione locale. Il pannello **+** gestisce la discovery e la doppia autorizzazione. I passaggi manuali documentati restano disponibili per diagnosi e configurazioni particolari. Il ruolo client distingue il marchio; la UI locale è la stessa. Il percorso completo non è ancora stato ripetuto da zero su un nuovo Windows.
 
 ## Sviluppo e limiti
 

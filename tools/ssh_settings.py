@@ -101,7 +101,7 @@ def settings(home, config, operation, value):
             return {'ok': True}
         saved.pop(identifier)
     else:
-        saved[identifier] = {'ssh_alias': alias, 'settings': validate(value['settings'])}
+        saved[identifier] = {'ssh_alias': alias, 'settings': validate(value['settings']), 'paired': value.get('paired') is True}
     directory = home / '.ssh'
     if directory.is_symlink():
         raise ValueError('Cartella SSH non regolare')
@@ -116,6 +116,8 @@ def settings(home, config, operation, value):
     for entry in saved.values():
         data = validate(entry['settings'])
         text = f"Host {entry['ssh_alias']}\n  HostName {data['address']}\n  Port {data['port']}\n  User {data['user']}\n  StrictHostKeyChecking yes\n"
+        if entry.get('paired'):
+            text += '  UserKnownHostsFile "' + str(config / 'known_hosts') + '" ~/.ssh/known_hosts\n'
         if data['identity_file']:
             text += f"  IdentityFile \"{data['identity_file']}\"\n  IdentitiesOnly yes\n"
         hosts.append(text)

@@ -5,7 +5,7 @@ case "$role" in client|master) ;; *) echo 'Uso: bash scripts/install.sh [client|
 [[ $(uname -s) == Linux ]] || { echo 'Questo installer supporta Linux e WSL.' >&2; exit 1; }
 source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 export PATH="$HOME/.cargo/bin:$PATH"
-for command in cargo python3 ssh rsync; do
+for command in cargo python3 ssh ssh-keygen rsync; do
     command -v "$command" >/dev/null || { echo "Dipendenza mancante: $command. Consulta README.md." >&2; exit 1; }
 done
 cargo build --release --locked --manifest-path "$source_dir/Cargo.toml"

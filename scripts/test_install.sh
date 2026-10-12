@@ -6,7 +6,7 @@ trap 'rm -rf "$test_dir"' EXIT
 mkdir -p "$test_dir/repo/scripts" "$test_dir/repo/target/release" "$test_dir/home" "$test_dir/bin"
 cp "$repo/scripts/install.sh" "$test_dir/repo/scripts/"
 printf '#!/bin/sh\nexit 0\n' > "$test_dir/repo/target/release/oaclis"
-for tool in cargo python3 ssh rsync; do
+for tool in cargo python3 ssh ssh-keygen rsync; do
     printf '#!/bin/sh\nexit 0\n' > "$test_dir/bin/$tool"
     chmod +x "$test_dir/bin/$tool"
 done

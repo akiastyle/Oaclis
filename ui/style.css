@@ -1068,3 +1068,11 @@ select {
 :root[data-theme="dark"] { --brand-blue: #64b9d0; --brand-cream: #efdbb4; }
 .brand-word { font-family: "OaclisBrand", var(--font-family); font-size: var(--font-wordmark); font-weight: 650; font-stretch: 85%; letter-spacing: -0.045em; line-height: 1; color: var(--brand-blue); }
 .brand-accent { color: var(--brand-cream); }
+
+.discovery-content { display: grid; gap: var(--space-12); }
+.discovery-content small { display: block; font-size: var(--font-small); color: var(--muted); }
+.discovery-peer { padding-block: var(--space-12); border-top: var(--border-width) solid var(--line); }
+.discovery-peer p { font-size: var(--font-small); margin-block: var(--space-8); }
+.pairing-code { display: block; font-size: var(--font-heading); font-variant-numeric: tabular-nums; margin-block: var(--space-16); }
+.discovery-reject, .discovery-manual { margin-top: var(--space-12); }
+.discovery-network { width: 100%; }

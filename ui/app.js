@@ -1232,7 +1232,7 @@ function editDevice(device = {}, anchor = $("#add-device")) {
   });
   panel.querySelector('[name="name"]').focus();
 }
-$("#add-device").onclick = () => editDevice();
+$("#add-device").onclick = () => openDiscovery();
 $("#edit-device").onclick = () => editDevice(data.devices.find(d => d.id === sourceId), $("#edit-device"));
 function formatBytes(bytes) {
   return bytes > 1e6
@@ -1310,6 +1310,7 @@ async function poll() {
   }
   data.connections = next.connections;
   data.job = next.job;
+  if (next.discovery) await updateDiscovery(next.discovery);
   renderConnections();
   renderJob();
 }
@@ -1360,5 +1361,60 @@ guard(async () => {
   chatLinks = data.links || [];
   renderMap();
   renderJob();
+  await updateDiscovery(await api("peers"), true);
   await api("check", {});
 })();
+
+let discovery = { peers: [] };
+const noticedPeers = new Set();
+function openDiscovery() {
+  closeDeviceSettings();
+  let panel = $("#discovery-popover");
+  if (!panel) {
+    panel = document.createElement("div"); panel.id = "discovery-popover";
+    panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Collega dispositivo");
+    panel.innerHTML = '<button class="icon-button popover-close" type="button" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Collega dispositivo</h2><div class="discovery-content" aria-live="polite"></div><button class="discovery-manual" type="button">Aggiungi manualmente</button>';
+    document.body.append(panel); panel.showPopover();
+    panel.querySelector('.popover-close').onclick = () => panel.remove();
+    panel.querySelector('.discovery-manual').onclick = () => { panel.remove(); editDevice(); };
+  }
+  renderDiscovery(); positionContext(panel, $("#add-device"));
+}
+function renderDiscovery() {
+  const panel = $("#discovery-popover"); if (!panel) return;
+  const content = panel.querySelector('.discovery-content');
+  const html = (discovery.wsl ? '<button type="button" class="discovery-network">Configura rete WSL</button><small>Richiede conferma amministrativa di Windows.</small>' : '') +
+    (discovery.error ? '<p class="discovery-error">' + esc(discovery.error) + '</p>' : '') +
+    (discovery.ignored ? '<button type="button" class="discovery-restore">Mostra dispositivi rifiutati</button>' : '') +
+    (discovery.peers.length ? discovery.peers.map(peer => '<section class="discovery-peer"><strong>' + esc(peer.name) + '</strong><small>' + esc(peer.address) + '</small>' +
+      (peer.connected ? '<p>Collegamento autorizzato</p>' : '<p>Confronta questo codice sui due dispositivi.</p><strong class="pairing-code">' + esc(peer.code) + '</strong>' +
+        (peer.accepted ? '<p>In attesa della conferma sull’altro dispositivo.</p>' : '<button type="button" class="primary discovery-accept" data-peer="' + esc(peer.id) + '">Il codice coincide · Accetta</button>') +
+        '<button type="button" class="discovery-reject" data-peer="' + esc(peer.id) + '">Rifiuta</button>') + '</section>').join('') : '<p>Ricerca di Oaclis nella rete…</p>');
+  if (content.dataset.view === html) return;
+  content.innerHTML = html; content.dataset.view = html;
+  content.querySelector('.discovery-network')?.addEventListener('click', guard(async () => {
+    const result = await api('peers/network', {}); notice(result.message);
+  }));
+  content.querySelector('.discovery-restore')?.addEventListener('click', guard(async () => {
+    await api('peers/restore', {}); await updateDiscovery(await api('peers'));
+  }));
+  for (const button of content.querySelectorAll('[data-peer]')) button.onclick = guard(async () => {
+    button.disabled = true;
+    try { await api('peers/approve', { id: button.dataset.peer, accept: button.classList.contains('discovery-accept') }); await updateDiscovery(await api('peers')); }
+    finally { if (button.isConnected) button.disabled = false; }
+  });
+  positionContext(panel, $("#add-device"));
+}
+async function updateDiscovery(next, first = false) {
+  discovery = next;
+  const fresh = next.peers.filter(peer => !noticedPeers.has(peer.id));
+  for (const peer of fresh) noticedPeers.add(peer.id);
+  const newRegistration = next.peers.some(peer => peer.device_id && !data.devices.some(device => device.id === peer.device_id));
+  if (newRegistration) { data = await api('state'); chatLinks = data.links || []; renderMap(); await api('check', {}); }
+  if (fresh.some(peer => !peer.connected)) { notice('Oaclis trovato nella rete'); beep(); }
+  if ((first && !data.devices.length) || fresh.some(peer => !peer.accepted && !peer.connected)) {
+    if (!document.querySelector('.context-popover:popover-open')) openDiscovery();
+  }
+  renderDiscovery();
+}
