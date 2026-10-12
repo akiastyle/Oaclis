@@ -1355,7 +1355,10 @@ setInterval(async () => {
     refreshing = false;
   }
 }, 10000);
-window.onresize = () => renderMap();
+window.onresize = () => {
+  renderMap();
+  for (const panel of document.querySelectorAll('.context-popover:popover-open')) positionContext(panel, panel.opener);
+};
 guard(async () => {
   data = await api("state");
   chatLinks = data.links || [];
@@ -1371,7 +1374,7 @@ function openDiscovery() {
   closeDeviceSettings();
   let panel = $("#discovery-popover");
   if (!panel) {
-    panel = document.createElement("div"); panel.id = "discovery-popover";
+    panel = document.createElement("div"); panel.id = "discovery-popover"; panel.opener = $("#add-device");
     panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Collega dispositivo");
     panel.innerHTML = '<button class="icon-button popover-close" type="button" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Collega dispositivo</h2><div class="discovery-content" aria-live="polite"></div><button class="discovery-manual" type="button">Aggiungi manualmente</button>';
