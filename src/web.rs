@@ -142,6 +142,10 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     println!("Oaclis UI: http://localhost:23232");
     for mut request in server.incoming_requests() {
         if request.method() == &Method::Get && request.url() == "/peer/hello" {
+            if !request.remote_addr().is_some_and(|address| crate::peers::local_address(address.ip())) {
+                answer(request, 403, "Rete locale richiesta".into(), "text/plain");
+                continue;
+            }
             let packet = crate::peers::hello(&peers);
             answer(request, if packet.is_null() { 503 } else { 200 }, packet.to_string(), "application/json");
             continue;

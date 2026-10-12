@@ -16,6 +16,9 @@ pub struct State {
     network: Value,
 }
 pub type Peers = Arc<Mutex<State>>;
+pub(crate) fn local_address(ip: std::net::IpAddr) -> bool {
+    matches!(ip, std::net::IpAddr::V4(ip) if ip.is_private() || ip.is_loopback() || ip.is_link_local())
+}
 
 fn helper(home: &Path, operation: &str, value: &Value) -> io::Result<Value> {
     let mut child = Command::new("python3").args(["-c", include_str!("../tools/pairing.py")])
@@ -90,8 +93,8 @@ pub fn start(home: PathBuf) -> Peers {
                 }
             }
             let mut bytes = [0u8; 8193];
-            if let Ok((size, _)) = socket.recv_from(&mut bytes) {
-                if size > 8192 || budget >= 64 { continue; }
+            if let Ok((size, sender)) = socket.recv_from(&mut bytes) {
+                if !local_address(sender.ip()) || size > 8192 || budget >= 64 { continue; }
                 let Ok(packet) = serde_json::from_slice::<Value>(&bytes[..size]) else { continue; };
                 let Ok(unverified) = serde_json::from_str::<Value>(packet["hello"].as_str().unwrap_or("")) else { continue; };
                 {
