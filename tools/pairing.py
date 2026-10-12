@@ -111,7 +111,7 @@ def prepare(home, config):
     private_address(address)
     return {'id': identifier(key), 'public_key': key, 'name': label(config), 'instance': str(uuid.uuid4()),
             'role': (config / 'role').read_text().strip() if (config / 'role').exists() else 'master',
-            'ssh': {'address': address, 'port': 2222 if wsl else 22,
+            'ssh': {'address': address, 'port': 2222 if wsl and address != linux[0] else 22,
                     'user': __import__('pwd').getpwuid(os.getuid()).pw_name, 'host_key': public_key(host_key)},
             'wsl': wsl, 'wsl_ip': linux[0], 'distro': os.environ.get('WSL_DISTRO_NAME', '')}
 

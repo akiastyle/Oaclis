@@ -5,6 +5,7 @@ import os
 import platform
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -55,7 +56,8 @@ def local_networks():
     if os.environ.get('WSL_DISTRO_NAME') or 'microsoft' in platform.release().lower():
         script = "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch 'vEthernet|Loopback' -and $_.AddressState -eq 'Preferred' -and $_.IPAddress -notlike '169.254.*' } | Select-Object IPAddress,PrefixLength | ConvertTo-Json -Compress"
         try:
-            output = subprocess.run(['powershell.exe', '-NoProfile', '-NonInteractive', '-Command', script], capture_output=True, text=True, timeout=5)
+            executable = shutil.which('powershell.exe') or '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
+            output = subprocess.run([executable, '-NoProfile', '-NonInteractive', '-Command', script], capture_output=True, text=True, timeout=5)
             values = json.loads(output.stdout.lstrip('\ufeff'))
             if isinstance(values, dict):
                 values = [values]

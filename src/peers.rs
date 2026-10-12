@@ -35,6 +35,7 @@ fn powershell(script: &str) -> Command {
 }
 fn bridge(local: &Value) -> io::Result<Option<std::process::Child>> {
     if local["wsl"] != true { return Ok(None); }
+    if local["ssh"]["address"] == local["wsl_ip"] { return Ok(None); }
     let address = local["wsl_ip"].as_str().ok_or_else(|| invalid("Indirizzo WSL assente"))?;
     address.parse::<std::net::Ipv4Addr>().map_err(io::Error::other)?;
     let instance = local["instance"].as_str().unwrap_or("");
@@ -156,6 +157,7 @@ pub fn approve(peers: &Peers, home: &Path, value: &Value) -> io::Result<Value> {
 pub fn network(peers: &Peers) -> io::Result<Value> {
     let state = peers.lock().unwrap();
     if state.local["wsl"] != true { return Err(invalid("Questo comando riguarda WSL")); }
+    if state.local["ssh"]["address"] == state.local["wsl_ip"] { return Err(invalid("WSL con rete condivisa: configurare il firewall senza portproxy, come indicato nel README")); }
     let lan = state.local["ssh"]["address"].as_str().unwrap();
     let wsl = state.local["wsl_ip"].as_str().unwrap();
     lan.parse::<std::net::Ipv4Addr>().map_err(io::Error::other)?;
