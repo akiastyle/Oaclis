@@ -169,3 +169,26 @@ pub fn network(peers: &Peers) -> io::Result<Value> {
     if !output.status.success() { return Err(invalid(String::from_utf8_lossy(&output.stderr))); }
     Ok(json!({"ok":true,"message":"Conferma la richiesta amministrativa di Windows su questo dispositivo"}))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn fixture(local: &str, remote: &str, remote_accepted: bool) -> Peers {
+        let mut state = State::default();
+        state.local = json!({"id":local,"public_key":local});
+        state.approvals = json!({"approved":{remote:{"public_key":remote}},"ignored":[]});
+        state.peers.insert(remote.into(), (json!({"id":remote,"public_key":remote,"name":"Peer","role":"client","ssh":{"address":"192.168.1.1"},"approved":if remote_accepted {vec![local]} else {vec![]}}), Instant::now()));
+        state.committed.insert(remote.into(), json!({}));
+        Arc::new(Mutex::new(state))
+    }
+    #[test]
+    fn both_screens_share_code_and_single_approval_is_pending() {
+        let a = fixture("a", "b", false);
+        let b = fixture("b", "a", true);
+        assert_eq!(snapshot(&a)["peers"][0]["code"], snapshot(&b)["peers"][0]["code"]);
+        assert_eq!(snapshot(&a)["peers"][0]["connected"], false);
+        assert_eq!(snapshot(&b)["peers"][0]["connected"], true);
+        a.lock().unwrap().peers.get_mut("b").unwrap().1 = Instant::now() - Duration::from_secs(21);
+        assert_eq!(snapshot(&a)["peers"], json!([]));
+    }
+}
