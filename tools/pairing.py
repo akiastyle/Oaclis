@@ -208,9 +208,9 @@ def commit(home, config, card, settings, atomic):
     settings(home, config, 'save', dict(device, paired=True, settings=dict(address=ssh['address'], port=ssh['port'], user=ssh['user'], identity_file=str(config / 'pairing_ed25519'))))
     # Commit metadata before granting access, so retries repair an interrupted setup.
     atomic(devices_path, json.dumps(devices))
-    append_unique(directory / 'authorized_keys', card['public_key'] + ' oaclis-peer-' + card['id'], atomic)
     approval['device_id'] = device['id']
     atomic(config / 'pairing.json', json.dumps(saved))
+    append_unique(directory / 'authorized_keys', card['public_key'] + ' oaclis-peer-' + card['id'], atomic)
     return {'device_id': device['id']}
 
 
