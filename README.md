@@ -29,7 +29,7 @@ La porta Oaclis resta **23232** in tutte le combinazioni. La sua pubblicazione, 
 
 ## Avvio della preparazione
 
-Dopo aver scaricato la repository, il primo comando da eseguire dipende dall’ambiente. In modalità normale, `run.sh` prepara i prerequisiti e poi compila e installa automaticamente Oaclis in `~/.local/bin/oaclis`, senza un’altra conferma. `run.ps1` richiama lo stesso percorso solo quando si sceglie WSL. Non avviano Oaclis e non modificano rete o SSH; non assegnano un nuovo ruolo master/client. Un ruolo già configurato resta conservato. Le installazioni delle dipendenze richiedono una conferma esplicita.
+Dopo aver scaricato la repository, il primo comando da eseguire dipende dall’ambiente. In modalità normale, `run.sh` prepara i prerequisiti e poi compila e installa automaticamente Oaclis in `~/.local/bin/oaclis`, senza un’altra conferma. `run.ps1` richiama lo stesso percorso solo quando si sceglie WSL. Non avviano la UI e non modificano rete o autorizzazioni SSH. Dopo l’installazione eseguono `oaclis setup`: cercano il master sulla 23232 e configurano la nuova installazione come client se ne trovano uno. Un ruolo già configurato resta conservato. Le installazioni delle dipendenze richiedono una conferma esplicita.
 
 ### macOS / Linux / WSL / container Docker
 
@@ -71,6 +71,22 @@ Questo passaggio chiede conferma e poi esegue `run.sh` nella distribuzione scelt
 
 Se PowerShell impedisce l’esecuzione dello script, non modificare globalmente la policy: riportare l’errore prima di proseguire.
 
+## Ricerca del master dopo l’installazione
+
+Alla fine di `run.sh`, il binario installato esegue `oaclis setup`. Il master deve essere acceso e Oaclis deve essere avviato sul master. La ricerca usa gli annunci UDP **23232** e interroga `/peer/hello` via TCP **23232** sugli IP della tabella dei vicini. Su Linux usa `ip neigh`, già controllato dai prerequisiti: non serve installare `arp` o `net-tools`. Su macOS usa `arp`; in WSL considera anche i vicini della rete Windows.
+
+Un IP o una porta aperta non bastano: solo una risposta firmata con identità coerente e ruolo `master` è considerata un master Oaclis. Se viene trovato un solo master, lo script salva il ruolo `client` e l’identità/nome/ultimo indirizzo del master in `~/.config/oaclis/settings.json`, con `authorized: false`. Il file `role` viene aggiornato per il runtime. Le altre impostazioni restano conservate.
+
+Se vengono trovati più master, chiede quale scegliere. Se non ne trova, propone di riprovare, configurare esplicitamente questa macchina come master o rimandare. Senza terminale interattivo lascia il ruolo da configurare. Un’installazione nuova non si annuncia automaticamente come master.
+
+Per ripetere soltanto questo passaggio, senza ricompilare:
+
+```bash
+~/.local/bin/oaclis setup
+```
+
+Il rilevamento e il ruolo non autorizzano SSH e non trasferiscono chat: la conferma reciproca del collegamento rimane un passaggio successivo. `--check` non esegue la ricerca né modifica il ruolo. Se la porta UDP 23232 è già occupata da Oaclis, arrestare quell’istanza prima di eseguire `setup`.
+
 ## Settings locali dello scenario
 
 In modalità normale, gli script salvano lo scenario in `settings.json`:
@@ -90,7 +106,7 @@ Sono ammessi `windows`, `macos`, `linux`. Con `run.ps1 -Distro Ubuntu`, Windows 
 
 Per scegliere una cartella diversa usare `OACLIS_SETTINGS_DIR`; nei container la cartella va conservata in un volume persistente. La creazione e il collegamento di quel volume restano da definire nel percorso Docker.
 
-Questo passo salva soltanto lo scenario locale. Il consumo del file da parte di Oaclis e il salvataggio degli IP/dispositivi conosciuti nel nuovo formato non sono ancora implementati. Non vengono salvate password o chiavi private nel file.
+Questo passo salva soltanto lo scenario locale. Il comando `oaclis setup` legge questi settings, ne conserva lo scenario e aggiunge ruolo e ultimo master trovato. Il riuso degli indirizzi degli altri client e l’autorizzazione restano da completare. Non vengono salvate password o chiavi private nel file.
 
 ## Scaricare la repository prima della preparazione
 

@@ -61,7 +61,8 @@ finish() {
         echo 'Prerequisiti Oaclis presenti. Oaclis non è stato compilato o avviato.'
     else
         bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/install.sh" --unconfigured
-        echo 'Oaclis compilato e installato. Avvio e configurazione master/client restano separati.'
+        echo 'Oaclis compilato e installato. Cerco il master nella LAN sulla 23232.'
+        "$HOME/.local/bin/oaclis" setup
     fi
 }
 if [[ ${#missing[@]} -eq 0 ]]; then finish; exit 0; fi

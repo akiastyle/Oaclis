@@ -20,7 +20,7 @@ pub(crate) fn local_address(ip: std::net::IpAddr) -> bool {
     matches!(ip, std::net::IpAddr::V4(ip) if ip.is_private() || ip.is_loopback() || ip.is_link_local())
 }
 
-fn helper(home: &Path, operation: &str, value: &Value) -> io::Result<Value> {
+pub(crate) fn helper(home: &Path, operation: &str, value: &Value) -> io::Result<Value> {
     let mut child = Command::new("python3").args(["-c", include_str!("../tools/pairing.py")])
         .arg(home).arg(home.join(".config/oaclis")).arg(operation)
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
@@ -58,6 +58,7 @@ pub fn start(home: PathBuf) -> Peers {
         let _ = socket.set_broadcast(true);
         let _ = socket.set_read_timeout(Some(Duration::from_millis(250)));
         let mut next_announcement = Instant::now();
+        let mut next_probe = Instant::now();
         let mut budget = 0;
         loop {
             if Instant::now() >= next_announcement {
@@ -65,7 +66,15 @@ pub fn start(home: PathBuf) -> Peers {
                 budget = 0;
                 let result = (|| -> io::Result<Value> {
                     let mut state = shared.lock().unwrap();
-                    if state.local.is_null() { state.local = helper(&home, "prepare", &Value::Null)?; }
+                    if state.local.is_null() || Instant::now() >= next_probe {
+                        let mut local = helper(&home, "prepare", &Value::Null)?;
+                        if !state.local.is_null() { local["instance"] = state.local["instance"].clone(); }
+                        if state.local["wsl_ip"] != local["wsl_ip"] {
+                            if let Some(mut bridge) = state.bridge.take() { let _ = bridge.kill(); }
+                        }
+                        state.local = local;
+                        next_probe = Instant::now() + Duration::from_secs(30);
+                    }
                     if state.bridge.as_mut().is_some_and(|child| child.try_wait().ok().flatten().is_some()) { state.bridge = None; }
                     if state.bridge.is_none() { state.bridge = bridge(&state.local)?; }
                     state.approvals = helper(&home, "state", &Value::Null)?;
@@ -88,7 +97,13 @@ pub fn start(home: PathBuf) -> Peers {
                     Ok(packet)
                 })();
                 match result {
-                    Ok(packet) => { let _ = socket.send_to(&serde_json::to_vec(&packet).unwrap(), "255.255.255.255:23232"); }
+                    Ok(packet) => {
+                        let bytes = serde_json::to_vec(&packet).unwrap();
+                        let targets = shared.lock().unwrap().local["broadcasts"].clone();
+                        for address in targets.as_array().into_iter().flatten().filter_map(Value::as_str) {
+                            let _ = socket.send_to(&bytes, format!("{address}:23232"));
+                        }
+                    }
                     Err(error) => { shared.lock().unwrap().error = Some(error.to_string()); }
                 }
             }
@@ -124,6 +139,7 @@ pub fn snapshot(peers: &Peers) -> Value {
             let id = card["id"].as_str().unwrap();
             json!({"id":id,"name":card["name"],"role":card["role"],"address":card["ssh"]["address"],
                 "code":format!("{} {} {}", &digest[..4], &digest[4..8], &digest[8..12]),
+                "ssh_ready":card["ssh"]["host_key"].is_string(),
                 "accepted":state.approvals["approved"][id]["public_key"] == card["public_key"],
                 "remote_accepted":card["approved"].as_array().unwrap().contains(&state.local["id"]),
                 "device_id":state.approvals["approved"][id]["device_id"],
@@ -131,7 +147,7 @@ pub fn snapshot(peers: &Peers) -> Value {
                     && state.approvals["approved"][id]["public_key"] == card["public_key"]
                     && card["approved"].as_array().unwrap().contains(&state.local["id"])})
         }).collect();
-    json!({"local_id":state.local["id"],"wsl":state.local["wsl"],"peers":list,"error":state.error,"network":state.network,"ignored":state.approvals["ignored"].as_array().map_or(0, Vec::len)})
+    json!({"local_id":state.local["id"],"wsl":state.local["wsl"],"setup_needed":state.local["setup_needed"],"setup_kind":state.local["setup_kind"],"port":23232,"peers":list,"error":state.error,"network":state.network,"ignored":state.approvals["ignored"].as_array().map_or(0, Vec::len)})
 }
 pub fn forget(peers: &Peers, home: &Path, id: &str) -> io::Result<()> {
     let mut state = peers.lock().unwrap();

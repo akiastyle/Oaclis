@@ -46,3 +46,5 @@ fn check_unchanged(file: &File, before: &Metadata) -> io::Result<()> {
 }
 
 pub mod peers;
+
+pub mod setup;

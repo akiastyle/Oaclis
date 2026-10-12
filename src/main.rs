@@ -15,6 +15,10 @@ use std::path::Path;
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args_os().skip(1).collect();
     match args.as_slice() {
+        [command] if command == "setup" => {
+            let home = env::var_os("HOME").ok_or("HOME non definita")?;
+            oaclis::setup::configure(Path::new(&home))?;
+        }
         [command] if command == "serve" => {
             let home = env::var_os("HOME").ok_or("HOME non definita")?;
             oaclis::web::serve(home.into())?;
@@ -135,7 +139,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             println!("{}", mapping.map(Path::new(path))?.display());
         }
         [] => println!(
-            "Oaclis\nserve (UI locale sulla porta 23232)\ninspect CHAT\ncompare-chat ORIGINE DESTINAZIONE\ncompare-file ORIGINE DESTINAZIONE\nmap-path CARTELLA_ORIGINE CARTELLA_DESTINAZIONE PERCORSO\ndevice-set CONFIG ID NOME ALIAS_SSH\ndevice-list CONFIG\nsend-file CONFIG ID ORIGINE DESTINAZIONE\nsync-file CONFIG ID LOCALE REMOTO CHECKPOINT\nsync-chat CONFIG ID LOCALE REMOTO CHECKPOINT\nrule-set REGOLE DEFINIZIONE_JSON\nrule-list REGOLE\nrule-run DISPOSITIVI REGOLE ID STATO"
+            "Oaclis\nsetup (ricerca master e configurazione ruolo)\nserve (UI locale sulla porta 23232)\ninspect CHAT\ncompare-chat ORIGINE DESTINAZIONE\ncompare-file ORIGINE DESTINAZIONE\nmap-path CARTELLA_ORIGINE CARTELLA_DESTINAZIONE PERCORSO\ndevice-set CONFIG ID NOME ALIAS_SSH\ndevice-list CONFIG\nsend-file CONFIG ID ORIGINE DESTINAZIONE\nsync-file CONFIG ID LOCALE REMOTO CHECKPOINT\nsync-chat CONFIG ID LOCALE REMOTO CHECKPOINT\nrule-set REGOLE DEFINIZIONE_JSON\nrule-list REGOLE\nrule-run DISPOSITIVI REGOLE ID STATO"
         ),
         _ => return Err("Comando non valido; eseguire oaclis senza argomenti per l'elenco".into()),
     }

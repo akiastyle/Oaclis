@@ -24,16 +24,24 @@ class BootstrapTests(unittest.TestCase):
             (folder / 'sed').symlink_to('/usr/bin/sed')
             (folder / 'bash').symlink_to('/bin/bash')
             (folder / 'dirname').symlink_to('/usr/bin/dirname')
+            (folder / 'mkdir').symlink_to('/bin/mkdir')
+            (folder / 'chmod').symlink_to('/bin/chmod')
+            (folder / 'home').mkdir()
             repo = folder / 'repo'
             (repo / 'scripts').mkdir(parents=True)
             shutil.copy(ROOT / 'run.sh', repo / 'run.sh')
             shutil.copy(ROOT / 'scripts/prepare_codex.sh', repo / 'scripts/prepare_codex.sh')
-            (repo / 'scripts/install.sh').write_text('#!/bin/sh\necho "install $*" >> "$OACLIS_TEST_LOG"\n')
-            env = dict(os.environ, PATH=str(folder), OACLIS_TEST_LOG=str(folder/'mutations'))
+            (repo / 'scripts/install.sh').write_text('''#!/bin/sh
+echo "install $*" >> "$OACLIS_TEST_LOG"
+mkdir -p "$HOME/.local/bin"
+printf '#!/bin/sh\necho setup >> "$OACLIS_TEST_LOG"\n' > "$HOME/.local/bin/oaclis"
+chmod +x "$HOME/.local/bin/oaclis"
+''')
+            env = dict(os.environ, HOME=str(folder/'home'), PATH=str(folder), OACLIS_TEST_LOG=str(folder/'mutations'))
             arguments = [] if normal else ['--check']
             result = subprocess.run(['/bin/bash', str(repo/'run.sh'), *arguments], env=env, capture_output=True, text=True)
             if normal:
-                self.assertEqual((folder/'mutations').read_text(), 'install --unconfigured\n')
+                self.assertEqual((folder/'mutations').read_text(), 'install --unconfigured\nsetup\n')
             else:
                 self.assertFalse((folder/'mutations').exists())
             return result

@@ -51,7 +51,7 @@ def validate(card):
         raise ValueError('Identità non valida')
     if not isinstance(card['name'], str) or not card['name'].strip() or len(card['name']) > 160 or any(ord(c) < 32 for c in card['name']):
         raise ValueError('Nome non valido')
-    if card['role'] not in ('master', 'client'):
+    if card['role'] not in ('master', 'client', 'unconfigured'):
         raise ValueError('Ruolo non valido')
     ssh = card['ssh']
     private_address(ssh['address'])
@@ -59,7 +59,8 @@ def validate(card):
         raise ValueError('Porta non valida')
     if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}', ssh['user']):
         raise ValueError('Utente non valido')
-    public_key(ssh['host_key'])
+    if ssh['host_key'] is not None:
+        public_key(ssh['host_key'])
     approved = card['approved']
     if not isinstance(approved, list) or len(approved) > 64 or any(not isinstance(i, str) or not re.fullmatch('[a-f0-9]{32}', i) for i in approved):
         raise ValueError('Approvazioni non valide')
@@ -95,25 +96,73 @@ def label(config):
     return socket.gethostname()
 
 
+def network_interfaces():
+    """Active IPv4 interfaces, excluding loopback even when its scope is global."""
+    if platform.system() == 'Linux':
+        interfaces = json.loads(run(['ip', '-j', '-4', 'addr', 'show', 'up']).decode())
+        try:
+            routes = json.loads(run(['ip', '-j', '-4', 'route', 'show', 'default']).decode())
+            default = routes[0]['dev'] if routes else None
+        except (ValueError, KeyError, OSError):
+            default = None
+        result = []
+        for interface in interfaces:
+            if 'LOOPBACK' in interface.get('flags', []) or interface.get('operstate') == 'DOWN':
+                continue
+            for address in interface.get('addr_info', []):
+                if address.get('scope') != 'global':
+                    continue
+                ip = ipaddress.IPv4Address(address['local'])
+                if ip.is_loopback or ip.is_unspecified:
+                    continue
+                result.append(dict(name=interface['ifname'], address=str(ip),
+                                   prefix=address['prefixlen'], broadcast=address.get('broadcast')))
+        return sorted(result, key=lambda nic: nic['name'] != default)
+    if platform.system() == 'Darwin':
+        text = run(['ifconfig', '-a']).decode()
+        result = []
+        for block in re.split(r'(?m)(?=^[A-Za-z0-9]+:)', text):
+            name = block.partition(':')[0]
+            if not name or 'LOOPBACK' in block or 'status: inactive' in block:
+                continue
+            for address, mask in re.findall(r'\binet (\d+\.\d+\.\d+\.\d+) netmask (0x[0-9a-fA-F]+|[0-9.]+)', block):
+                dotted = str(ipaddress.IPv4Address(int(mask, 16))) if mask.startswith('0x') else mask
+                network = ipaddress.IPv4Network(f'{address}/{dotted}', strict=False)
+                result.append(dict(name=name, address=address, prefix=network.prefixlen, broadcast=str(network.broadcast_address)))
+        return result
+    raise ValueError('Rilevamento rete non disponibile su questo sistema: usare un runtime Linux o macOS')
+
+
+def windows_network(virtual_ip):
+    executable = shutil.which('powershell.exe') or '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
+    script = r"""$ErrorActionPreference='Stop'; $nic=Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.InterfaceAlias -notmatch 'vEthernet' } | Select-Object -First 1; $address=$nic.IPv4Address.IPAddress; $listeners=@(Get-NetTCPConnection -LocalPort 23232 -State Listen -ErrorAction SilentlyContinue); $udp=Get-NetFirewallRule -Name 'Oaclis-LAN-Discovery' -ErrorAction SilentlyContinue; $proxy=netsh interface portproxy show v4tov4; $mapping=$proxy | Where-Object { $_ -match ('^\s*'+[regex]::Escape($address)+'\s+23232\s+__VIRTUAL_IP__\s+23232\s*$') }; @{address=$address; ready=($mapping -and $listeners.Count -gt 0 -and $udp -and $udp.Enabled -eq 'True')} | ConvertTo-Json -Compress"""
+    script = script.replace('__VIRTUAL_IP__', re.escape(virtual_ip))
+    value = json.loads(run([executable, '-NoProfile', '-NonInteractive', '-Command', script]).decode('utf-8-sig'))
+    return value['address'], bool(value['ready'])
+
+
 def prepare(home, config):
     _, key = identity(config)
-    host_key = ' '.join(Path('/etc/ssh/ssh_host_ed25519_key.pub').read_text().split()[:2])
-    wsl = bool(os.environ.get('WSL_DISTRO_NAME')) or 'microsoft' in platform.release().lower()
-    addresses = json.loads(run(['ip', '-j', '-4', 'addr', 'show', 'up']).decode())
-    linux = [a['local'] for nic in addresses for a in nic.get('addr_info', []) if a.get('scope') == 'global']
-    if not linux:
-        raise ValueError('Nessuna rete IPv4 disponibile')
-    address = linux[0]
+    host_path = Path('/etc/ssh/ssh_host_ed25519_key.pub')
+    host_key = ' '.join(host_path.read_text().split()[:2]) if host_path.exists() else None
+    wsl = platform.system() == 'Linux' and (bool(os.environ.get('WSL_DISTRO_NAME')) or 'microsoft' in platform.release().lower())
+    interfaces = network_interfaces()
+    if not interfaces:
+        raise ValueError('Nessuna interfaccia IPv4 attiva: collegare il dispositivo alla rete')
+    primary = interfaces[0]['address']
+    address = primary
+    needs_setup = False
     if wsl:
-        script = "Get-NetIPConfiguration | Where-Object { $_.IPv4DefaultGateway -and $_.InterfaceAlias -notmatch 'vEthernet' } | ForEach-Object { $_.IPv4Address.IPAddress } | Select-Object -First 1"
-        executable = shutil.which('powershell.exe') or '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
-        address = run([executable, '-NoProfile', '-NonInteractive', '-Command', script]).decode('utf-8-sig').strip()
+        address, ready = windows_network(primary)
+        needs_setup = address != primary and not ready
     private_address(address)
     return {'id': identifier(key), 'public_key': key, 'name': label(config), 'instance': str(uuid.uuid4()),
-            'role': (config / 'role').read_text().strip() if (config / 'role').exists() else 'master',
-            'ssh': {'address': address, 'port': 2222 if wsl and address != linux[0] else 22,
-                    'user': __import__('pwd').getpwuid(os.getuid()).pw_name, 'host_key': public_key(host_key)},
-            'wsl': wsl, 'wsl_ip': linux[0], 'distro': os.environ.get('WSL_DISTRO_NAME', '')}
+            'role': (config / 'role').read_text().strip() if (config / 'role').exists() else 'unconfigured',
+            'ssh': {'address': address, 'port': 2222 if wsl and address != primary else 22,
+                    'user': __import__('pwd').getpwuid(os.getuid()).pw_name, 'host_key': public_key(host_key) if host_key else None},
+            'broadcasts': [nic['broadcast'] for nic in interfaces if nic['broadcast']],
+            'setup_needed': needs_setup, 'setup_kind': 'wsl-nat' if wsl and address != primary else None,
+            'wsl': wsl, 'wsl_ip': primary, 'distro': os.environ.get('WSL_DISTRO_NAME', '')}
 
 
 def sign(config, card):
@@ -123,6 +172,29 @@ def sign(config, card):
     message = json.dumps(card, sort_keys=True, separators=(',', ':'))
     signature = run(['ssh-keygen', '-Y', 'sign', '-f', str(key), '-n', 'oaclis-lan'], input=message.encode()).decode()
     return {'hello': message, 'signature': signature}
+
+
+def neighbors():
+    if platform.system() == 'Darwin':
+        addresses = re.findall(r'\(([0-9.]+)\)', run(['arp', '-an']).decode())
+    elif platform.system() == 'Linux':
+        values = json.loads(run(['ip', '-j', '-4', 'neigh', 'show']).decode())
+        addresses = [v['dst'] for v in values if v.get('lladdr') and not any(s in ('FAILED', 'INCOMPLETE') for s in v.get('state', []))]
+        if os.environ.get('WSL_DISTRO_NAME') or 'microsoft' in platform.release().lower():
+            executable = shutil.which('powershell.exe') or '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe'
+            script = "Get-NetNeighbor -AddressFamily IPv4 | Where-Object { $_.State -in 'Reachable','Stale','Delay','Probe','Permanent' } | ForEach-Object { $_.IPAddress }"
+            addresses.extend(run([executable, '-NoProfile', '-NonInteractive', '-Command', script]).decode('utf-8-sig').split())
+    else:
+        raise ValueError('Tabella dei vicini non disponibile su questo sistema')
+    result = []
+    for address in addresses:
+        try:
+            address = private_address(address)
+            if not ipaddress.IPv4Address(address).is_loopback and address not in result:
+                result.append(address)
+        except ValueError:
+            pass
+    return result[:32]
 
 
 def verify(packet):
@@ -191,6 +263,8 @@ def commit(home, config, card, settings, atomic):
     directory.mkdir(mode=0o700, exist_ok=True)
     known = config / 'known_hosts'
     ssh = card['ssh']
+    if not ssh['host_key']:
+        raise ValueError('SSH non pronto su ' + card['name'] + ': attivare il server SSH')
     endpoint = ssh['address'] if ssh['port'] == 22 else f"[{ssh['address']}]:{ssh['port']}"
     if known.exists():
         found = subprocess.run(['ssh-keygen', '-F', endpoint, '-f', str(known)], capture_output=True, text=True, timeout=3)
@@ -220,6 +294,7 @@ def request(home, config, operation, value, source):
     with open(config / 'pairing.lock', 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if operation == 'prepare': return prepare(home, config)
+        if operation == 'neighbors': return neighbors()
         if operation == 'sign': return sign(config, value)
         if operation == 'verify': return verify(value)
         if operation == 'state': return state(config)
