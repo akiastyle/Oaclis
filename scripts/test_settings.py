@@ -19,6 +19,9 @@ class SettingsTests(unittest.TestCase):
             modified = path.stat().st_mtime_ns
             save(folder, environment)
             self.assertEqual(path.stat().st_mtime_ns, modified)
+            save(folder, environment, {'codex': {'detected': False, 'path': None}})
+            save(folder, environment, {'codex': {'detected': True, 'path': '/example/codex'}})
+            self.assertTrue(json.loads(path.read_text())['tools']['codex']['detected'])
 
     def test_unknown_container_host_and_bad_file(self):
         with tempfile.TemporaryDirectory() as temporary:

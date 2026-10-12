@@ -3,10 +3,11 @@ import json
 import os
 from pathlib import Path
 import sys
+import shutil
 import tempfile
 
 
-def save(directory, environment):
+def save(directory, environment, tools=None):
     if environment['os'] not in ('linux', 'macos', 'windows') or environment['host_os'] not in (None, 'linux', 'macos', 'windows'):
         raise ValueError('Sistema non valido')
     if directory.is_symlink():
@@ -27,6 +28,11 @@ def save(directory, environment):
     saved.setdefault('schema_version', 1)
     saved.setdefault('control_port', 23232)
     saved['environment'] = environment
+    if tools is not None:
+        existing_tools = saved.get('tools', {})
+        if not isinstance(existing_tools, dict):
+            raise ValueError('Impostazioni tools non valide: file conservato')
+        saved['tools'] = dict(existing_tools, **tools)
     if saved == previous:
         return path
     fd, temporary = tempfile.mkstemp(prefix='.settings-', dir=directory)
@@ -50,7 +56,8 @@ if __name__ == '__main__':
                            runtime='container' if container else 'wsl' if kernel else 'native',
                            wsl_distribution=os.environ.get('OACLIS_WSL_DISTRO') or os.environ.get('WSL_DISTRO_NAME') or None)
         directory = Path(os.environ.get('OACLIS_SETTINGS_DIR') or str(Path.home() / '.config/oaclis'))
-        print('Settings:', save(directory, environment))
+        tools = {name: {'detected': bool(shutil.which(name)), 'path': shutil.which(name)} for name in ('node', 'npm', 'codex')}
+        print('Settings:', save(directory, environment, tools))
     except (OSError, ValueError, TypeError, KeyError) as error:
         print('Settings non salvati: ' + str(error), file=sys.stderr)
         sys.exit(1)

@@ -45,7 +45,7 @@ Per eseguire soltanto i controlli, senza installare nulla:
 bash run.sh --check
 ```
 
-Il controllo distingue Linux/macOS, segnala container e kernel WSL, verifica gli strumenti presenti e Rust. Le installazioni automatiche sono disponibili su Ubuntu/Debian con apt e su macOS con Homebrew già presente; gli strumenti Apple mancanti vengono segnalati. Non installa Codex né lo autentica. `--check` termina con codice 1 se mancano prerequisiti.
+Il controllo distingue Linux/macOS, segnala container e kernel WSL, verifica gli strumenti presenti e Rust. Le installazioni automatiche sono disponibili su Ubuntu/Debian con apt e su macOS con Homebrew già presente; gli strumenti Apple mancanti vengono segnalati. Se Codex non è rilevato, propone un’installazione opzionale di Codex 0.162.0. Verifica Node.js e npm; se mancanti o Node è incompatibile, propone Node.js 22/npm tramite NVM nella home, mostrando anche la modifica della configurazione shell. Ogni installazione richiede conferma. Il rifiuto o un errore nella preparazione di Codex non blocca Oaclis. Non esegue autenticazione né modifica llama.cpp. `--check` termina con codice 1 se mancano prerequisiti.
 
 ### Windows — PowerShell
 
@@ -78,7 +78,7 @@ In modalità normale, gli script salvano lo scenario in `settings.json`:
 - Linux, macOS, WSL e container Linux: `~/.config/oaclis/settings.json`.
 - Launcher Windows: `%LOCALAPPDATA%\Oaclis\settings.json`.
 
-Il file registra versione del formato, sistema rilevato, sistema ospitante quando noto, ambiente nativo/WSL/container, kernel WSL, eventuale distribuzione WSL e porta di controllo **23232**. Conserva le altre impostazioni già presenti. `--check` e `-Check` restano senza scritture.
+Il file registra anche disponibilità nel PATH e percorsi di Node.js, npm e Codex, senza credenziali. Per l’installazione npm viene usato il metodo indicato nella [documentazione ufficiale Codex](https://learn.chatgpt.com/docs/codex/cli). Il file registra versione del formato, sistema rilevato, sistema ospitante quando noto, ambiente nativo/WSL/container, kernel WSL, eventuale distribuzione WSL e porta di controllo **23232**. Conserva le altre impostazioni già presenti. `--check` e `-Check` restano senza scritture.
 
 `run.sh` salva dopo che Python 3 è disponibile. Da un container il sistema ospitante può essere sconosciuto: viene salvato come `null`, non indovinato. Se noto, dichiararlo prima dell'esecuzione, per esempio:
 
@@ -193,7 +193,7 @@ rustc --version
 
 Su KDell è stata verificata anche l’alternativa `sudo apt install -y cargo build-essential`, con Rust/Cargo 1.93.1 dai repository Ubuntu. Su release Ubuntu precedenti i pacchetti possono essere troppo vecchi: preferire rustup. Servono edition 2024 e compatibilità con le dipendenze bloccate in `Cargo.lock`.
 
-Codex deve essere già installato e autenticato sul dispositivo; non copiare le credenziali da un altro computer. Per le console delle chat verificare:
+Per aprire le chat, Codex deve essere installato e autenticato sul dispositivo; `run.sh` può proporne l’installazione, mentre il login resta manuale; non copiare le credenziali da un altro computer. Per le console delle chat verificare:
 
 ```bash
 command -v codex

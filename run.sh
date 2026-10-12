@@ -5,7 +5,14 @@ case "${1:-}" in ''|--check) ;; *) echo 'Uso: bash run.sh [--check]' >&2; exit 2
 check_only=${1:-}
 system=$(uname -s)
 case "$system" in Linux|Darwin) ;; *) echo 'Usare run.ps1 su Windows nativo.' >&2; exit 1;; esac
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+# Reuse an existing Node installation before declaring Codex absent.
+if ! command -v codex >/dev/null && [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
+    export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+    set +u
+    if ! source "$NVM_DIR/nvm.sh"; then echo 'NVM esistente non caricato; continuo con i comandi nel PATH.'; fi
+    set -u
+fi
 container=no; wsl=no
 if [[ -f /.dockerenv || -f /run/.containerenv ]] || { [[ -r /proc/1/cgroup ]] && grep -Eq 'docker|containerd|kubepods|podman' /proc/1/cgroup; }; then container=yes; fi
 if [[ "$system" == Linux ]] && { [[ -n ${WSL_DISTRO_NAME:-} ]] || [[ $(uname -r) == *[Mm]icrosoft* ]]; }; then wsl=yes; fi
@@ -39,8 +46,20 @@ if command -v rustc >/dev/null; then
     if [[ ! "$major" =~ ^[0-9]+$ || ! "$minor" =~ ^[0-9]+$ ]]; then echo 'Versione Rust non riconosciuta.' >&2; exit 1; fi
     if (( major < 1 || (major == 1 && minor < 85) )); then echo '[Da aggiornare] Rust: edition 2024 richiede almeno 1.85; usare stable per Cargo.lock.'; missing+=(rustc); fi
 fi
-if command -v codex >/dev/null; then echo '[OK] codex'; else echo '[Nota] Codex assente: necessario per usare le chat, non per compilare Oaclis.'; fi
-if [[ ${#missing[@]} -eq 0 ]]; then save_scenario; echo 'Prerequisiti presenti. Oaclis non è stato compilato o avviato.'; exit 0; fi
+for tool in node npm codex; do
+    if command -v "$tool" >/dev/null; then printf '[OK] %s\n' "$tool";
+    else printf '[Opzionale, non rilevato] %s\n' "$tool"; fi
+done
+confirm() { local reply; read -r -p "$1 [s/N] " reply; [[ "$reply" == s || "$reply" == S ]]; }
+finish() {
+    if [[ "$check_only" != --check ]]; then
+        source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/prepare_codex.sh"
+        if ! prepare_codex; then echo 'Preparazione Codex non riuscita; Oaclis può proseguire senza Codex.'; fi
+    fi
+    save_scenario
+    echo 'Prerequisiti Oaclis presenti. Oaclis non è stato compilato o avviato.'
+}
+if [[ ${#missing[@]} -eq 0 ]]; then finish; exit 0; fi
 if [[ "$check_only" == --check ]]; then exit 1; fi
 save_scenario
 if [[ ! -t 0 ]]; then echo 'Per installare serve un terminale interattivo. Nessuna modifica eseguita.' >&2; exit 1; fi
@@ -48,7 +67,6 @@ if [[ "$system" == Darwin ]] && { ! command -v cc >/dev/null || ! xcode-select -
     echo 'Installare prima gli strumenti Apple con: xcode-select --install'
     exit 1
 fi
-confirm() { local reply; read -r -p "$1 [s/N] " reply; [[ "$reply" == s || "$reply" == S ]]; }
 if [[ ${#packages[@]} -gt 0 ]]; then
     printf 'Pacchetti mancanti: %s\n' "${packages[*]}"
     if ! confirm 'Installare questi pacchetti?'; then echo 'Installazione annullata.'; exit 1; fi
@@ -73,5 +91,5 @@ if ! command -v cargo >/dev/null || ! command -v rustc >/dev/null || [[ " ${miss
         sh "$rust_setup" -y --default-toolchain stable
     fi
 fi
-save_scenario
+finish
 bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/run.sh" --check
