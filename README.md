@@ -2,6 +2,22 @@
 
 Applicazione Rust per gestire copie e sincronizzazioni di chat Codex, cartelle e ambiente tramite SSH e rsync. Git distribuisce il programma; non trasporta le chat.
 
+## Primo passaggio: installare Git
+
+Nel terminale Ubuntu/Debian, nella WSL Ubuntu o nel container Docker basato su Ubuntu/Debian, prima di scaricare Oaclis:
+
+```bash
+sudo apt update
+sudo apt install -y git
+```
+
+Se sei già **root**, esegui gli stessi comandi senza `sudo`:
+
+```bash
+apt update
+apt install -y git
+```
+
 ## Installazione e prima configurazione: Ubuntu / WSL
 
 Eseguire i passaggi sulla macchina da aggiungere. I blocchi indicano il terminale da usare. In Ubuntu, se si è già root, `sudo` si può omettere. Usare lo stesso utente con cui si vogliono gestire le chat Codex: ogni utente ha un archivio distinto in `~/.codex`.
