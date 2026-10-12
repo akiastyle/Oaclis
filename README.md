@@ -2,6 +2,100 @@
 
 Applicazione Rust per gestire copie e sincronizzazioni di chat Codex, cartelle e ambiente tramite SSH e rsync. Git distribuisce il programma; non trasporta le chat.
 
+## Combinazioni di sistema e ambiente
+
+Prima di procedere, scegliere dove verrà eseguito Oaclis: sul sistema direttamente, nella WSL oppure dentro un container. La presenza di Docker sul computer non implica che Oaclis debba essere installato in Docker.
+
+| Sistema del computer | Ambiente scelto per Oaclis | Dove eseguire la preparazione | Script | Gestione del collegamento sulla 23232 |
+| --- | --- | --- | --- | --- |
+| Linux, compreso Jetson | Linux nativo | Terminale Linux | `bash run.sh` | Interfacce e firewall del dispositivo. |
+| Linux | Container Linux con Docker Engine | Terminale dentro il container | `bash run.sh` | Configurare la rete del container; la rete host è un'opzione da verificare. |
+| Linux | Container Linux con Docker Desktop o Docker in una VM | Terminale dentro il container | `bash run.sh` | Considerare anche la rete della VM; non assumere la stessa configurazione di Docker Engine diretto. |
+| macOS | macOS nativo | Terminale macOS | `bash run.sh` | Interfacce e firewall di macOS; collaudo su Mac ancora da fare. |
+| macOS | Container Linux con Docker Desktop o Docker in una VM | Terminale dentro il container | `bash run.sh` | Gestire il percorso container → VM → rete del Mac; procedura LAN ancora da definire. |
+| Windows | Windows nativo | PowerShell | `.\run.ps1 -Check` | Solo controlli: esecuzione nativa di Oaclis non ancora supportata. |
+| Windows | Distribuzione Linux in WSL | Terminale WSL, oppure PowerShell con distribuzione scelta esplicitamente | `bash run.sh`, oppure `.\run.ps1 -Distro Ubuntu` | Rilevare la modalità di rete WSL; NAT e rete condivisa richiedono verifiche diverse. |
+| Windows | Container Linux con Docker Desktop | Terminale dentro il container | `bash run.sh` | Gestire rete Docker e sistema ospitante; procedura LAN e avvio guidato da PowerShell ancora da definire. |
+| Windows | Container Linux con Docker Engine dentro WSL | Terminale dentro il container | `bash run.sh` | Considerare entrambi i livelli: rete del container e rete WSL. Non basta preparare soltanto WSL. |
+| Windows | Container Windows | PowerShell nel container | Nessun percorso funzionante attuale | Non supportato: non trattarlo come un container Linux. |
+
+### Cosa cambia quando si sceglie Docker
+
+Su Windows, Linux e macOS, il container Linux ha i propri strumenti, utente e cartelle: Git e i prerequisiti devono essere disponibili **dentro il container**, anche se sono già installati sul computer. Scaricare o rendere disponibile la repository nel container, poi eseguire lì `run.sh`. Il gestore dei pacchetti dipende dalla distribuzione del container, non dal sistema del computer: i comandi `apt` valgono solo per Ubuntu/Debian e derivate. Lo script attuale installa automaticamente solo su queste distribuzioni Linux.
+
+Il percorso Docker dovrà inoltre verificare che Docker sia installato e attivo sull'host, predisporre l'accesso al container e scegliere volumi persistenti per configurazioni, chat e progetti. Queste operazioni **non sono ancora gestite dai due script**: `run.ps1` controlla soltanto la presenza del comando Docker, mentre `run.sh` segnala il container.
+
+La porta Oaclis resta **23232** in tutte le combinazioni. La sua pubblicazione, l'accessibilità dalla LAN e il passaggio degli annunci di discovery sono verifiche distinte: pubblicare la porta non dimostra che il broadcast raggiunga gli altri dispositivi. La configurazione Docker non è ancora implementata o collaudata; non assumere che una soluzione provata su Docker Engine Linux funzioni anche su Docker Desktop Windows/macOS.
+
+## Avvio della preparazione
+
+Dopo aver scaricato la repository, il primo comando da eseguire dipende dall’ambiente. I due script preparano solo i prerequisiti: non compilano, non installano Oaclis, non lo avviano e non modificano rete o SSH. Le installazioni delle dipendenze richiedono una conferma esplicita.
+
+### macOS / Linux / WSL / container Docker
+
+Nel terminale del sistema o del container, dalla cartella `Oaclis`:
+
+```bash
+bash run.sh
+```
+
+Per eseguire soltanto i controlli, senza installare nulla:
+
+```bash
+bash run.sh --check
+```
+
+Il controllo distingue Linux/macOS, segnala container e kernel WSL, verifica gli strumenti presenti e Rust. Le installazioni automatiche sono disponibili su Ubuntu/Debian con apt e su macOS con Homebrew già presente; gli strumenti Apple mancanti vengono segnalati. Non installa Codex né lo autentica. `--check` termina con codice 1 se mancano prerequisiti.
+
+### Windows — PowerShell
+
+Dalla cartella `Oaclis`:
+
+```powershell
+.\run.ps1 -Check
+```
+
+Lo script controlla gli strumenti Windows e mostra le distribuzioni WSL disponibili. **Windows nativo non è ancora supportato dal programma**: non viene presentato come un’installazione funzionante.
+
+Solo se si sceglie di usare una distribuzione WSL già installata, indicarla esplicitamente:
+
+```powershell
+.\run.ps1 -Distro Ubuntu
+```
+
+Questo passaggio chiede conferma e poi esegue `run.sh` nella distribuzione scelta. Per i soli controlli dentro quella distribuzione:
+
+```powershell
+.\run.ps1 -Distro Ubuntu -Check
+```
+
+Se PowerShell impedisce l’esecuzione dello script, non modificare globalmente la policy: riportare l’errore prima di proseguire.
+
+## Settings locali dello scenario
+
+In modalità normale, gli script salvano lo scenario in `settings.json`:
+
+- Linux, macOS, WSL e container Linux: `~/.config/oaclis/settings.json`.
+- Launcher Windows: `%LOCALAPPDATA%\Oaclis\settings.json`.
+
+Il file registra versione del formato, sistema rilevato, sistema ospitante quando noto, ambiente nativo/WSL/container, kernel WSL, eventuale distribuzione WSL e porta di controllo **23232**. Conserva le altre impostazioni già presenti. `--check` e `-Check` restano senza scritture.
+
+`run.sh` salva dopo che Python 3 è disponibile. Da un container il sistema ospitante può essere sconosciuto: viene salvato come `null`, non indovinato. Se noto, dichiararlo prima dell'esecuzione, per esempio:
+
+```bash
+OACLIS_HOST_OS=windows bash run.sh
+```
+
+Sono ammessi `windows`, `macos`, `linux`. Con `run.ps1 -Distro Ubuntu`, Windows passa esplicitamente sistema ospitante e distribuzione allo script nella WSL. Le impostazioni del launcher Windows e quelle del runtime WSL sono file distinti.
+
+Per scegliere una cartella diversa usare `OACLIS_SETTINGS_DIR`; nei container la cartella va conservata in un volume persistente. La creazione e il collegamento di quel volume restano da definire nel percorso Docker.
+
+Questo passo salva soltanto lo scenario locale. Il consumo del file da parte di Oaclis e il salvataggio degli IP/dispositivi conosciuti nel nuovo formato non sono ancora implementati. Non vengono salvate password o chiavi private nel file.
+
+## Scaricare la repository prima della preparazione
+
+Gli script fanno parte della repository: per scaricarli servono Git e i due passaggi seguenti.
+
 ## Primo passaggio: installare Git
 
 Nel terminale Ubuntu/Debian, nella WSL Ubuntu o nel container Docker basato su Ubuntu/Debian, prima di scaricare Oaclis:
@@ -18,7 +112,42 @@ apt update
 apt install -y git
 ```
 
-## Installazione e prima configurazione: Ubuntu / WSL
+## Secondo passaggio: scaricare Oaclis
+
+Su Linux, macOS o WSL, usa lo stesso utente con cui lavori in Codex e scarica la repository nella sua home. Usa `sudo` per installare i pacchetti o per le operazioni amministrative, non per il clone o per avviare Oaclis.
+
+Se sei entrato in una shell root con `sudo -i` o `sudo su`, torna al tuo utente e verifica il nome:
+
+```bash
+exit
+whoami
+```
+
+Il comando `exit` serve solo se sei nella shell root. Poi scarica la repository nella home dell'utente; `git clone` crea automaticamente la cartella `Oaclis`:
+
+```bash
+cd ~
+git clone https://github.com/akiastyle/Oaclis.git
+cd Oaclis
+```
+
+Sul Jetson della prova l'utente è `kimrusso` e la cartella è `/home/kimrusso/Oaclis`. L'archivio Codex di root è distinto da quello di `kimrusso`.
+
+Questo passaggio scarica il progetto; non installa né avvia ancora Oaclis.
+
+## Collegamento fra due dispositivi
+
+Questa sezione è ancora in lavorazione: alcune correzioni del rilevamento LAN descritte sotto sono solo locali e non sono incluse nell'aggiornamento dei due script di preparazione. Il collegamento reale tra dispositivi resta da collaudare.
+
+Il flusso è lo stesso per master e client: avviare Oaclis su ciascuno, aprire `http://localhost:23232`, attendere che appaia l’altro dispositivo, confrontare il codice e accettare su entrambi. La ricerca è automatica, sulla **porta 23232**. Il pannello è accessibile anche da **+**. Una sola conferma lascia il collegamento in attesa; nessuna chat viene trasferita durante l’abbinamento.
+
+Il rilevamento usa le interfacce IPv4 attive e i relativi broadcast. Su Linux nativo e Jetson non viene invocato Windows; macOS usa il proprio adattatore di rete. In WSL NAT si usa un ponte locale verso la rete Windows. La preparazione specifica compare solo quando il controllo rileva un inoltro mancante o errato: **Prepara collegamento** richiede la conferma amministrativa del sistema ospitante. Non viene richiesto questo passaggio sui dispositivi con rete già disponibile.
+
+La scoperta non dipende dalla presenza di un server SSH. Se SSH manca, il dispositivo può comunque apparire e ricevere la conferma; l’accesso operativo viene completato quando SSH è pronto. Gli indirizzi vengono ricontrollati durante l’esecuzione; loopback e bridge spenti non sono destinazioni LAN.
+
+In Docker, una rete bridge isolata non inoltra i broadcast della LAN. La prima configurazione da provare su un host Linux è la rete host, riservando la porta 23232 a una sola istanza e predisponendo separatamente SSH del container. Non è stato implementato un ponte automatico Docker o un installer Windows nativo. La discovery macOS è coperta da test con dati di interfaccia, ma non ancora collaudata su hardware Mac.
+
+## Installazione e prima configurazione: Ubuntu / Linux / WSL
 
 Eseguire i passaggi sulla macchina da aggiungere. I blocchi indicano il terminale da usare. In Ubuntu, se si è già root, `sudo` si può omettere. Usare lo stesso utente con cui si vogliono gestire le chat Codex: ogni utente ha un archivio distinto in `~/.codex`.
 
@@ -97,7 +226,7 @@ Avviare SSH (passaggio 4 sotto), poi Oaclis **su entrambi i dispositivi**:
 ~/.local/bin/oaclis serve
 ```
 
-Aprire `http://localhost:23232` su ciascuno e premere **+** nella toolbar: il pannello cerca gli altri Oaclis. Su WSL premere **Configura rete WSL** e accettare la richiesta amministrativa Windows su ciascun computer. Vengono configurati soltanto gli inoltri SSH `2222 → 22`, controllo `23232 → 23232` e le regole firewall Oaclis TCP/UDP limitate alla sottorete locale. Il ponte di discovery Windows parte con Oaclis e termina quando l’app non risponde più; non si aggiungono servizi o attività pianificate.
+Aprire `http://localhost:23232` su ciascuno e premere **+** nella toolbar: il pannello cerca gli altri Oaclis. Se il pannello rileva che la rete WSL NAT richiede preparazione, premere **Prepara collegamento** e accettare la richiesta amministrativa Windows su ciascun computer. Vengono configurati soltanto gli inoltri SSH `2222 → 22`, controllo `23232 → 23232` e le regole firewall Oaclis TCP/UDP limitate alla sottorete locale. Il ponte di discovery Windows parte con Oaclis e termina quando l’app non risponde più; non si aggiungono servizi o attività pianificate.
 
 Quando compare l’altro dispositivo, confrontare il codice mostrato nelle due UI e premere **Il codice coincide · Accetta su entrambe**. Una sola accettazione lascia il collegamento in attesa. Dopo la seconda, Oaclis autorizza le chiavi pubbliche dedicate, salva l’identità host SSH e aggiunge il dispositivo alla mappa; il controllo SSH della mappa verifica poi l’accesso operativo. Le chiavi private restano sul dispositivo che le ha generate. Non vengono copiati chat, file o credenziali durante l’abbinamento.
 
@@ -105,7 +234,7 @@ Gli annunci LAN sono firmati con Ed25519 e scadono; il codice confrontato lega l
 
 Discovery: **UDP 23232** mediante broadcast IPv4 nella LAN; HTTP di annuncio: **TCP 23232**, solo `/peer/hello` accessibile dalla rete. UI e API operative restano riservate al loopback e alla sessione locale. In Linux nativo, consentire UDP/TCP 23232 e SSH nel firewall della sola rete prevista. Reti isolate, VLAN e Wi-Fi con isolamento client possono impedire il broadcast; resta l’aggiunta manuale per indirizzo. Questa versione non implementa discovery IPv6.
 
-In WSL NAT, dopo un cambio IP riaprire il pannello e ripetere **Configura rete WSL** con gli IP rilevati al riavvio dell’app. Se Windows nega l’elevazione o il bridge non può essere avviato, usare le verifiche manuali seguenti. In questa versione la configurazione rete WSL usa NAT/portproxy: il percorso mirrored resta manuale.
+In WSL NAT, dopo un cambio IP riaprire il pannello e ripetere **Prepara collegamento** con gli IP rilevati al riavvio dell’app. Se Windows nega l’elevazione o il bridge non può essere avviato, usare le verifiche manuali seguenti. In questa versione la configurazione rete WSL usa NAT/portproxy: il percorso mirrored resta manuale.
 
 ### 4. Avviare e verificare SSH — terminale Ubuntu
 
@@ -209,7 +338,7 @@ Dal **PowerShell dell’altro computer**, verificare anche l’accesso LAN, usan
 Test-NetConnection 192.168.1.167 -Port 2222
 ```
 
-Se Windows → WSL funziona ma la porta LAN no, verificare portproxy, `iphlpsvc` e firewall. Non disabilitare globalmente i firewall. Gli IP possono cambiare al riavvio: ripetere il rilevamento e aggiornare mapping/regola. La porta **2222** inoltra SSH verso **22**; **23232** è la porta Oaclis. Il percorso manuale qui sopra configura soltanto SSH: per la discovery usare **Configura rete WSL** nel pannello **+**, che prepara anche TCP/UDP 23232.
+Se Windows → WSL funziona ma la porta LAN no, verificare portproxy, `iphlpsvc` e firewall. Non disabilitare globalmente i firewall. Gli IP possono cambiare al riavvio: ripetere il rilevamento e aggiornare mapping/regola. La porta **2222** inoltra SSH verso **22**; **23232** è la porta Oaclis. Il percorso manuale qui sopra configura soltanto SSH: per la discovery usare **Prepara collegamento** nel pannello **+**, che prepara anche TCP/UDP 23232.
 
 ### 6. Verificare l’identità e autorizzare SSH — terminali Ubuntu
 
@@ -320,7 +449,7 @@ Il ruolo esistente viene conservato anche sul master. La reinstallazione non can
 
 Su KDell sono stati verificati download da GitHub, installazione con Rust/Cargo 1.93.1, ruolo client, avvio in tmux, risposta HTTP, CSS e catalogo delle chat. I controlli e il ripristino del portproxy dopo riavvio sono stati provati durante la configurazione delle due WSL; il firewall va verificato su ciascun Windows.
 
-L’installer compila e installa; la rete Windows viene configurata dal pulsante **Configura rete WSL**, con elevazione locale. Il pannello **+** gestisce la discovery e la doppia autorizzazione. I passaggi manuali documentati restano disponibili per diagnosi e configurazioni particolari. Il ruolo client distingue il marchio; la UI locale è la stessa. Il percorso completo non è ancora stato ripetuto da zero su un nuovo Windows.
+L’installer compila e installa; la rete Windows viene configurata dal pulsante **Prepara collegamento**, con elevazione locale. Il pannello **+** gestisce la discovery e la doppia autorizzazione. I passaggi manuali documentati restano disponibili per diagnosi e configurazioni particolari. Il ruolo client distingue il marchio; la UI locale è la stessa. Il percorso completo non è ancora stato ripetuto da zero su un nuovo Windows.
 
 ## Sviluppo e limiti
 
