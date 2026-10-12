@@ -13,6 +13,7 @@ pub struct State {
     error: Option<String>,
     bridge: Option<std::process::Child>,
     committed: BTreeMap<String, Value>,
+    network: Value,
 }
 pub type Peers = Arc<Mutex<State>>;
 
@@ -127,7 +128,7 @@ pub fn snapshot(peers: &Peers) -> Value {
                     && state.approvals["approved"][id]["public_key"] == card["public_key"]
                     && card["approved"].as_array().unwrap().contains(&state.local["id"])})
         }).collect();
-    json!({"local_id":state.local["id"],"wsl":state.local["wsl"],"peers":list,"error":state.error,"ignored":state.approvals["ignored"].as_array().map_or(0, Vec::len)})
+    json!({"local_id":state.local["id"],"wsl":state.local["wsl"],"peers":list,"error":state.error,"network":state.network,"ignored":state.approvals["ignored"].as_array().map_or(0, Vec::len)})
 }
 pub fn forget(peers: &Peers, home: &Path, id: &str) -> io::Result<()> {
     let mut state = peers.lock().unwrap();
@@ -155,7 +156,8 @@ pub fn approve(peers: &Peers, home: &Path, value: &Value) -> io::Result<Value> {
     Ok(result)
 }
 pub fn network(peers: &Peers) -> io::Result<Value> {
-    let state = peers.lock().unwrap();
+    let mut state = peers.lock().unwrap();
+    if state.network["status"] == "pending" { return Err(invalid("Configurazione Windows già in attesa")); }
     if state.local["wsl"] != true { return Err(invalid("Questo comando riguarda WSL")); }
     if state.local["ssh"]["address"] == state.local["wsl_ip"] { return Err(invalid("WSL con rete condivisa: configurare il firewall senza portproxy, come indicato nel README")); }
     let lan = state.local["ssh"]["address"].as_str().unwrap();
@@ -164,11 +166,19 @@ pub fn network(peers: &Peers) -> io::Result<Value> {
     wsl.parse::<std::net::Ipv4Addr>().map_err(io::Error::other)?;
     let script = include_str!("../scripts/wsl-network.ps1").replacen("param([Parameter(Mandatory=$true)][string]$LanIp, [Parameter(Mandatory=$true)][string]$WslIp)", &format!("$LanIp = '{lan}'; $WslIp = '{wsl}'"), 1);
     // PowerShell performs the UTF-16/base64 encoding; the script is carried on stdin.
-    let launcher = "$code = [Console]::In.ReadToEnd(); $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code)); Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoProfile','-EncodedCommand',$encoded)";
+    let launcher = "$ErrorActionPreference = 'Stop'; $code = [Console]::In.ReadToEnd(); $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($code)); $process = Start-Process powershell.exe -Verb RunAs -ArgumentList @('-NoProfile','-EncodedCommand',$encoded) -Wait -PassThru; if ($process.ExitCode -ne 0) { throw 'Configurazione rete non riuscita: verificare la finestra PowerShell.' }";
     let mut child = powershell(launcher).stdin(Stdio::piped()).stdout(Stdio::null()).stderr(Stdio::piped()).spawn()?;
     child.stdin.take().unwrap().write_all(script.as_bytes())?;
-    let output = child.wait_with_output()?;
-    if !output.status.success() { return Err(invalid(String::from_utf8_lossy(&output.stderr))); }
+    state.network = json!({"status":"pending"});
+    let shared = peers.clone();
+    thread::spawn(move || {
+        let result = match child.wait_with_output() {
+            Ok(output) if output.status.success() => json!({"status":"ready"}),
+            Ok(output) => json!({"status":"failed","error":String::from_utf8_lossy(&output.stderr)}),
+            Err(error) => json!({"status":"failed","error":error.to_string()}),
+        };
+        shared.lock().unwrap().network = result;
+    });
     Ok(json!({"ok":true,"message":"Conferma la richiesta amministrativa di Windows su questo dispositivo"}))
 }
 

@@ -1387,7 +1387,8 @@ function openDiscovery() {
 function renderDiscovery() {
   const panel = $("#discovery-popover"); if (!panel) return;
   const content = panel.querySelector('.discovery-content');
-  const html = (discovery.wsl ? '<button type="button" class="discovery-network">Configura rete WSL</button><small>Richiede conferma amministrativa di Windows.</small>' : '') +
+  const html = (discovery.wsl ? '<button type="button" class="discovery-network" ' + (discovery.network?.status === 'pending' ? 'disabled' : '') + '>Configura rete WSL</button><small>' + (discovery.network?.status === 'ready' ? 'Rete configurata.' : discovery.network?.status === 'pending' ? 'Attendi la conferma di Windows…' : 'Richiede conferma amministrativa di Windows.') + '</small>' : '') +
+    (discovery.network?.error ? '<p class="discovery-error">' + esc(discovery.network.error) + '</p>' : '') +
     (discovery.error ? '<p class="discovery-error">' + esc(discovery.error) + '</p>' : '') +
     (discovery.ignored ? '<button type="button" class="discovery-restore">Mostra dispositivi rifiutati</button>' : '') +
     (discovery.peers.length ? discovery.peers.map(peer => '<section class="discovery-peer"><strong>' + esc(peer.name) + '</strong><small>' + esc(peer.address) + '</small>' +
