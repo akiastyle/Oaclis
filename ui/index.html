@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="oaclis-token" content="__TOKEN__" />
+    <title>Oaclis</title>
+    <link rel="icon" href="/assets/__BRAND_ICON__.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/assets/__BRAND_ICON__.png" />
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main id="map" aria-label="Dispositivi"><div id="nodes"></div></main>
+    <nav class="toolbar" aria-label="Comandi Oaclis">
+      <a class="brand" href="/"><img class="brand-logo" src="/assets/__BRAND_ICON__.svg" alt="" width="32" height="32" /><span class="brand-word">Oac<span class="brand-accent">lis</span></span></a
+      ><button
+        id="add-device"
+        class="icon-button"
+        aria-label="Aggiungi dispositivo"
+        title="Aggiungi dispositivo"
+      >
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg></button
+      ><button
+        id="check"
+        class="icon-button"
+        aria-label="Verifica collegamenti"
+        title="Verifica collegamenti"
+      >
+        <svg viewBox="0 0 24 24">
+          <path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5" />
+        </svg>
+      </button>
+
+      <button id="palette" class="icon-button" type="button" popovertarget="palette-menu" aria-label="Scegli palette colori" title="Palette colori"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h2a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a2 2 0 0 0 2-2 9 9 0 0 0-9-9z"/><circle cx="7" cy="10" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/><circle cx="18" cy="10" r="1"/></svg></button>
+      <div id="palette-menu" popover="auto" role="radiogroup" aria-label="Palette colori">
+        <button type="button" class="palette-option" data-palette="sienna" role="radio" aria-checked="false"><span class="palette-name">Sienna · Blue</span></button>
+        <button type="button" class="palette-option" data-palette="imperial" role="radio" aria-checked="false"><span class="palette-name">Imperial · Cadet</span></button>
+        <button type="button" class="palette-option" data-palette="honey" role="radio" aria-checked="false"><span class="palette-name">Honey · Prussian</span></button>
+        <button type="button" class="palette-option" data-palette="rose" role="radio" aria-checked="false"><span class="palette-name">Rose · Blue</span></button>
+        <button type="button" class="palette-option" data-palette="cyber" role="radio" aria-checked="false"><span class="palette-name">Cyber · Royal</span></button>
+        <button type="button" class="palette-option" data-palette="paradise" role="radio" aria-checked="false"><span class="palette-name">Paradise · Caribbean</span></button>
+        <button type="button" class="palette-option" data-palette="lemon" role="radio" aria-checked="false"><span class="palette-name">Lemon · Prussian</span></button>
+        <button type="button" class="palette-option" data-palette="oxford" role="radio" aria-checked="false"><span class="palette-name">Orange · Oxford</span></button>
+        <button type="button" class="palette-option" data-palette="carolina" role="radio" aria-checked="false"><span class="palette-name">Carolina · CG</span></button>
+        <button type="button" class="palette-option" data-palette="blue" role="radio" aria-checked="false"><span class="palette-name">Shades of Blue</span></button>
+        <button type="button" class="palette-option" data-palette="midnight" role="radio" aria-checked="false"><span class="palette-name">Midnight · Seaweed</span></button>
+        <button type="button" class="palette-option" data-palette="sage" role="radio" aria-checked="false"><span class="palette-name">Sage · Ming</span></button>
+        <button type="button" class="palette-option" data-palette="almond" role="radio" aria-checked="false"><span class="palette-name">Almond · Navy</span></button>
+        <button type="button" class="palette-option" data-palette="ruby" role="radio" aria-checked="false"><span class="palette-name">Ruby · Sky</span></button>
+        <button type="button" class="palette-option" data-palette="atomic" role="radio" aria-checked="false"><span class="palette-name">Tangerine · Pacific</span></button>
+        <button type="button" class="palette-option" data-palette="cadet" role="radio" aria-checked="false"><span class="palette-name">Sienna · Cadet</span></button>
+        <button type="button" class="palette-option" data-palette="jet" role="radio" aria-checked="false"><span class="palette-name">Jet · Indigo</span></button>
+        <button type="button" class="palette-option" data-palette="sunglow" role="radio" aria-checked="false"><span class="palette-name">Sunglow · Crayola</span></button>
+        <button type="button" class="palette-option" data-palette="salmon" role="radio" aria-checked="false"><span class="palette-name">Salmon · Baby Blue</span></button>
+        <button type="button" class="palette-option" data-palette="coffee" role="radio" aria-checked="false"><span class="palette-name">Coffee · Duke</span></button>
+        <button type="button" class="palette-option" data-palette="cerise" role="radio" aria-checked="false"><span class="palette-name">Cerise · Royal</span></button>
+      </div>
+      <button
+        id="reset-map"
+        class="icon-button"
+        aria-label="Riordina mappa"
+        title="Riordina mappa"
+      >
+        <svg viewBox="0 0 24 24">
+          <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" />
+        </svg></button
+      ><button
+        id="sound"
+        class="icon-button"
+        aria-label="Abilita avviso sonoro"
+        aria-pressed="false"
+        title="Avviso sonoro"
+      >
+        <svg viewBox="0 0 24 24">
+          <path d="M4 9h4l5-4v14l-5-4H4Zm12-1a6 6 0 0 1 0 8" />
+        </svg></button
+      ><button
+        id="theme"
+        class="icon-button"
+        aria-label="Cambia tema"
+        title="Cambia tema"
+      >
+        <svg viewBox="0 0 24 24">
+          <path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z" />
+        </svg>
+      </button>
+    </nav>
+    <aside id="panel" hidden aria-label="Chat e trasferimento">
+      <div class="panel-bar">
+        <button
+          id="back"
+          class="icon-button"
+          aria-label="Torna alle chat"
+          hidden
+        >
+          <svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6" /></svg></button
+        ><span id="panel-device"></span
+        ><button
+          id="edit-device"
+          class="icon-button"
+          aria-label="Modifica dispositivo"
+          title="Modifica dispositivo"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="m4 16 12-12 4 4L8 20H4Z" />
+          </svg></button
+        ><button
+          id="refresh"
+          class="icon-button"
+          aria-label="Aggiorna chat"
+          title="Aggiorna chat"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5" />
+          </svg></button
+        ><button id="close" class="icon-button" aria-label="Chiudi pannello">
+          <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg>
+        </button>
+      </div>
+      <div id="library">
+        <label class="search"
+          ><input
+            id="search"
+            type="search"
+            placeholder="Cerca una chat"
+            aria-label="Cerca una chat"
+        /></label>
+        <div
+          id="library-list"
+          role="region"
+          aria-label="Chat del dispositivo"
+        ></div>
+      </div>
+      <div id="details" hidden></div>
+    </aside>
+    <section id="activity" hidden aria-label="Trasferimento in corso">
+      <div id="job"></div>
+      <button
+        id="dismiss-job"
+        class="icon-button"
+        aria-label="Chiudi risultato"
+        hidden
+      >
+        <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg>
+      </button>
+    </section>
+    <div id="notice" hidden role="status" aria-live="polite"></div>
+  </body>
+</html>

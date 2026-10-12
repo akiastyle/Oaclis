@@ -1,0 +1,6 @@
+/target/
+__pycache__/
+/.backups/
+/.impeccable/
+/docs/*results.json
+/docs/chat-copy-*.json
