@@ -253,11 +253,17 @@ if __name__ == '__main__':
         store = Store(pathlib.Path.home())
         operation = sys.argv[1]
         packet = None
-        if operation == 'exchange':
+        if operation in ('exchange', 'positions'):
             raw = sys.stdin.read(LIMIT + 1)
             if len(raw) > LIMIT:
                 raise ValueError('Impostazioni troppo grandi')
             packet = json.loads(raw)
+        if operation == 'positions':
+            validate({'position:' + key: {'clock': [0, store.id], 'value': value} for key, value in packet.items()})
+            with open(store.config / 'shared-settings.lock', 'a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                atomic(store.config / 'positions.json', packet)
+            print(json.dumps({'ok': True})); sys.exit(0)
         source = os.environ.get('OACLIS_SHARED_SOURCE')
         if operation == 'sync' and not source:
             source = pathlib.Path(sys.argv[2]).read_text()

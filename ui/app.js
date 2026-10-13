@@ -865,10 +865,12 @@ function place(node, p) {
     ) + "px";
   renderLink();
 }
-let positionTimer;
+let positionTimer, positionsSaving = false;
 function savePositions() {
   clearTimeout(positionTimer);
-  positionTimer = setTimeout(() => api("positions", positions).catch(e => notice(e.message)), 120);
+  positionsSaving = true;
+  const snapshot = JSON.parse(JSON.stringify(positions));
+  positionTimer = setTimeout(() => api("positions", snapshot).catch(e => notice(e.message)).finally(() => { positionsSaving = false; }), 120);
 }
 function savePosition(node) {
   positions[node.dataset.id] = { x: node.offsetLeft, y: node.offsetTop };
@@ -1229,7 +1231,7 @@ async function poll() {
     }
     if (state !== "checking") lastConnection[device.id] = state;
   }
-  if (next.shared && !drag && !document.querySelector('.map-node[data-dragging="true"]')) {
+  if (next.shared && !positionsSaving && !drag && !document.querySelector('.map-node[data-dragging="true"]')) {
     const previous = JSON.stringify([data.devices, data.appearance, chatLinks, data.chat_settings, positions]);
     const shared = next.shared;
     if (previous !== JSON.stringify([shared.devices, shared.appearance, shared.links, shared.chat_settings, shared.positions])) {

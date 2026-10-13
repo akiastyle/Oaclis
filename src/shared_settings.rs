@@ -1,5 +1,5 @@
 //! Presentation replication uses the existing mutually approved SSH transport.
-use std::{path::{Path, PathBuf}, process::Command, thread, time::Duration};
+use std::{io::Write, path::{Path, PathBuf}, process::{Command, Stdio}, thread, time::Duration};
 use serde_json::Value;
 const SCRIPT: &str = include_str!("../tools/shared_settings.py");
 pub fn start(home: PathBuf) {
@@ -27,5 +27,11 @@ pub fn save_positions(config: &Path, value: &Value) -> std::io::Result<()> {
         || ["x", "y"].iter().any(|key| !point[*key].as_f64().is_some_and(|n| n.is_finite() && (0.0..=100000.0).contains(&n)))) {
         return Err(crate::invalid("Posizioni non valide"));
     }
-    crate::staging::save_json(&config.join("positions.json"), value)
+    let mut child = Command::new("python3").args(["-c", SCRIPT, "positions"])
+        .env("HOME", config.parent().and_then(Path::parent).ok_or_else(|| crate::invalid("Home non valida"))?)
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).spawn()?;
+    child.stdin.take().unwrap().write_all(&serde_json::to_vec(value)?)?;
+    let output = child.wait_with_output()?;
+    if !output.status.success() { return Err(crate::invalid("Salvataggio posizioni non riuscito")); }
+    Ok(())
 }
