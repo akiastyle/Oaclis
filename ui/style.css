@@ -703,7 +703,7 @@ select {
   align-items: start;
 }
 .scope-detail {
-  height: var(--scope-detail-height);
+  max-height: var(--scope-detail-height);
   overflow: auto;
   padding: var(--space-8);
   border-radius: var(--radius-control);
