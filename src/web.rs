@@ -91,12 +91,17 @@ fn answer_bytes(request: Request, status: u16, body: Vec<u8>, content_type: &str
         .with_header(header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"));
     let _ = request.respond(response);
 }
+fn local_host(host: &str) -> bool {
+    let Some((name, port)) = host.rsplit_once(':') else { return false; };
+    matches!(name, "localhost" | "127.0.0.1" | "[::1]")
+        && port.parse::<u16>().is_ok_and(|port| port > 0)
+}
 fn trusted(request: &Request) -> bool {
     request
         .headers()
         .iter()
         .find(|h| h.field.equiv("Host"))
-        .is_some_and(|h| matches!(h.value.as_str(), "localhost:23232" | "127.0.0.1:23232"))
+        .is_some_and(|h| local_host(h.value.as_str()))
 }
 fn body(request: &mut Request) -> io::Result<Value> {
     let mut data = Vec::new();
@@ -728,6 +733,15 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn accepts_local_tunnel_ports_only() {
+        for host in ["localhost:23232", "localhost:23233", "127.0.0.1:23234", "[::1]:23233"] {
+            assert!(local_host(host));
+        }
+        for host in ["evil.example:23233", "localhost.evil.example:23233", "192.168.1.154:23232", "localhost:0", "localhost:65536", "localhost:no", "localhost"] {
+            assert!(!local_host(host));
+        }
+    }
     #[test]
     fn validates_associations_and_preserves_identity_across_direction_changes() {
         let devices = [Device {
