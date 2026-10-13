@@ -572,6 +572,32 @@ function renderLink(force = false) {
     drawChatLink(value, index, lane);
   });
 }
+// Split the original cubic at the badge, preserving its shape and endpoint tangents.
+function curveThroughBadge(points, midpoint) {
+  const mix = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+  const split = t => {
+    const a = mix(points[0], points[1], t), b = mix(points[1], points[2], t), c = mix(points[2], points[3], t);
+    const d = mix(a, b, t), e = mix(b, c, t);
+    return { a, c, d, e, joint: mix(d, e, t) };
+  };
+  let t = 0.5, best = Infinity;
+  for (let i = 1; i < 100; i++) {
+    const point = split(i / 100).joint;
+    const distance = (point.x - midpoint.x) ** 2 + (point.y - midpoint.y) ** 2;
+    if (distance < best) { best = distance; t = i / 100; }
+  }
+  for (let i = 0; i < 6; i++) {
+    const { d, e, joint } = split(t);
+    const dx = 3 * (e.x - d.x), dy = 3 * (e.y - d.y), squared = dx * dx + dy * dy;
+    if (squared < 1e-8) break;
+    t = Math.max(0.001, Math.min(0.999, t - ((joint.x - midpoint.x) * dx + (joint.y - midpoint.y) * dy) / squared));
+  }
+  const { a, c, d, e, joint } = split(t);
+  return point => {
+    const dx = point.x - joint.x, dy = point.y - joint.y;
+    return `M${points[0].x} ${points[0].y} C${a.x} ${a.y} ${d.x + dx} ${d.y + dy} ${point.x} ${point.y} C${e.x + dx} ${e.y + dy} ${c.x} ${c.y} ${points[3].x} ${points[3].y}`;
+  };
+}
 function drawChatLink(connection, index, lane = 0) {
   const nodes = [...document.querySelectorAll(".map-node")];
   const from = nodes.find((n) => n.dataset.id === connection.source),
@@ -640,10 +666,13 @@ function drawChatLink(connection, index, lane = 0) {
   $("#nodes").prepend(layer);
   const path = layer.querySelector(".connection-lines > path");
   const midpoint = path.getPointAtLength(path.getTotalLength() / 2);
+  const bend = curveThroughBadge([{ x: x1, y: y1 }, { x: x1 + startSide * reach, y: y1 }, { x: x2 + endSide * reach, y: y2 }, { x: x2, y: y2 }], midpoint);
+  const updateCurve = () => path.setAttribute("d", bend({ x: parseFloat(marker.style.left), y: parseFloat(marker.style.top) }));
   const key = [connection.entry.id, ...[connection.source, connection.target].sort()].join(":");
   const offset = linkPositions[key] || { x: 0, y: 0 };
   marker.style.left = midpoint.x + offset.x + "px";
   marker.style.top = midpoint.y + offset.y + "px";
+  updateCurve();
   const save = () => {
     linkPositions[key] = { x: marker.offsetLeft - midpoint.x, y: marker.offsetTop - midpoint.y };
     linkPositionSaving = true;
@@ -660,6 +689,7 @@ function drawChatLink(connection, index, lane = 0) {
       if (!main.hasPointerCapture(e.pointerId)) return;
       marker.style.left = Math.max(22, Math.min(start.left + e.clientX - start.x, $("#nodes").clientWidth - 22)) + "px";
       marker.style.top = Math.max(22, Math.min(start.top + e.clientY - start.y, $("#nodes").clientHeight - 22)) + "px";
+      updateCurve();
     };
     main.onpointerup = e => {
       save(); delete marker.dataset.dragging;
@@ -674,6 +704,7 @@ function drawChatLink(connection, index, lane = 0) {
     const [x, y] = directions[event.key];
     marker.style.left = marker.offsetLeft + x + "px";
     marker.style.top = marker.offsetTop + y + "px";
+    updateCurve();
     save();
   };
 }

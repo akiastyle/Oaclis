@@ -1117,3 +1117,4 @@ select {
 .link-badge[data-dragging="true"], .link-badge[data-dragging="true"] * { transition: none; }
 
 .connection-lines > path { stroke-linecap: butt; }
+.chat-link:has(.link-badge[data-dragging="true"]) .connection-lines > path { transition: none; }
