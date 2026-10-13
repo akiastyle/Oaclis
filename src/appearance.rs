@@ -8,8 +8,8 @@ use std::{
     process::{Command, Stdio},
 };
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
 pub struct Appearance {
     pub label: String,
     pub icon: String,

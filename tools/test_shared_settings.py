@@ -46,6 +46,9 @@ class SharedSettingsTests(unittest.TestCase):
         with sqlite3.connect(client.config / 'appearance.sqlite') as db:
             local=json.loads(db.execute("SELECT value FROM appearance WHERE key='device:master'").fetchone()[0])
             self.assertEqual(local['label'],'KDell')
+            self.assertEqual(set(local), {'label', 'icon', 'color'})
+            for (raw,) in db.execute('SELECT value FROM appearance'):
+                self.assertEqual(set(json.loads(raw)), {'label', 'icon', 'color'})
             chat=json.loads(db.execute("SELECT value FROM appearance WHERE key='chat:chat-one'").fetchone()[0])
             self.assertEqual(chat['label'],'Oaclis'); self.assertEqual(chat['icon'],'chat')
             link=json.loads(db.execute('SELECT value FROM chat_links').fetchone()[0])

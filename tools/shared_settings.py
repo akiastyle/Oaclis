@@ -115,6 +115,7 @@ class Store:
             appearance = appearances.get('device:' + device['id'], {})
             name = appearance.get('label') or device['name'] if device['id'] == 'master' else device['name']
             shared_appearance = {k: v for k, v in appearance.items() if k != 'label'}
+            shared_appearance.setdefault('icon', 'desktop')
             if not shared_appearance.get('color'):
                 colors = ['#3d5a80', '#98c1d9', '#e0fbfc', '#ee6c4d', '#293241']
                 shared_appearance['color'] = colors[int(hashlib.sha256(mapping[device['id']].encode()).hexdigest()[:8], 16) % len(colors)]
@@ -186,7 +187,8 @@ class Store:
                     devices.pop(local, None)
                     db.execute('DELETE FROM appearance WHERE key=?', ('device:' + local,))
                 else:
-                    appearance = dict(value.get('appearance', {}), label=value['name'])
+                    appearance = dict({'icon': 'desktop', 'color': ''}, **value.get('appearance', {}))
+                    appearance['label'] = value['name']
                     db.execute('INSERT OR REPLACE INTO appearance VALUES(?,?)', ('device:' + local, json.dumps(appearance)))
                     if local != 'master':
                         device = devices.get(local, {'id': local, 'ssh_alias': 'oaclis-unconfigured-' + local})
@@ -195,7 +197,7 @@ class Store:
                 if value is None:
                     db.execute('DELETE FROM appearance WHERE key=?', (key,))
                 else:
-                    db.execute('INSERT OR REPLACE INTO appearance VALUES(?,?)', (key, json.dumps(value)))
+                    db.execute('INSERT OR REPLACE INTO appearance VALUES(?,?)', (key, json.dumps(dict({'label': '', 'icon': '', 'color': ''}, **value))))
             elif kind == 'preference':
                 if value is None:
                     db.execute('DELETE FROM chat_settings WHERE id=?', (identifier_,))
