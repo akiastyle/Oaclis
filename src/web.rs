@@ -82,7 +82,13 @@ fn background_analysis(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::c
                 let Ok(key) = environment::key("master", id) else { continue; };
                 let revision = environment::revision(&chat, None);
                 let cached = environment::database(&config, &key, "analysis-get", None).unwrap_or(Value::Null);
-                if cached["revision"] == revision && matches!(cached["status"].as_str(), Some("ready" | "failed")) { continue; }
+                let auth_revision = fs::metadata(codex.join("auth.json"))
+                    .and_then(|metadata| metadata.modified())
+                    .map(|time| format!("{time:?}"))
+                    .unwrap_or_default();
+                if cached["revision"] == revision
+                    && (cached["status"] == "ready"
+                        || (cached["status"] == "failed" && cached["auth_revision"] == auth_revision)) { continue; }
                 {
                     let mut running = active.lock().unwrap();
                     if running.len() >= 2 || !running.insert(key.clone()) { continue; }
@@ -90,7 +96,7 @@ fn background_analysis(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::c
                 let _ = environment::database(&config, &key, "analysis-save", Some(&json!({"status":"pending", "revision":revision})));
                 let result = match environment::analyze(None, chat["path"].as_str().unwrap_or(""), id) {
                     Ok(manifest) => json!({"status":"ready", "revision":revision, "manifest":manifest, "chat_bytes":chat["bytes"], "chat_modified_ns":chat["modified_ns"]}),
-                    Err(error) => json!({"status":"failed", "revision":revision, "error":error.to_string()}),
+                    Err(error) => json!({"status":"failed", "revision":revision, "error":error.to_string(), "auth_revision":auth_revision}),
                 };
                 let _ = environment::database(&config, &key, "analysis-save", Some(&result));
                 active.lock().unwrap().remove(&key);

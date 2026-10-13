@@ -219,6 +219,15 @@ def codex_model_config():
     return [arg for key,val in selected.items() for arg in ("-c",key + "=" + toml(val))]
 
 
+def analysis_failure(process):
+    text = re.sub(r"\x1b\[[0-9;]*m", "", process.stderr or "")
+    lines = [line.strip() for line in text.splitlines() if re.search(r"(?i)error|failed|unauthorized|not logged|authentication|invalid|unsupported", line)]
+    detail = redact(" ".join(lines[-3:]))[:600]
+    if re.search(r"(?i)not logged|unauthorized|authentication|401", detail):
+        return "Accesso Codex richiesto sul dispositivo sorgente: esegui codex login --device-auth. " + detail
+    return "Codex ha interrotto l’analisi (codice {}). {}".format(process.returncode, detail or "Nessun risultato restituito.")
+
+
 def analyze(path, chat_id):
     evidence = collect(path, chat_id)
     watched = [pathlib.Path(fact["path"]) / name for fact in evidence["projects"] for name in (*MANIFESTS,"Cargo.lock","package-lock.json","composer.lock","Gemfile.lock","go.sum")]
@@ -242,9 +251,14 @@ Evidence:\n""" + json.dumps(evidence, ensure_ascii=False)
     with tempfile.TemporaryDirectory(prefix="oaclis-analysis-") as directory:
         schema_path, result = pathlib.Path(directory) / "schema.json", pathlib.Path(directory) / "result.json"
         schema_path.write_text(json.dumps(schema))
-        process = subprocess.run([shutil.which("codex") or "codex", "exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--sandbox", "read-only", "--skip-git-repo-check", "-c", "features.shell_tool=false", *codex_model_config(), "--output-schema", str(schema_path), "--output-last-message", str(result), "-"], input=prompt, text=True, cwd=directory, capture_output=True, timeout=180)
+        try:
+            process = subprocess.run([shutil.which("codex") or "codex", "exec", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--sandbox", "read-only", "--skip-git-repo-check", "-c", "features.shell_tool=false", *codex_model_config(), "--output-schema", str(schema_path), "--output-last-message", str(result), "-"], input=prompt, text=True, cwd=directory, capture_output=True, timeout=180)
+        except subprocess.TimeoutExpired:
+            raise ValueError("Analisi Codex scaduta dopo 180 secondi; riprova sul dispositivo sorgente") from None
+        except FileNotFoundError:
+            raise ValueError("Codex non è installato o non è disponibile sul dispositivo sorgente") from None
         if process.returncode or not result.exists():
-            raise ValueError("Codex non ha completato l’analisi; verifica accesso e disponibilità del modello")
+            raise ValueError(analysis_failure(process))
         answer = json.loads(result.read_text())
     roots = {fact["path"]: fact for fact in evidence["projects"]}
     plugins = {fact["path"]: fact for fact in evidence["plugins"]}

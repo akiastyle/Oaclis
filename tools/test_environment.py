@@ -129,6 +129,15 @@ class EnvironmentTests(unittest.TestCase):
             self.assertTrue(any("http://localhost:11434/v1" in arg for arg in args))
             self.assertFalse(any("hooks" in arg or "danger-full-access" in arg for arg in args))
 
+    def test_analysis_error_is_actionable_and_redacts_credentials(self):
+        analyzer = module("environment_analysis")
+        result = types.SimpleNamespace(returncode=1, stderr="ERROR: 401 Unauthorized token=private-value")
+        message = analyzer.analysis_failure(result)
+        self.assertIn("codex login --device-auth", message)
+        self.assertNotIn("private-value", message)
+        result.stderr = "ERROR: model unavailable"
+        self.assertIn("model unavailable", analyzer.analysis_failure(result))
+
     def test_analysis_database_preserves_selection(self):
         with tempfile.TemporaryDirectory() as directory:
             db = pathlib.Path(directory)/"appearance.sqlite"

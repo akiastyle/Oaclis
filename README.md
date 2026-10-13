@@ -45,7 +45,7 @@ Per eseguire soltanto i controlli, senza installazioni, compilazione o scritture
 bash run.sh --check
 ```
 
-Il controllo distingue Linux/macOS, segnala container e kernel WSL, verifica gli strumenti presenti e Rust. Le installazioni automatiche sono disponibili su Ubuntu/Debian con apt e su macOS con Homebrew già presente; gli strumenti Apple mancanti vengono segnalati. Se Codex non è rilevato, propone un’installazione opzionale di Codex 0.162.1. Verifica Node.js e npm; se mancanti o Node è incompatibile, propone Node.js 22/npm tramite NVM nella home, mostrando anche la modifica della configurazione shell. Ogni installazione richiede conferma. Il rifiuto o un errore nella preparazione di Codex non blocca Oaclis. Non esegue autenticazione né modifica llama.cpp. `--check` termina con codice 1 se mancano prerequisiti.
+Il controllo distingue Linux/macOS, segnala container e kernel WSL, verifica gli strumenti presenti e Rust. Le installazioni automatiche sono disponibili su Ubuntu/Debian con apt e su macOS con Homebrew già presente; gli strumenti Apple mancanti vengono segnalati. Se Codex non è rilevato, propone un’installazione opzionale di Codex 0.162.1. Verifica Node.js e npm; se mancanti o Node è incompatibile, propone Node.js 22/npm tramite NVM nella home, mostrando anche la modifica della configurazione shell. Ogni installazione richiede conferma. Il rifiuto o un errore nella preparazione di Codex non blocca Oaclis. Verifica anche l’autenticazione di Codex: se manca, propone l’accesso ChatGPT con `codex login --device-auth`, da completare personalmente nel browser anche su un altro computer. Se rimandato, segnala che analisi e chat potrebbero non funzionare. Non modifica llama.cpp. `--check` termina con codice 1 se mancano prerequisiti.
 
 ### Windows — PowerShell
 
@@ -209,7 +209,7 @@ rustc --version
 
 Su KDell è stata verificata anche l’alternativa `sudo apt install -y cargo build-essential`, con Rust/Cargo 1.93.1 dai repository Ubuntu. Su release Ubuntu precedenti i pacchetti possono essere troppo vecchi: preferire rustup. Servono edition 2024 e compatibilità con le dipendenze bloccate in `Cargo.lock`.
 
-Per aprire le chat, Codex deve essere installato e autenticato sul dispositivo; `run.sh` può proporne l’installazione, mentre il login resta manuale; non copiare le credenziali da un altro computer. Per le console delle chat verificare:
+Per aprire le chat, Codex deve essere installato e autenticato sul dispositivo; `run.sh` può proporne l’installazione, e, se manca il login, propone l’accesso ChatGPT con `codex login --device-auth`; non copiare le credenziali da un altro computer. Per le console delle chat verificare:
 
 ```bash
 command -v codex
