@@ -447,7 +447,7 @@ function editChat(entry, anchor, origin = sourceId || "master") {
   const panel = document.createElement("div");
   panel.id = "chat-popover"; panel.opener = anchor; panel.dataset.objectId = entry.id;
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Personalizza chat");
-  panel.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form id="appearance-form"><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button><button type="button" class="icon-button reset-appearance">Ripristina</button></form>';
+  panel.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form id="appearance-form"><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
   panel.querySelector('.popover-close').onclick = closeChatEditor;
   renderScopeDetails(panel, entry);
@@ -465,7 +465,6 @@ function editChat(entry, anchor, origin = sourceId || "master") {
     closeChatEditor(); renderLibrary(); renderLink(true);
   };
   panel.querySelector('form').onsubmit = guard(async event => { event.preventDefault(); await save({ label: event.target.elements.label.value, ...readAppearance() }); });
-  panel.querySelector('.reset-appearance').onclick = guard(() => save({ label: "", icon: "", color: "" }));
   panel.querySelector('.delete-presentation').onclick = guard(() => removePresentation("chat", entry.id));
   panel.querySelectorAll('[data-scope]').forEach(button => button.onclick = guard(async () => {
     const previous = button.getAttribute('aria-pressed'); button.setAttribute('aria-pressed', String(previous !== 'true'));
