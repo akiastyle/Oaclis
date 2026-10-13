@@ -479,3 +479,10 @@ Moduli Rust in `src/`, adattatori Python incorporati nel binario da `tools/`, in
 Questa prima installazione supporta Linux e WSL. Windows nativo e macOS richiedono ancora adattamenti; Docker necessita di volumi persistenti e accesso SSH. Il passaggio monodirezionale definitivo con disattivazione automatica dopo la prima copia resta da completare.
 
 Specifiche: [PROJECT.md](PROJECT.md). Funzioni UI: [docs/UI.md](docs/UI.md). Licenza: [Apache 2.0](LICENSE).
+
+
+### Impostazioni condivise
+
+I dispositivi autorizzati reciprocamente scambiano tramite SSH nomi, colori e icone di dispositivi/chat, collegamenti, categorie da sincronizzare e posizioni della mappa. Il dispositivo ha un’identità stabile: KDell mantiene lo stesso nome anche nella propria UI. Il master fornisce le impostazioni iniziali; successivamente le modifiche possono essere effettuate da qualsiasi dispositivo. Le modifiche offline sono persistenti e convergono alla riconnessione. Due modifiche concorrenti allo stesso valore vengono risolte in modo deterministico dalla revisione, con l’identità del dispositivo come spareggio. Le eliminazioni conservano una revisione per evitare ripristini da copie vecchie.
+
+Lo stato condiviso è in `~/.config/oaclis/shared-settings.json`; le posizioni sono in `positions.json`. Le credenziali e gli alias SSH, l’autenticazione Codex e le analisi locali non vengono copiati. Ricevere un collegamento non avvia un secondo trasferimento di chat/file sul client. Il coordinamento continua fra dispositivi autorizzati anche se il master è spento. Le coordinate sono condivise; una finestra più piccola limita la visualizzazione ai propri bordi. Al primo caricamento della UI master, il layout precedentemente salvato nel browser viene importato nel file persistente. I temi della singola UI restano locali.

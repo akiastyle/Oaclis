@@ -392,7 +392,7 @@ async function removePresentation(kind, id) {
     if (kind === "chat" ? panel.dataset.chatId === id : panel.dataset.deviceId === id) closeChatTerminal(panel);
   });
   if (kind === "device") {
-    delete positions[id]; localStorage.setItem("oaclis-map", JSON.stringify(positions));
+    delete positions[id]; savePositions();
     if (sourceId === id) closePanel();
   }
   data = await api("state"); chatLinks = data.links || [];
@@ -865,9 +865,14 @@ function place(node, p) {
     ) + "px";
   renderLink();
 }
+let positionTimer;
+function savePositions() {
+  clearTimeout(positionTimer);
+  positionTimer = setTimeout(() => api("positions", positions).catch(e => notice(e.message)), 120);
+}
 function savePosition(node) {
   positions[node.dataset.id] = { x: node.offsetLeft, y: node.offsetTop };
-  localStorage.setItem("oaclis-map", JSON.stringify(positions));
+  savePositions();
 }
 function renderMap() {
   $("#nodes").replaceChildren();
@@ -1048,7 +1053,7 @@ function renderConnections() {
 }
 $("#reset-map").onclick = () => {
   positions = {};
-  localStorage.removeItem("oaclis-map");
+  savePositions();
   renderMap();
 };
 $("#check").onclick = guard(() => api("check", {}));
@@ -1224,6 +1229,14 @@ async function poll() {
     }
     if (state !== "checking") lastConnection[device.id] = state;
   }
+  if (next.shared && !drag && !document.querySelector('.map-node[data-dragging="true"]')) {
+    const previous = JSON.stringify([data.devices, data.appearance, chatLinks, data.chat_settings, positions]);
+    const shared = next.shared;
+    if (previous !== JSON.stringify([shared.devices, shared.appearance, shared.links, shared.chat_settings, shared.positions])) {
+      Object.assign(data, shared); chatLinks = shared.links; positions = shared.positions;
+      renderMap(); renderLibrary();
+    }
+  }
   data.connections = next.connections;
   data.job = next.job;
   if (next.discovery) await updateDiscovery(next.discovery);
@@ -1281,7 +1294,15 @@ window.onresize = () => {
 guard(async () => {
   data = await api("state");
   chatLinks = data.links || [];
+  const oldPositions = positions;
+  positions = data.positions || {};
   renderMap();
+  if (data.role === "master" && !Object.keys(positions).length) {
+    positions = Object.fromEntries([...document.querySelectorAll(".map-node")].map(n => [n.dataset.id, oldPositions[n.dataset.id] || { x: n.offsetLeft, y: n.offsetTop }]));
+    await api("positions", positions);
+    localStorage.removeItem("oaclis-map");
+    renderMap();
+  }
   renderJob();
   await updateDiscovery(await api("peers"), true);
   await api("check", {});
