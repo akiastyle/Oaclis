@@ -109,10 +109,10 @@
   --scope-detail-height: 100px;
   --scope-active: #3d875b;
   --scope-inactive: var(--muted);
-  --glass-opacity: 72%;
+  --glass-opacity: var(--glass-device-opacity);
   --glass-menu-opacity: var(--glass-opacity);
   --glass-device-opacity: 60%;
-  --glass-blur: 18px;
+  --glass-blur: var(--glass-device-blur);
   --glass-device-blur: 3px;
   --glass-saturation: 125%;
   --glass-border: color-mix(in srgb, var(--ink) 14%, transparent);
@@ -708,8 +708,8 @@ select {
   padding: var(--space-8);
   border-radius: var(--radius-control);
   background: color-mix(in srgb, var(--panel) var(--glass-opacity), transparent);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   color: var(--ink);
   font-size: var(--font-small);
   overflow-wrap: anywhere;
@@ -998,8 +998,8 @@ select {
   border-radius: var(--radius-panel);
   color: var(--ink);
   background: color-mix(in srgb, var(--panel) var(--glass-menu-opacity), transparent);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   box-shadow: var(--shadow-surface);
 }
 .context-popover .popover-close { position: absolute; top: var(--space-4); right: var(--space-4); }
