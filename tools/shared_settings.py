@@ -114,7 +114,11 @@ class Store:
                 continue
             appearance = appearances.get('device:' + device['id'], {})
             name = appearance.get('label') or device['name'] if device['id'] == 'master' else device['name']
-            snapshot[key] = {'name': name, 'appearance': {k: v for k, v in appearance.items() if k != 'label'}}
+            shared_appearance = {k: v for k, v in appearance.items() if k != 'label'}
+            if not shared_appearance.get('color'):
+                colors = ['#3d5a80', '#98c1d9', '#e0fbfc', '#ee6c4d', '#293241']
+                shared_appearance['color'] = colors[int(hashlib.sha256(mapping[device['id']].encode()).hexdigest()[:8], 16) % len(colors)]
+            snapshot[key] = {'name': name, 'appearance': shared_appearance}
         for key, value in appearances.items():
             if key.startswith('chat:'):
                 snapshot[key] = value
