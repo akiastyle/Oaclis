@@ -411,8 +411,82 @@ function positionContext(popover, anchor) {
   const top = toolbar ? toolbar.getBoundingClientRect().bottom + 8 : origin.top;
   popover.style.maxHeight = "calc(100dvh - " + (toolbar ? top + 8 : 16) + "px)";
   const rect = popover.getBoundingClientRect();
+  if (popover.dataset.moved === "true") {
+    popover.style.left = Math.max(8, Math.min(rect.left, innerWidth - rect.width - 8)) + "px";
+    popover.style.top = Math.max(8, Math.min(rect.top, innerHeight - rect.height - 8)) + "px";
+    return;
+  }
   popover.style.left = Math.max(8, Math.min(toolbar ? origin.left : origin.right + 8, innerWidth - rect.width - 8)) + "px";
   popover.style.top = Math.max(8, Math.min(top, innerHeight - rect.height - 8)) + "px";
+}
+function bindPanelDrag(panel, reference = false) {
+  const heading = panel.querySelector("h2");
+  panel.classList.add("draggable-panel");
+  const move = (left, top) => {
+    panel.dataset.moved = "true";
+    panel.style.left = Math.max(8, Math.min(left, innerWidth - panel.offsetWidth - 8)) + "px";
+    panel.style.top = Math.max(8, Math.min(top, innerHeight - panel.offsetHeight - 8)) + "px";
+  };
+  heading.tabIndex = 0;
+  heading.onkeydown = event => {
+    const directions = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] };
+    if (!directions[event.key]) return;
+    event.preventDefault();
+    const [x, y] = directions[event.key];
+    move(panel.offsetLeft + x, panel.offsetTop + y);
+  };
+  heading.onpointerdown = event => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    panel.hidePopover(); panel.showPopover();
+    const start = { x: event.clientX, y: event.clientY, left: panel.offsetLeft, top: panel.offsetTop };
+    panel.dataset.dragging = "true";
+    heading.setPointerCapture(event.pointerId);
+    heading.onpointermove = e => {
+      if (heading.hasPointerCapture(e.pointerId)) move(start.left + e.clientX - start.x, start.top + e.clientY - start.y);
+    };
+    const finish = e => {
+      delete panel.dataset.dragging;
+      if (heading.hasPointerCapture(e.pointerId)) heading.releasePointerCapture(e.pointerId);
+    };
+    heading.onpointerup = finish;
+    heading.onpointercancel = finish;
+    heading.onlostpointercapture = () => delete panel.dataset.dragging;
+  };
+  if (!reference) return;
+  const original = panel.opener.closest(".map-node, .link-badge, .library-row") || panel.opener;
+  const nodeId = original.dataset.id, linkKey = original.dataset.linkKey;
+  const chatId = original.querySelector("[data-chat-id]")?.dataset.chatId;
+  const resolve = () => nodeId ? [...document.querySelectorAll(".map-node")].find(n => n.dataset.id === nodeId)
+    : linkKey ? [...document.querySelectorAll(".link-badge")].find(n => n.dataset.linkKey === linkKey)
+    : chatId ? [...document.querySelectorAll(".library-item")].find(n => n.dataset.chatId === chatId)?.closest(".library-row") : original;
+  const tether = document.createElement("div");
+  tether.className = "panel-tether";
+  tether.setAttribute("popover", "manual"); tether.setAttribute("aria-hidden", "true");
+  tether.innerHTML = '<svg><line/></svg>';
+  document.body.append(tether); tether.showPopover();
+  panel.hidePopover(); panel.showPopover();
+  const line = tether.querySelector("line");
+  const edge = (rect, target) => {
+    const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
+    const dx = target.x - x, dy = target.y - y;
+    const scale = Math.min(dx ? rect.width / 2 / Math.abs(dx) : Infinity, dy ? rect.height / 2 / Math.abs(dy) : Infinity);
+    const ratio = Number.isFinite(scale) ? Math.min(1, scale) : 0;
+    return { x: x + dx * ratio, y: y + dy * ratio };
+  };
+  const update = () => {
+    if (!panel.isConnected) { tether.remove(); return; }
+    const object = resolve();
+    tether.style.visibility = object?.isConnected ? "visible" : "hidden";
+    if (object?.isConnected) {
+      const a = object.getBoundingClientRect(), b = panel.getBoundingClientRect();
+      const start = edge(a, { x: b.left + b.width / 2, y: b.top + b.height / 2 });
+      const end = edge(b, { x: a.left + a.width / 2, y: a.top + a.height / 2 });
+      for (const [name, value] of Object.entries({ x1: start.x, y1: start.y, x2: end.x, y2: end.y })) line.setAttribute(name, value);
+    }
+    requestAnimationFrame(update);
+  };
+  requestAnimationFrame(update);
 }
 function closeDeviceSettings() {
   const popover = $("#device-settings");
@@ -449,6 +523,7 @@ function editChat(entry, anchor, origin = sourceId || "master") {
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Personalizza chat");
   panel.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form id="appearance-form"><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
+  bindPanelDrag(panel, true);
   panel.querySelector('.popover-close').onclick = closeChatEditor;
   renderScopeDetails(panel, entry);
   panel.detailsTimer = setInterval(async () => {
@@ -522,6 +597,7 @@ function drawChatLink(connection, index) {
     badge(connection.entry) +
     "</div>";
   const marker = layer.querySelector(".link-badge");
+  marker.dataset.linkKey = JSON.stringify([connection.entry.id, connection.source, connection.target]);
   marker.replaceChildren();
   const name = chatLabel(connection.entry);
   marker.title = name;
@@ -606,25 +682,7 @@ function openChatTerminal(connection, anchor, deviceId) {
   const count = document.querySelectorAll(".chat-terminal").length - 1;
   panel.style.left = Math.max(8, Math.min(parseFloat(panel.style.left) + count * 24, innerWidth - panel.offsetWidth - 8)) + "px";
   panel.style.top = Math.max(8, Math.min(parseFloat(panel.style.top) + count * 24, innerHeight - panel.offsetHeight - 8)) + "px";
-  const heading = panel.querySelector("h2");
-  heading.onpointerdown = e => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    panel.hidePopover(); panel.showPopover();
-    const start = { x: e.clientX, y: e.clientY, left: panel.offsetLeft, top: panel.offsetTop };
-    panel.dataset.dragging = "true";
-    heading.setPointerCapture(e.pointerId);
-    heading.onpointermove = event => {
-      if (!heading.hasPointerCapture(event.pointerId)) return;
-      panel.style.left = Math.max(8, Math.min(start.left + event.clientX - start.x, innerWidth - panel.offsetWidth - 8)) + "px";
-      panel.style.top = Math.max(8, Math.min(start.top + event.clientY - start.y, innerHeight - panel.offsetHeight - 8)) + "px";
-    };
-    heading.onpointerup = event => {
-      delete panel.dataset.dragging;
-      if (heading.hasPointerCapture(event.pointerId)) heading.releasePointerCapture(event.pointerId);
-    };
-    heading.onlostpointercapture = () => delete panel.dataset.dragging;
-  };
+  bindPanelDrag(panel);
   panel.querySelector(".popover-close").onclick = () => closeChatTerminal(panel);
   const screen = panel.querySelector("pre"), form = panel.querySelector("form");
   const payload = { device_id: deviceId, chat_id: connection.entry.id };
@@ -1057,6 +1115,7 @@ function editDevice(device = {}, anchor = $("#add-device")) {
   panel.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Chiudi dispositivo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + (device.id ? "Modifica dispositivo" : "Aggiungi dispositivo") + '</h2><form id="device-form" novalidate>' + field("Nome", "name", device.name || "") + appearanceFields(value, "desktop") +
     (local ? '' : '<details class="device-advanced"><summary>Avanzato</summary>' + field("Indirizzo IP o hostname", "address", settings.address || "") + '<label class="field">Porta SSH<input type="number" name="port" min="1" max="65535" required value="' + esc(settings.port || 22) + '"></label>' + field("Utente SSH", "user", settings.user || "") + '<label class="field">Chiave SSH (facoltativa)<input name="identity_file" value="' + esc(settings.identity_file || "") + '" placeholder="~/.ssh/id_ed25519"></label></details>') + '<button class="primary" type="submit">Salva</button>' + (device.id && !local ? '<button type="button" class="delete-presentation">Elimina</button>' : '') + '</form>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
+  bindPanelDrag(panel, true);
   panel.querySelector('.popover-close').onclick = closeDeviceSettings;
   const readAppearance = bindAppearanceFields(panel);
   panel.querySelector('.delete-presentation')?.addEventListener('click', guard(() => removePresentation("device", device.id)));

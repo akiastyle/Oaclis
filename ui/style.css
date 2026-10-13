@@ -1103,3 +1103,9 @@ select {
 .pairing-code { display: block; font-size: var(--font-heading); font-variant-numeric: tabular-nums; margin-block: var(--space-16); }
 .discovery-reject, .discovery-manual { margin-top: var(--space-12); }
 .discovery-network { width: 100%; }
+
+.draggable-panel h2 { cursor: move; touch-action: none; user-select: none; }
+.draggable-panel[data-dragging="true"], .draggable-panel[data-dragging="true"] * { transition: none; }
+.panel-tether { position: fixed; inset: 0; width: 100vw; height: 100dvh; margin: 0; padding: 0; border: 0; background: transparent; pointer-events: none; overflow: hidden; }
+.panel-tether svg { width: 100%; height: 100%; }
+.panel-tether line { stroke: var(--muted); stroke-width: 1px; vector-effect: non-scaling-stroke; transition: none; }
