@@ -181,7 +181,6 @@ function openPanel() {
 }
 function showLibrary() {
   closeConnectionPopover();
-  cancelAnalysis();
   selected = null;
   $("#details").hidden = true;
   $("#library").hidden = false;
@@ -192,7 +191,6 @@ function showLibrary() {
 }
 function closePanel() {
   closeConnectionPopover();
-  cancelAnalysis();
   const origin = sourceId;
   catalogRequest++;
   $("#panel").hidden = true;
@@ -351,23 +349,33 @@ function bindAppearanceFields(panel) {
     return { icon: icon.value, color: color.value };
   };
 }
-function scopeFields(scopes = {}) {
+function scopeFields(scopes = {}, entry = {}) {
   return '<div class="scope-tools" role="group" aria-label="Cosa sincronizzare">' +
     [["chat", "chat", "Chat"], ["paths", "folder", "Percorsi"], ["apps", "box", "App, plugin e configurazioni"]].map(([scope, icon, label]) =>
-      '<button type="button" class="scope-toggle" data-scope="' + scope + '" aria-pressed="' + (scopes[scope] !== false) + '" aria-label="' + label + '" title="' + label + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + icons[icon] + '</svg></button>').join("") + '</div>';
+      '<div class="scope-row"><button type="button" class="scope-toggle" data-scope="' + scope + '" aria-pressed="' + (scopes[scope] !== false) + '" aria-label="' + label + '" title="' + label + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + icons[icon] + '</svg></button><div class="scope-detail" data-detail="' + scope + '" tabindex="0" aria-label="' + label + '"></div></div>').join("") + '</div>';
+}
+function renderScopeDetails(panel, entry) {
+  const result = entry.analysis || {}, manifest = result.manifest || {};
+  const activity = entry.modified_ns ? new Date(Number(entry.modified_ns) / 1e6).toLocaleString("it-IT") : "Non disponibile";
+  const chat = panel.querySelector('[data-detail="chat"]');
+  if (!chat) return;
+  chat.textContent = ((entry.bytes || 0) / 1048576).toLocaleString("it-IT", { maximumFractionDigits: 2 }) + " MB · Ultima attività: " + activity;
+  const state = result.status === "failed" ? "Analisi non riuscita. " + (result.error || "") : "Analisi in corso…";
+  const write = (scope, items, empty) => {
+    const box = panel.querySelector('[data-detail="' + scope + '"]');
+    box.replaceChildren();
+    if (result.status !== "ready") { box.textContent = state; return; }
+    if (!items.length) { box.textContent = empty; return; }
+    for (const text of items) { const line = document.createElement("div"); line.textContent = text; box.append(line); }
+  };
+  write("paths", manifest.paths || [], "Nessun percorso individuato");
+  write("apps", [...(manifest.packages || []), ...(manifest.plugins || []).map(p => p.name), ...(manifest.configs || []).map(c => c.path)], "Nessuna app aggiuntiva individuata");
+  positionContext(panel, panel.opener);
 }
 async function saveChatScopes(entry, scopes, origin = sourceId || "master") {
   const result = await api("scopes", { source_device_id: origin, chat_id: entry.id, scopes });
   data.chat_settings = result.preferences; chatLinks = result.links;
   if (link?.entry.id === entry.id) link.scopes = scopes;
-  if (selected?.id === entry.id) {
-    const form = $("#chat-form");
-    if (form) {
-      form.dataset.choicesLoaded = "true";
-      form.querySelectorAll('[data-scope]').forEach(button => button.setAttribute("aria-pressed", String(scopes[button.dataset.scope])));
-      updateStart();
-    }
-  }
   renderLink(true);
 }
 async function removePresentation(kind, id) {
@@ -401,7 +409,7 @@ function positionContext(popover, anchor) {
   if (!origin) return;
   const toolbar = popover.anchorToolbar;
   const top = toolbar ? toolbar.getBoundingClientRect().bottom + 8 : origin.top;
-  if (toolbar) popover.style.maxHeight = "calc(100dvh - " + (top + 8) + "px)";
+  popover.style.maxHeight = "calc(100dvh - " + (toolbar ? top + 8 : 16) + "px)";
   const rect = popover.getBoundingClientRect();
   popover.style.left = Math.max(8, Math.min(toolbar ? origin.left : origin.right + 8, innerWidth - rect.width - 8)) + "px";
   popover.style.top = Math.max(8, Math.min(top, innerHeight - rect.height - 8)) + "px";
@@ -416,7 +424,6 @@ function closeDeviceSettings() {
 function closeConnectionPopover() {
   const popover = $("#connection-popover");
   if (!popover) return;
-  cancelAnalysis();
   const details = $("#details");
   details.hidden = true;
   $("#panel").append(details);
@@ -429,19 +436,28 @@ function closeChatEditor() {
   const popover = $("#chat-popover");
   if (!popover) return;
   const anchor = popover.opener;
+  clearInterval(popover.detailsTimer);
   popover.remove();
   if (anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
-function editChat(entry, anchor) {
+function editChat(entry, anchor, origin = sourceId || "master") {
   closeChatEditor();
   const value = data.appearance?.["chat:" + entry.id] || {};
   const scopes = data.chat_settings?.[entry.id]?.scopes || chatLinks.find(v => v.entry.id === entry.id)?.scopes || {};
   const panel = document.createElement("div");
   panel.id = "chat-popover"; panel.opener = anchor; panel.dataset.objectId = entry.id;
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Personalizza chat");
-  panel.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form id="appearance-form"><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button><button type="button" class="icon-button reset-appearance">Ripristina</button></form>';
+  panel.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form id="appearance-form"><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button><button type="button" class="icon-button reset-appearance">Ripristina</button></form>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
   panel.querySelector('.popover-close').onclick = closeChatEditor;
+  renderScopeDetails(panel, entry);
+  panel.detailsTimer = setInterval(async () => {
+    try {
+      const catalog = await api("catalog", { device_id: origin });
+      const fresh = catalog.chats.find(c => c.id === entry.id);
+      if (fresh && panel.isConnected) renderScopeDetails(panel, fresh);
+    } catch (_) { /* Existing details remain available while the device is offline. */ }
+  }, 10000);
   const readAppearance = bindAppearanceFields(panel);
   const save = async value => {
     const key = "chat:" + entry.id;
@@ -454,7 +470,7 @@ function editChat(entry, anchor) {
   panel.querySelectorAll('[data-scope]').forEach(button => button.onclick = guard(async () => {
     const previous = button.getAttribute('aria-pressed'); button.setAttribute('aria-pressed', String(previous !== 'true'));
     panel.querySelectorAll('[data-scope]').forEach(b => b.disabled = true);
-    try { await saveChatScopes(entry, Object.fromEntries([...panel.querySelectorAll('[data-scope]')].map(b => [b.dataset.scope, b.getAttribute('aria-pressed') === 'true']))); }
+    try { await saveChatScopes(entry, Object.fromEntries([...panel.querySelectorAll('[data-scope]')].map(b => [b.dataset.scope, b.getAttribute('aria-pressed') === 'true'])), origin); }
     catch (error) { button.setAttribute('aria-pressed', previous); throw error; }
     finally { panel.querySelectorAll('[data-scope]').forEach(b => b.disabled = false); }
   }));
@@ -523,7 +539,10 @@ function drawChatLink(connection, index) {
   edit.setAttribute("aria-label", "Modifica " + name);
   edit.title = "Modifica chat";
   edit.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
-  edit.onclick = () => editChat(connection.entry, edit);
+  edit.onclick = guard(async () => {
+    const result = await api("catalog", { device_id: connection.source });
+    editChat(result.chats.find(c => c.id === connection.entry.id) || connection.entry, edit, connection.source);
+  });
   marker.append(main, edit);
   main.querySelector(".chat-badge").style.color = appearance(connection.entry).color || "var(--ink)";
   marker.style.color = appearance(connection.entry).color || "var(--ink)";
@@ -581,7 +600,7 @@ function openChatTerminal(connection, anchor, deviceId) {
   panel.setAttribute("popover", "manual");
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", "Console Codex · " + deviceName(deviceId));
-  panel.innerHTML = '<button class="icon-button popover-close" aria-label="Chiudi chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(connection.entry)) + ' · ' + esc(deviceName(deviceId)) + '</h2><pre class="terminal-screen" tabindex="0" aria-label="Schermo Codex">Connessione…</pre><form class="terminal-input"><textarea name="text" maxlength="8000" aria-label="Messaggio a Codex" rows="2" placeholder="Scrivi a Codex" disabled></textarea><button class="primary" disabled>Invia</button></form><div class="terminal-keys"></div>';
+  panel.innerHTML = '<button class="icon-button popover-close" aria-label="Chiudi chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(connection.entry)) + ' · ' + esc(deviceName(deviceId)) + '</h2><pre class="terminal-screen" tabindex="0" aria-label="Schermo Codex">Connessione…</pre><form class="terminal-input"><textarea name="text" maxlength="8000" aria-label="Messaggio a Codex" rows="2" placeholder="Scrivi a Codex" disabled></textarea></form><div class="terminal-keys"></div>';
   document.body.append(panel);
   panel.showPopover();
   positionContext(panel, anchor);
@@ -634,10 +653,18 @@ function openChatTerminal(connection, anchor, deviceId) {
     e.preventDefault();
     if (ready && await send({ action: "input", text: form.elements.text.value, key: "Enter" })) form.elements.text.value = "";
   });
+  form.elements.text.onkeydown = event => {
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); }
+  };
   for (const [key, label] of [["Enter", "↵"], ["Escape", "Esc"], ["Tab", "Tab"], ["Up", "↑"], ["Down", "↓"], ["C-c", "Ctrl+C"]]) {
     const button = document.createElement("button");
     button.type = "button"; button.className = "icon-button"; button.textContent = label;
-    button.onclick = () => { if (ready) send({ action: "input", key }); };
+    button.setAttribute("aria-label", key === "Enter" ? "Invio" : label);
+    button.onclick = () => {
+      if (!ready) return;
+      if (key === "Enter" && form.elements.text.value) form.requestSubmit();
+      else send({ action: "input", key });
+    };
     panel.querySelector(".terminal-keys").append(button);
   }
   screen.onkeydown = e => {
@@ -976,226 +1003,50 @@ function field(label, name, value = "") {
     '" required></label>'
   );
 }
-let analysisTimer,
-  analysisVersion = 0;
-function cancelAnalysis() {
-  clearTimeout(analysisTimer);
-  analysisVersion++;
-}
-function updateStart() {
-  const form = $("#chat-form"),
-    start = $("#start-chat");
-  if (!form || !start) return;
-  start.disabled =
-    data.job.status === "running" ||
-    form.dataset.ready !== "true" ||
-    form.dataset.saving === "true" ||
-    ![...form.querySelectorAll("[data-scope]")].some(
-      (b) => b.getAttribute("aria-pressed") === "true",
-    );
-}
-function startAnalysis(entry, form, source, force = false) {
-  cancelAnalysis();
-  const version = analysisVersion;
-  form.dataset.ready = "false";
-  const status = form.querySelector(".analysis-status");
-  status.innerHTML =
-    '<span class="analysis-spinner" aria-hidden="true"></span><span>Analisi…</span>';
-  form.setAttribute("aria-busy", "true");
-  updateStart();
-  const apply = (result) => {
-    if (version !== analysisVersion || !form.isConnected) return;
-    if (!form.dataset.choicesLoaded) {
-      for (const button of form.querySelectorAll("[data-scope]"))
-        button.setAttribute(
-          "aria-pressed",
-          String(result.scopes?.[button.dataset.scope] !== false),
-        );
-      form.dataset.choicesLoaded = "true";
-    }
-    form.dataset.ready = String(result.status === "ready");
-    if (result.status === "ready") {
-      status.replaceChildren();
-      form.setAttribute("aria-busy", "false");
-      const manifest = result.manifest;
-      form.querySelector('[data-scope="paths"]').title =
-        "Cartelle · " + manifest.paths.length;
-      form.querySelector('[data-scope="apps"]').title =
-        "App/plugin e configurazioni · " +
-        (manifest.packages.length +
-          manifest.plugins.length +
-          manifest.configs.length);
-    } else if (result.status === "pending") {
-      analysisTimer = setTimeout(() => fetchStatus().catch(fail), 1500);
-    } else {
-      fail(Error(result.error || "Analisi interrotta. Riprova."));
-    }
-    updateStart();
-  };
-  const fail = (error) => {
-    if (version !== analysisVersion || !form.isConnected) return;
-    form.dataset.ready = "false";
-    form.setAttribute("aria-busy", "false");
-    status.textContent = error.message;
-    const retry = document.createElement("button");
-    retry.type = "button";
-    retry.className = "icon-button";
-    retry.setAttribute("aria-label", "Ripeti analisi");
-    retry.title = "Ripeti analisi";
-    retry.innerHTML =
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17a8 8 0 1 0 2-11"/></svg>';
-    retry.onclick = () => startAnalysis(entry, form, source, true);
-    status.append(retry);
-    updateStart();
-  };
-  const fetchStatus = async () =>
-    apply(
-      await api("analysis", { source_device_id: source, chat_id: entry.id }),
-    );
-  api("analyze", { source_device_id: source, chat_id: entry.id, force })
-    .then(apply)
-    .catch(fail);
-}
-function selectChat(entry, targetId, operation = "copy") {
-  closeConnectionPopover();
-  cancelAnalysis();
-  selected = entry;
-  const node = [...document.querySelectorAll(".map-node")].find(n => n.dataset.id === targetId);
-  const anchor = node?.querySelector(operation === "sync" ? ".connection-port.sync" : ".connection-port.receive") || node || $("#add-device");
-  const popover = document.createElement("div");
-  popover.id = "connection-popover";
-  popover.opener = anchor;
-  popover.setAttribute("popover", "manual");
-  popover.setAttribute("role", "dialog");
-  popover.setAttribute("aria-label", "Collegamento chat");
-  popover.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Chiudi collegamento"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>';
-  popover.append($("#details"));
-  document.body.append(popover);
-  $("#details").hidden = false;
-  popover.showPopover();
-  popover.querySelector(".popover-close").onclick = closeConnectionPopover;
-  const targets = sourceId === "master" ? data.devices : [master];
-  if (!targets.length) {
-    $("#details").innerHTML =
-      "<h2>" +
-      esc(chatLabel(entry)) +
-      '</h2><p class="muted">Aggiungi un dispositivo per portare questa chat.</p>';
-    positionContext(popover, anchor);
-    focusDetails();
-    return;
-  }
-  $("#details").innerHTML =
-    "<h2>" +
-    esc(chatLabel(entry)) +
-    '</h2><form id="chat-form"><div class="route">' +
-    esc(deviceName(sourceId)) +
-    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16m-6-6 6 6-6 6"/></svg></div><label class="field">Destinazione<select name="device_id">' +
-    targets
-      .map(
-        (d) =>
-          '<option value="' +
-          esc(d.id) +
-          '" ' +
-          (d.id === targetId ? "selected" : "") +
-          ">" +
-          esc(d.name) +
-          "</option>",
-      )
-      .join("") +
-    '</select></label><label class="field">Operazione<select name="operation"><option value="copy">Copia</option><option value="send">Sincronizza →</option><option value="sync">Sincronizza ↔</option></select></label>' + scopeFields() + '<div class="analysis-status" role="status" aria-live="polite"></div><button class="primary" id="start-chat" type="submit" disabled>Avvia</button></form>';
-  positionContext(popover, anchor);
-  const formElement = $("#chat-form");
+const pendingTransfers = new Map();
+async function selectChat(entry, targetId, operation = "copy") {
   const origin = sourceId;
-  formElement.elements.operation.value = operation;
-  for (const button of formElement.querySelectorAll("[data-scope]")) {
-    button.onclick = guard(async () => {
-      if (formElement.dataset.saving === "true") return;
-      button.setAttribute(
-        "aria-pressed",
-        String(button.getAttribute("aria-pressed") !== "true"),
-      );
-      formElement.dataset.choicesLoaded = "true";
-      formElement.dataset.saving = "true";
-      updateStart();
-      const scopes = Object.fromEntries(
-        [...formElement.querySelectorAll("[data-scope]")].map((b) => [
-          b.dataset.scope,
-          b.getAttribute("aria-pressed") === "true",
-        ]),
-      );
-      try {
-        await saveChatScopes(entry, scopes, origin);
-        updateLink();
-      } catch (error) {
-        button.setAttribute(
-          "aria-pressed",
-          String(button.getAttribute("aria-pressed") !== "true"),
-        );
-        throw error;
-      } finally {
-        formElement.dataset.saving = "false";
-        updateStart();
-      }
-    });
-  }
-  const savedScopes = data.chat_settings?.[entry.id]?.scopes || chatLinks.find(v => v.entry.id === entry.id &&
-    [v.source, v.target].sort().join(":") === [origin, formElement.elements.device_id.value].sort().join(":"))?.scopes;
-  if (savedScopes) {
-    formElement.dataset.choicesLoaded = "true";
-    formElement.querySelectorAll("[data-scope]").forEach(b => b.setAttribute("aria-pressed", String(savedScopes[b.dataset.scope])));
-  }
-  startAnalysis(entry, formElement, origin);
-  const updateLink = () => {
-    const savedLink = chatLinks.find(v => v.entry.id === entry.id &&
-      [v.source, v.target].sort().join(":") === [origin, formElement.elements.device_id.value].sort().join(":"));
-    link = {
-      ...savedLink,
-      scopes: Object.fromEntries([...formElement.querySelectorAll("[data-scope]")].map(b => [b.dataset.scope, b.getAttribute("aria-pressed") === "true"])),
-      entry,
-      source: origin,
-      target: formElement.elements.device_id.value,
-      operation: formElement.elements.operation.value,
-    };
-    const association = { ...link, entry: { id: entry.id, name: entry.name } };
-    saveLinks = saveLinks.then(async () => {
-      try {
-        chatLinks = await api("links", association);
-        renderLink();
-      } catch (error) { notice("Associazione non salvata: " + error.message); }
-    });
+  const scopes = data.chat_settings?.[entry.id]?.scopes || { chat: true, paths: true, apps: true };
+  const association = { source: origin, target: targetId, operation, entry: { id: entry.id, name: entry.name }, scopes, transfer_pending: true };
+  const key = [origin, targetId, entry.id].join(":");
+  try {
+    await saveLinks;
+    chatLinks = await api("links", association);
+    link = null;
     renderLink();
-  };
-  formElement.onchange = updateLink;
-  updateLink();
-  $("#chat-form").onsubmit = guard(async (e) => {
-    e.preventDefault();
-    if (formElement.dataset.ready !== "true") return;
-    const form = Object.fromEntries(new FormData(e.target));
-    const scopes = Object.fromEntries(
-      [...formElement.querySelectorAll("[data-scope]")].map((b) => [
-        b.dataset.scope,
-        b.getAttribute("aria-pressed") === "true",
-      ]),
-    );
-    try {
-      await api("run", {
-        scopes,
-        source_device_id: origin,
-        chat_id: entry.id,
-        ...form,
-      });
-    } catch (error) {
-      if (error.message.includes("ripeti l’analisi")) {
-        startAnalysis(entry, formElement, origin, true);
-        return;
+    pendingTransfers.set(key, association);
+    checkPendingTransfers();
+  } catch (error) { notice("Associazione non salvata: " + error.message); }
+}
+let checkingTransfers = false;
+async function checkPendingTransfers() {
+  if (checkingTransfers || data.job.status === "running") return;
+  checkingTransfers = true;
+  try {
+    for (const association of chatLinks.filter(v => v.transfer_pending)) pendingTransfers.set([association.source, association.target, association.entry.id].join(":"), association);
+    for (const [key, association] of pendingTransfers) {
+      const remote = association.source === "master" ? association.target : association.source;
+      if (data.connections[remote] !== "online") continue;
+      if (!chatLinks.some(v => v.entry.id === association.entry.id && v.source === association.source && v.target === association.target)) { pendingTransfers.delete(key); continue; }
+      const catalog = await api("catalog", { device_id: association.source });
+      const entry = catalog.chats.find(c => c.id === association.entry.id);
+      if (!entry) { chatLinks = await api("links", { ...association, transfer_pending: false }); pendingTransfers.delete(key); notice("Chat sorgente non disponibile."); continue; }
+      if (entry.analysis?.status === "failed") { chatLinks = await api("links", { ...association, transfer_pending: false }); pendingTransfers.delete(key); notice("Analisi non riuscita: controlla Sincronizza nella modifica della chat."); continue; }
+      if (entry.analysis?.status !== "ready") continue;
+      const scopes = data.chat_settings?.[entry.id]?.scopes || association.scopes;
+      try {
+        await api("run", { source_device_id: association.source, device_id: association.target, operation: association.operation, chat_id: entry.id, scopes });
+      } catch (error) {
+        chatLinks = await api("links", { ...association, transfer_pending: false });
+        pendingTransfers.delete(key);
+        throw error;
       }
-      throw error;
+      chatLinks = await api("links", { ...association, transfer_pending: false });
+      pendingTransfers.delete(key);
+      break;
     }
-    closePanel();
-    await poll();
-  });
-  focusDetails();
-  renderJob();
+  } catch (error) { notice(error.message); }
+  finally { checkingTransfers = false; }
 }
 function editDevice(device = {}, anchor = $("#add-device")) {
   const settings = data.ssh_settings?.[device.id] || {}, value = data.appearance?.["device:" + device.id] || {};
@@ -1246,7 +1097,6 @@ function renderJob() {
   document.querySelectorAll(".primary").forEach((b) => {
     if (b.id !== "start-chat") b.disabled = running;
   });
-  updateStart();
   if (job.status === "idle") {
     $("#activity").hidden = true;
     return;
@@ -1313,6 +1163,7 @@ async function poll() {
   if (next.discovery) await updateDiscovery(next.discovery);
   renderConnections();
   renderJob();
+  await checkPendingTransfers();
 }
 let polling = false;
 setInterval(async () => {
@@ -1337,6 +1188,8 @@ setInterval(async () => {
   try {
     const result = await api("catalog", { device_id: id });
     if (sourceId !== id || version !== catalogRequest) return;
+    const editor = $("#chat-popover");
+    if (editor) { const entry = result.chats.find(c => c.id === editor.dataset.objectId); if (entry) renderScopeDetails(editor, entry); }
     if (JSON.stringify(result.chats) !== JSON.stringify(visibleChats) || visibleChats.length === 0) {
       visibleChats = result.chats;
       renderLibrary();

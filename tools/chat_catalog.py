@@ -36,5 +36,16 @@ for directory, _, files in os.walk(root / "sessions", followlinks=False):
         chat_id = filename[-42:-6]
         if chat_id not in hidden:
             chats.append({"id": chat_id, "name": names.get(chat_id, "Senza titolo"), "path": str(path), "relative_path": str(path.relative_to(root)), "bytes": path.stat().st_size, "modified_ns": str(path.stat().st_mtime_ns)})
+settings = pathlib.Path(os.environ.get("OACLIS_SETTINGS_DIR", pathlib.Path.home() / ".config/oaclis")) / "appearance.sqlite"
+if settings.is_file():
+    with sqlite3.connect(settings.as_uri() + "?mode=ro", uri=True, timeout=2) as db:
+        if db.execute("SELECT 1 FROM sqlite_master WHERE name='analysis'").fetchone():
+            records = {key: json.loads(value) for key, value in db.execute("SELECT key,value FROM analysis WHERE value IS NOT NULL")}
+            for chat in chats:
+                record = records.get("master:" + chat["id"], {"status": "missing"})
+                revision = "environment-v2:master:{}:{}:{}".format(json.dumps(chat["path"], ensure_ascii=False), chat["bytes"], json.dumps(chat["modified_ns"]))
+                if record.get("status") in ("ready", "failed") and record.get("revision") != revision:
+                    record = {"status": "pending"}
+                chat["analysis"] = record
 chats.sort(key=lambda c: c["path"], reverse=True)
 print(json.dumps({"root": str(root), "chats": chats}))

@@ -57,7 +57,7 @@ fn association(value: &Value, devices: &[Device]) -> io::Result<(String, Value)>
     pair.sort();
     Ok((
         format!("{}:{}:{}", id, pair[0], pair[1]),
-        json!({"entry":{"id":id,"name":name},"source":source,"target":target,"operation":operation,"label":label,"scopes":scopes}),
+        json!({"entry":{"id":id,"name":name},"source":source,"target":target,"operation":operation,"label":label,"scopes":scopes,"transfer_pending":value["transfer_pending"] == true}),
     ))
 }
 
@@ -72,6 +72,32 @@ fn catalog(root: &Path) -> io::Result<Vec<Value>> {
     }
     let value: Value = serde_json::from_slice(&output.stdout).map_err(io::Error::other)?;
     serde_json::from_value(value["chats"].clone()).map_err(io::Error::other)
+}
+// Each device analyzes its own archives serially; unchanged failures are not retried.
+fn background_analysis(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::collections::HashSet<String>>>) {
+    thread::spawn(move || loop {
+        if let Ok(chats) = catalog(&codex) {
+            for chat in chats {
+                let Some(id) = chat["id"].as_str() else { continue; };
+                let Ok(key) = environment::key("master", id) else { continue; };
+                let revision = environment::revision(&chat, None);
+                let cached = environment::database(&config, &key, "analysis-get", None).unwrap_or(Value::Null);
+                if cached["revision"] == revision && matches!(cached["status"].as_str(), Some("ready" | "failed")) { continue; }
+                {
+                    let mut running = active.lock().unwrap();
+                    if running.len() >= 2 || !running.insert(key.clone()) { continue; }
+                }
+                let _ = environment::database(&config, &key, "analysis-save", Some(&json!({"status":"pending", "revision":revision})));
+                let result = match environment::analyze(None, chat["path"].as_str().unwrap_or(""), id) {
+                    Ok(manifest) => json!({"status":"ready", "revision":revision, "manifest":manifest, "chat_bytes":chat["bytes"], "chat_modified_ns":chat["modified_ns"]}),
+                    Err(error) => json!({"status":"failed", "revision":revision, "error":error.to_string()}),
+                };
+                let _ = environment::database(&config, &key, "analysis-save", Some(&result));
+                active.lock().unwrap().remove(&key);
+            }
+        }
+        thread::sleep(std::time::Duration::from_secs(60));
+    });
 }
 fn remote_catalog(device: &Device) -> io::Result<Value> {
     let command = format!("python3 -c {}", crate::ssh::quote(CATALOG));
@@ -144,6 +170,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     let job = Arc::new(Mutex::new(json!({"status":"idle"})));
     let connections = Arc::new(Mutex::new(json!({})));
     let analyses = Arc::new(Mutex::new(std::collections::HashSet::<String>::new()));
+    background_analysis(codex.clone(), config.clone(), analyses.clone());
     println!("Oaclis UI: http://localhost:23232");
     for mut request in server.incoming_requests() {
         if request.method() == &Method::Get && request.url() == "/peer/hello" {
@@ -289,7 +316,17 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         .into_iter()
                         .find(|d| d.id == value["device_id"])
                         .ok_or_else(|| invalid("Dispositivo non trovato"))?;
-                    remote_catalog(&device)
+                    let result = remote_catalog(&device)?;
+                    if let Some(chats) = result["chats"].as_array() {
+                        for chat in chats {
+                            if chat["analysis"]["status"] == "ready" {
+                                let mut record = chat["analysis"].clone();
+                                record["revision"] = json!(environment::revision(chat, Some(&device)));
+                                environment::database(&config, &environment::key(&device.id, chat["id"].as_str().unwrap())?, "analysis-save", Some(&record))?;
+                            }
+                        }
+                    }
+                    Ok(result)
                 }
                 (&Method::Post, "/api/scopes") | (&Method::Post, "/api/analysis") => {
                     let v = body(&mut request)?;
