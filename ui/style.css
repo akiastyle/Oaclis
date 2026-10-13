@@ -110,7 +110,7 @@
   --scope-active: #3d875b;
   --scope-inactive: var(--muted);
   --glass-opacity: 72%;
-  --glass-menu-opacity: 92%;
+  --glass-menu-opacity: var(--glass-opacity);
   --glass-device-opacity: 60%;
   --glass-blur: 18px;
   --glass-device-blur: 3px;
@@ -824,7 +824,9 @@ select {
 #activity,
 #notice,
 .connection-port,
-.link-badge {
+.link-badge,
+.terminal-screen,
+.terminal-input textarea {
   --glass-base: var(--panel);
   background: color-mix(in srgb, var(--glass-base) var(--glass-opacity), transparent);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
@@ -1026,10 +1028,10 @@ select {
 }
 
 .chat-terminal.context-popover { width: min(960px, calc(100vw - 16px)); }
-.terminal-screen { height: min(55dvh, 560px); overflow: auto; font: var(--font-caption)/1.4 monospace; white-space: pre; background: var(--soft); padding: var(--space-12); border-radius: var(--radius-control); }
+.terminal-screen { height: min(55dvh, 560px); overflow: auto; font: var(--font-caption)/1.4 monospace; white-space: pre; background: color-mix(in srgb, var(--soft) var(--glass-opacity), transparent); padding: var(--space-12); border-radius: var(--radius-control); }
 .terminal-input { display: flex; gap: var(--space-8); }
 .terminal-input textarea { width: 100%; box-sizing: border-box; }
-.terminal-input textarea { flex: 1; min-width: 0; background: var(--panel); color: var(--ink); border: var(--border-width) solid var(--line); border-radius: var(--radius-control); padding: var(--space-8); font: inherit; }
+.terminal-input textarea { flex: 1; min-width: 0; background: color-mix(in srgb, var(--panel) var(--glass-opacity), transparent); color: var(--ink); border: var(--border-width) solid var(--line); border-radius: var(--radius-control); padding: var(--space-8); font: inherit; }
 .terminal-keys { display: flex; gap: var(--space-8); margin-top: var(--space-8); }
 
 .terminal-destinations { display: flex; flex-direction: column; gap: var(--space-8); }
