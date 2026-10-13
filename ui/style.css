@@ -969,10 +969,10 @@ select {
 }
 .link-main .chat-badge { width: 100%; height: 100%; font-size: var(--font-brand); }
 .link-main .chat-badge svg { width: var(--size-24); height: var(--size-24); }
- .link-edit {
+ .link-edit, .link-open {
   position: absolute;
-  top: -12px;
-  right: -12px;
+  top: calc(-1 * var(--space-18));
+  right: calc(-1 * var(--space-18));
   width: var(--size-24);
   height: var(--size-24);
   padding: var(--space-4);
@@ -983,8 +983,8 @@ select {
   opacity: 0;
   visibility: hidden;
 }
-.link-edit svg { width: var(--size-14); height: var(--size-14); }
-.link-badge:hover .link-edit, .link-badge:focus-within .link-edit { opacity: 1; visibility: visible; }
+.link-edit svg, .link-open svg { width: var(--size-14); height: var(--size-14); }
+.link-badge:hover .link-edit, .link-badge:focus-within .link-edit, .link-open { opacity: 1; visibility: visible; }
 .chat-link:has(.link-badge:hover), .chat-link:has(.link-badge:focus-within) { z-index: 3; }
 .context-popover {
   position: fixed;
@@ -1109,3 +1109,11 @@ select {
 .panel-tether { position: fixed; inset: 0; width: 100vw; height: 100dvh; margin: 0; padding: 0; border: 0; background: transparent; pointer-events: none; overflow: hidden; }
 .panel-tether svg { width: 100%; height: 100%; }
 .panel-tether line { stroke: var(--muted); stroke-width: 1px; vector-effect: non-scaling-stroke; transition: none; }
+
+.connection-lines marker path { fill: currentColor; stroke: none; }
+.link-open { top: auto; bottom: calc(-1 * var(--space-18)); }
+.link-main { cursor: grab; touch-action: none; }
+.link-badge[data-dragging="true"] .link-main { cursor: grabbing; }
+.link-badge[data-dragging="true"], .link-badge[data-dragging="true"] * { transition: none; }
+
+.connection-lines > path { stroke-linecap: butt; }

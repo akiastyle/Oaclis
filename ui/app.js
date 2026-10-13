@@ -22,6 +22,8 @@ let data = {
   visibleChats = [],
   drag = null,
   positions = {},
+  linkPositions = {},
+  linkPositionSaving = false,
   catalogRequest = 0,
   audio,
   noticeTimer;
@@ -551,6 +553,7 @@ function editChat(entry, anchor, origin = sourceId || "master") {
   panel.querySelector('[name="label"]').focus();
 }
 function renderLink(force = false) {
+  if (document.querySelector('.link-badge[data-dragging="true"]')) return;
   if (!force && document.querySelector(".link-badge:hover, .link-badge:focus-within")) return;
   document.querySelectorAll(".chat-link").forEach(node => node.remove());
   const links = [...chatLinks];
@@ -593,7 +596,7 @@ function drawChatLink(connection, index, lane = 0) {
   if (index === 0) layer.id = "chat-link";
   layer.style.color = appearance(connection.entry).color || "var(--ink)";
   layer.innerHTML =
-    '<svg class="connection-lines" aria-hidden="true"><defs><marker id="link-arrow-' + index + '" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 2l6 3-6 3"/></marker></defs><path d="M' +
+    '<svg class="connection-lines" aria-hidden="true"><defs><marker id="link-arrow-' + index + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1 1L9 5L1 9Z"/></marker></defs><path d="M' +
     curve.slice(1) +
     '" stroke-dasharray="' +
     (connection.operation === "sync" ? "none" : "7 6") +
@@ -614,8 +617,13 @@ function drawChatLink(connection, index, lane = 0) {
   main.type = "button";
   main.innerHTML = badge(connection.entry);
   main.title = name;
-  main.setAttribute("aria-label", "Apri " + name);
-  main.onclick = () => chooseChatTerminal(connection, main);
+  main.setAttribute("aria-label", "Sposta " + name);
+  main.title = "Trascina " + name;
+  const open = document.createElement("button");
+  open.type = "button"; open.className = "link-open icon-button";
+  open.setAttribute("aria-label", "Apri " + name); open.title = "Apri console";
+  open.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + icons.terminal + '</svg>';
+  open.onclick = () => chooseChatTerminal(connection, open);
   const edit = document.createElement("button");
   edit.type = "button";
   edit.className = "link-edit icon-button";
@@ -626,15 +634,48 @@ function drawChatLink(connection, index, lane = 0) {
     const result = await api("catalog", { device_id: connection.source });
     editChat(result.chats.find(c => c.id === connection.entry.id) || connection.entry, edit, connection.source);
   });
-  marker.append(main, edit);
+  marker.append(main, edit, open);
   main.querySelector(".chat-badge").style.color = appearance(connection.entry).color || "var(--ink)";
   marker.style.color = appearance(connection.entry).color || "var(--ink)";
   $("#nodes").prepend(layer);
   const path = layer.querySelector(".connection-lines > path");
   const midpoint = path.getPointAtLength(path.getTotalLength() / 2);
-  marker.style.left = midpoint.x + "px";
-  marker.style.top = midpoint.y + "px";
-
+  const key = [connection.entry.id, ...[connection.source, connection.target].sort()].join(":");
+  const offset = linkPositions[key] || { x: 0, y: 0 };
+  marker.style.left = midpoint.x + offset.x + "px";
+  marker.style.top = midpoint.y + offset.y + "px";
+  const save = () => {
+    linkPositions[key] = { x: marker.offsetLeft - midpoint.x, y: marker.offsetTop - midpoint.y };
+    linkPositionSaving = true;
+    api("link-position", { id: connection.entry.id, source: connection.source, target: connection.target, ...linkPositions[key] })
+      .catch(e => notice(e.message)).finally(() => { linkPositionSaving = false; });
+  };
+  main.onpointerdown = event => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const start = { x: event.clientX, y: event.clientY, left: marker.offsetLeft, top: marker.offsetTop };
+    marker.dataset.dragging = "true";
+    main.setPointerCapture(event.pointerId);
+    main.onpointermove = e => {
+      if (!main.hasPointerCapture(e.pointerId)) return;
+      marker.style.left = Math.max(22, Math.min(start.left + e.clientX - start.x, $("#nodes").clientWidth - 22)) + "px";
+      marker.style.top = Math.max(22, Math.min(start.top + e.clientY - start.y, $("#nodes").clientHeight - 22)) + "px";
+    };
+    main.onpointerup = e => {
+      save(); delete marker.dataset.dragging;
+      if (main.hasPointerCapture(e.pointerId)) main.releasePointerCapture(e.pointerId);
+    };
+    main.onpointercancel = main.onlostpointercapture = () => delete marker.dataset.dragging;
+  };
+  main.onkeydown = event => {
+    const directions = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] };
+    if (!directions[event.key]) return;
+    event.preventDefault();
+    const [x, y] = directions[event.key];
+    marker.style.left = marker.offsetLeft + x + "px";
+    marker.style.top = marker.offsetTop + y + "px";
+    save();
+  };
 }
 function closeChatTerminal(panel) {
   if (!panel) return;
@@ -876,7 +917,20 @@ function savePosition(node) {
   positions[node.dataset.id] = { x: node.offsetLeft, y: node.offsetTop };
   savePositions();
 }
-function renderMap() {
+let mapMotionFrame;
+function followMapMotion() {
+  cancelAnimationFrame(mapMotionFrame);
+  const duration = getComputedStyle(document.documentElement).getPropertyValue("--duration-ui").trim();
+  const milliseconds = parseFloat(duration) * (duration.endsWith("ms") ? 1 : 1000);
+  const until = performance.now() + (matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : milliseconds);
+  const frame = () => {
+    renderLink(true);
+    if (performance.now() < until) mapMotionFrame = requestAnimationFrame(frame);
+  };
+  mapMotionFrame = requestAnimationFrame(frame);
+}
+function renderMap(animate = false) {
+  const previous = animate ? Object.fromEntries([...document.querySelectorAll(".map-node")].map(n => [n.dataset.id, { x: n.offsetLeft, y: n.offsetTop }])) : {};
   $("#nodes").replaceChildren();
   $("#nodes").style.height = mapLayout().canvasHeight + "px";
   devices().forEach((device, index) => {
@@ -909,7 +963,7 @@ function renderMap() {
     };
     node.append(customize);
     $("#nodes").append(node);
-    place(node, positions[device.id] || defaultPosition(index));
+    place(node, previous[device.id] || positions[device.id] || defaultPosition(index));
     {
       for (const [operation, label] of [
         ["sync", "Sincronizzazione bidirezionale"],
@@ -1025,6 +1079,15 @@ function renderMap() {
     });
   });
   renderConnections();
+  if (animate) {
+    $("#nodes").getBoundingClientRect();
+    requestAnimationFrame(() => {
+      [...document.querySelectorAll(".map-node")].forEach((node, index) => {
+        if (node.dataset.dragging !== "true") place(node, positions[node.dataset.id] || defaultPosition(index));
+      });
+      followMapMotion();
+    });
+  }
 }
 function renderConnections() {
   renderLink();
@@ -1231,12 +1294,12 @@ async function poll() {
     }
     if (state !== "checking") lastConnection[device.id] = state;
   }
-  if (next.shared && !positionsSaving && !drag && !document.querySelector('.map-node[data-dragging="true"]')) {
-    const previous = JSON.stringify([data.devices, data.appearance, chatLinks, data.chat_settings, positions]);
+  if (next.shared && !positionsSaving && !linkPositionSaving && !drag && !document.querySelector('.map-node[data-dragging="true"], .link-badge[data-dragging="true"]')) {
+    const previous = JSON.stringify([data.devices, data.appearance, chatLinks, data.chat_settings, positions, linkPositions]);
     const shared = next.shared;
-    if (previous !== JSON.stringify([shared.devices, shared.appearance, shared.links, shared.chat_settings, shared.positions])) {
-      Object.assign(data, shared); chatLinks = shared.links; positions = shared.positions;
-      renderMap(); renderLibrary();
+    if (previous !== JSON.stringify([shared.devices, shared.appearance, shared.links, shared.chat_settings, shared.positions, shared.link_positions])) {
+      Object.assign(data, shared); chatLinks = shared.links; positions = shared.positions; linkPositions = shared.link_positions || {};
+      renderMap(true); renderLibrary();
     }
   }
   data.connections = next.connections;
@@ -1298,6 +1361,7 @@ guard(async () => {
   chatLinks = data.links || [];
   const oldPositions = positions;
   positions = data.positions || {};
+  linkPositions = data.link_positions || {};
   renderMap();
   if (data.role === "master" && !Object.keys(positions).length) {
     positions = Object.fromEntries([...document.querySelectorAll(".map-node")].map(n => [n.dataset.id, oldPositions[n.dataset.id] || { x: n.offsetLeft, y: n.offsetTop }]));

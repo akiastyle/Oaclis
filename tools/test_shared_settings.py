@@ -32,6 +32,7 @@ class SharedSettingsTests(unittest.TestCase):
             link={'source':'master','target':'peer-1','operation':'sync','entry':{'id':'chat-one','name':'Originale'},'scopes':{'chat':True,'paths':False,'apps':True},'transfer_pending':True}
             db.execute('INSERT OR REPLACE INTO chat_links VALUES(?,?)', ('chat-one:master:peer-1',json.dumps(link)))
         shared.atomic(root.config / 'positions.json', {'master':{'x':200,'y':100},'peer-1':{'x':400,'y':500}})
+        shared.atomic(root.config / 'link-positions.json', {'chat-one:master:peer-1':{'x':-60,'y':20}})
 
     def converge(self):
         for _ in range(2):
@@ -57,6 +58,8 @@ class SharedSettingsTests(unittest.TestCase):
         positions=shared.read(client.config / 'positions.json',{})
         self.assertEqual(positions['master'],{'x':400,'y':500})
         self.assertEqual(positions['peer-0'],{'x':200,'y':100})
+        offsets=shared.read(client.config / 'link-positions.json',{})
+        self.assertEqual(offsets['chat-one:master:peer-0'],{'x':-60,'y':20})
         before=client.exchange()['records']; self.assertEqual(before,client.exchange()['records'])
 
     def test_offline_rename_and_deletion_converge_without_resurrection(self):
@@ -69,6 +72,7 @@ class SharedSettingsTests(unittest.TestCase):
         for store in self.stores:
             with sqlite3.connect(store.config / 'appearance.sqlite') as db:
                 self.assertEqual(db.execute('SELECT count(*) FROM chat_links').fetchone()[0],0)
+            self.assertEqual(shared.read(store.config / 'link-positions.json',{}),{})
             names=[d['name'] for d in shared.read(store.config / 'devices.json',[])]
             if store is not client:self.assertIn('KDell nuovo',names)
 

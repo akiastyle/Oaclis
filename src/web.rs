@@ -262,12 +262,17 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     crate::terminal::request(device.as_ref(), &v)
                 }
                 (&Method::Get, "/api/state") => Ok(
-                    json!({"positions":crate::shared_settings::positions(&config)?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
+                    json!({"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
                 ),
                 (&Method::Get, "/api/status") => Ok(
                     json!({"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
-                        "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":environment::database(&config,"","links-get",None)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"positions":crate::shared_settings::positions(&config)?}}),
+                        "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":environment::database(&config,"","links-get",None)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}),
                 ),
+                (&Method::Post, "/api/link-position") => {
+                    let value = body(&mut request)?;
+                    crate::shared_settings::write_positions(&config, "link-position", &value)?;
+                    Ok(json!({"ok":true}))
+                }
                 (&Method::Post, "/api/positions") => {
                     let value = body(&mut request)?;
                     crate::shared_settings::save_positions(&config, &value)?;

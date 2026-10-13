@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 LIMIT = 16 * 1024 * 1024
-KINDS = {'device', 'chat', 'preference', 'link', 'position'}
+KINDS = {'device', 'chat', 'preference', 'link', 'position', 'linkposition'}
 
 def read(path, default):
     if path.is_symlink():
@@ -36,7 +36,7 @@ def validate(records):
         raise ValueError('Impostazioni condivise non valide')
     for key, record in records.items():
         parts = key.split(':')
-        if parts[0] not in KINDS or any(not identifier(p) for p in parts[1:]) or len(parts) != (4 if parts[0] == 'link' else 2):
+        if parts[0] not in KINDS or any(not identifier(p) for p in parts[1:]) or len(parts) != (4 if parts[0] in ('link', 'linkposition') else 2):
             raise ValueError('Oggetto condiviso non valido')
         clock = record.get('clock') if isinstance(record, dict) else None
         if not isinstance(clock, list) or len(clock) != 2 or type(clock[0]) is not int or not 0 <= clock[0] < 2**53 or not identifier(clock[1]):
@@ -76,7 +76,7 @@ def validate(records):
                 raise ValueError('Titolo collegamento non valido')
         if parts[0] == 'link' and (value.get('source') not in parts[2:] or value.get('target') not in parts[2:] or value['source'] == value['target'] or value.get('operation') not in ('copy', 'send', 'sync') or value.get('entry', {}).get('id') != parts[1]):
             raise ValueError('Collegamento non valido')
-        if parts[0] == 'position' and (set(value) != {'x', 'y'} or any(type(v) not in (int, float) or not 0 <= v <= 100000 for v in value.values())):
+        if parts[0] in ('position', 'linkposition') and (set(value) != {'x', 'y'} or any(type(v) not in (int, float) or not (-100000 if parts[0] == 'linkposition' else 0) <= v <= 100000 for v in value.values())):
             raise ValueError('Posizione non valida')
 
 def merge(records, incoming):
@@ -136,6 +136,10 @@ class Store:
         for local, position in read(self.config / 'positions.json', {}).items():
             if local in mapping:
                 snapshot['position:' + mapping[local]] = position
+        for key, point in read(self.config / 'link-positions.json', {}).items():
+            chat, a, b = key.split(':')
+            if a in mapping and b in mapping:
+                snapshot[':'.join(['linkposition', chat, *sorted([mapping[a], mapping[b]])])] = point
         return snapshot
 
     def exchange(self, packet=None):
@@ -172,7 +176,7 @@ class Store:
     def apply(self, db, records, mapping):
         reverse = {global_id: local for local, global_id in mapping.items()}
         devices = {d['id']: d for d in read(self.config / 'devices.json', [])}
-        positions = {}
+        positions, link_positions = {}, {}
         for key, record in records.items():
             kind, identifier_ = key.split(':', 1)
             value = record['value']
@@ -220,10 +224,15 @@ class Store:
                 if 'scopes' in preference:
                     adapted['scopes'] = preference['scopes']
                 db.execute('INSERT OR REPLACE INTO chat_links VALUES(?,?)', (local_key, json.dumps(adapted)))
+            elif kind == 'linkposition' and value is not None:
+                chat, a, b = identifier_.split(':')
+                if a in reverse and b in reverse and records.get('link:' + identifier_, {}).get('value') is not None:
+                    link_positions[':'.join([chat, *sorted([reverse[a], reverse[b]])])] = value
             elif kind == 'position' and value is not None and identifier_ in reverse:
                 positions[reverse[identifier_]] = value
         atomic(self.config / 'devices.json', list(devices.values()))
         atomic(self.config / 'positions.json', positions)
+        atomic(self.config / 'link-positions.json', link_positions)
 
     def sync(self, source):
         packet = self.exchange()
@@ -255,11 +264,23 @@ if __name__ == '__main__':
         store = Store(pathlib.Path.home())
         operation = sys.argv[1]
         packet = None
-        if operation in ('exchange', 'positions'):
+        if operation in ('exchange', 'positions', 'link-position'):
             raw = sys.stdin.read(LIMIT + 1)
             if len(raw) > LIMIT:
                 raise ValueError('Impostazioni troppo grandi')
             packet = json.loads(raw)
+        if operation == 'link-position':
+            if any(not identifier(packet.get(k)) for k in ('id', 'source', 'target')) or packet['source'] == packet['target']:
+                raise ValueError('Collegamento non valido')
+            point = {'x': packet.get('x'), 'y': packet.get('y')}
+            key = ':'.join([packet['id'], *sorted([packet['source'], packet['target']])])
+            validate({'linkposition:' + key: {'clock': [0, store.id], 'value': point}})
+            with open(store.config / 'shared-settings.lock', 'a') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                points = read(store.config / 'link-positions.json', {})
+                points[key] = point
+                atomic(store.config / 'link-positions.json', points)
+            print(json.dumps({'ok': True})); sys.exit(0)
         if operation == 'positions':
             validate({'position:' + key: {'clock': [0, store.id], 'value': value} for key, value in packet.items()})
             with open(store.config / 'shared-settings.lock', 'a') as lock:
