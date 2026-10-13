@@ -178,6 +178,19 @@ function guard(fn) {
     }
   };
 }
+const eyePath = '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>';
+function renderEye(button, crossed, label) {
+  button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + eyePath + (crossed ? '<path d="m3 3 18 18"/>' : '') + '</svg>';
+  button.title = label; button.setAttribute("aria-label", label);
+  button.setAttribute("aria-pressed", String(!crossed));
+}
+let showHiddenChats = false;
+renderEye($("#show-hidden"), true, "Mostra chat nascoste");
+$("#show-hidden").onclick = () => {
+  showHiddenChats = !showHiddenChats;
+  renderEye($("#show-hidden"), !showHiddenChats, showHiddenChats ? "Nascondi chat nascoste" : "Mostra chat nascoste");
+  renderLibrary();
+};
 function openPanel() {
   $("#panel").hidden = false;
 }
@@ -196,6 +209,7 @@ function closePanel() {
   const origin = sourceId;
   catalogRequest++;
   $("#panel").hidden = true;
+  $("#panel").tether?.remove();
   sourceId = null;
   selected = null;
   renderConnections();
@@ -220,6 +234,8 @@ async function openDevice(id) {
   visibleChats = [];
   showLibrary();
   openPanel();
+  $("#panel").opener = [...document.querySelectorAll(".map-node")].find(node => node.dataset.id === id);
+  bindPanelReference($("#panel"));
   renderConnections();
   await loadChats();
   if (sourceId === id && !$("#panel").hidden) $("#search").focus();
@@ -492,7 +508,10 @@ function bindPanelDrag(panel, reference = false) {
     heading.onpointercancel = finish;
     heading.onlostpointercapture = () => delete panel.dataset.dragging;
   };
-  if (!reference) return;
+  if (reference) bindPanelReference(panel);
+}
+function bindPanelReference(panel) {
+  panel.tether?.remove();
   const original = panel.opener.closest(".map-node, .link-badge, .library-row") || panel.opener;
   const nodeId = original.dataset.id, linkKey = original.dataset.linkKey;
   const chatId = original.querySelector("[data-chat-id]")?.dataset.chatId;
@@ -503,8 +522,9 @@ function bindPanelDrag(panel, reference = false) {
   tether.className = "panel-tether";
   tether.setAttribute("popover", "manual"); tether.setAttribute("aria-hidden", "true");
   tether.innerHTML = '<svg><line/></svg>';
+  panel.tether = tether;
   document.body.append(tether); tether.showPopover();
-  panel.hidePopover(); panel.showPopover();
+  if (panel.hasAttribute("popover")) { panel.hidePopover(); panel.showPopover(); }
   const line = tether.querySelector("line");
   const edge = (rect, target) => {
     const x = rect.left + rect.width / 2, y = rect.top + rect.height / 2;
@@ -514,7 +534,7 @@ function bindPanelDrag(panel, reference = false) {
     return { x: x + dx * ratio, y: y + dy * ratio };
   };
   const update = () => {
-    if (!panel.isConnected) { tether.remove(); return; }
+    if (!panel.isConnected || panel.hidden || panel.tether !== tether) { tether.remove(); return; }
     const object = resolve();
     tether.style.visibility = object?.isConnected ? "visible" : "hidden";
     if (object?.isConnected) {
@@ -560,10 +580,25 @@ function editChat(entry, anchor, origin = sourceId || "master") {
   const panel = document.createElement("div");
   panel.id = "chat-popover"; panel.opener = anchor; panel.dataset.objectId = entry.id; panel.dataset.sourceDevice = origin;
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Personalizza chat");
-  panel.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form id="appearance-form"><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>';
+  panel.innerHTML = '<button type="button" class="icon-button chat-visibility" aria-label="Nascondi chat"></button><button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form id="appearance-form"><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
   bindPanelDrag(panel, true);
   panel.querySelector('.popover-close').onclick = closeChatEditor;
+  const visibility = panel.querySelector('.chat-visibility');
+  const updateVisibility = () => {
+    const hidden = data.chat_settings?.[entry.id]?.hidden === true;
+    renderEye(visibility, hidden, hidden ? "Mostra chat" : "Nascondi chat");
+  };
+  updateVisibility();
+  visibility.onclick = guard(async () => {
+    visibility.disabled = true;
+    try {
+      const result = await api("chat/visibility", { id: entry.id, hidden: data.chat_settings?.[entry.id]?.hidden !== true });
+      data.chat_settings = result.preferences;
+      updateVisibility(); renderLibrary();
+    } finally { visibility.disabled = false; }
+  });
+  panel.updateVisibility = updateVisibility;
   renderScopeDetails(panel, entry);
   panel.detailsTimer = setInterval(async () => {
     try {
@@ -855,7 +890,7 @@ function renderLibrary() {
   const search = $("#search").value.toLocaleLowerCase();
   const focused = document.activeElement?.dataset.chatId;
   const entries = visibleChats.filter(
-    (c) => !data.chat_settings?.[c.id]?.hidden && (
+    (c) => (showHiddenChats || !data.chat_settings?.[c.id]?.hidden) && (
       chatLabel(c).toLocaleLowerCase().includes(search) ||
       c.name.toLocaleLowerCase().includes(search) ||
       c.id.toLocaleLowerCase().includes(search)),
@@ -874,7 +909,7 @@ function renderLibrary() {
     button.type = "button";
     button.dataset.kind = "chat";
     button.dataset.chatId = entry.id;
-    button.draggable = true;
+    button.draggable = !data.chat_settings?.[entry.id]?.hidden;
     button.innerHTML =
       badge(entry) +
       "<span><strong>" +
@@ -921,6 +956,7 @@ function renderLibrary() {
     edit.innerHTML =
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
     edit.onclick = () => editChat(entry, edit);
+    row.classList.toggle("hidden-chat", data.chat_settings?.[entry.id]?.hidden === true);
     row.append(button, edit);
     $("#library-list").append(row);
     if (focused === entry.id) button.focus({ preventScroll: true });
@@ -1340,7 +1376,7 @@ async function poll() {
   data.analyses = next.analyses || {};
   data.transfers = next.transfers || {};
   const editor = $("#chat-popover");
-  if (editor?.scopeEntry) renderScopeDetails(editor, editor.scopeEntry);
+  if (editor?.scopeEntry) { renderScopeDetails(editor, editor.scopeEntry); editor.updateVisibility?.(); }
   if (next.discovery) await updateDiscovery(next.discovery);
   renderConnections();
   for (const marker of document.querySelectorAll(".link-badge")) {

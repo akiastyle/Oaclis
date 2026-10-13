@@ -215,7 +215,7 @@ class Store:
                 if a not in reverse or b not in reverse:
                     continue
                 local_key = ':'.join([chat, *sorted([reverse[a], reverse[b]])])
-                if value is None or any(records.get('device:' + peer, {}).get('value', True) is None for peer in (a, b)) or (records.get('preference:' + chat, {}).get('value') or {}).get('hidden'):
+                if value is None or any(records.get('device:' + peer, {}).get('value', True) is None for peer in (a, b)):
                     db.execute('DELETE FROM chat_links WHERE key=?', (local_key,))
                     continue
                 pending = db.execute('SELECT value FROM chat_links WHERE key=?', (local_key,)).fetchone()

@@ -7,12 +7,16 @@ from pathlib import Path
 
 path, operation = Path(sys.argv[1]), sys.argv[2]
 os.umask(0o077)
-if operation in ("preferences-get", "chat-hide", "chat-scopes", "device-forget"):
+if operation in ("preferences-get", "chat-hide", "chat-visibility", "chat-scopes", "device-forget"):
     with sqlite3.connect(path) as db:
         db.execute("CREATE TABLE IF NOT EXISTS chat_settings (id TEXT PRIMARY KEY, hidden INTEGER NOT NULL DEFAULT 0, scopes TEXT)")
         db.execute("CREATE TABLE IF NOT EXISTS chat_links (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
         key = sys.argv[3] if len(sys.argv) > 3 else ""
-        # shortcut: ripristino chat nascoste dal database; aggiungere un comando UI quando richiesto.
+        if operation == "chat-visibility":
+            value = json.load(sys.stdin)
+            if type(value.get('hidden')) is not bool:
+                raise ValueError("Visibilità non valida")
+            db.execute("INSERT INTO chat_settings(id,hidden) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET hidden=excluded.hidden", (key, int(value['hidden'])))
         if operation == "chat-hide":
             db.execute("INSERT INTO chat_settings(id,hidden) VALUES(?,1) ON CONFLICT(id) DO UPDATE SET hidden=1", (key,))
         if operation == "chat-scopes":
@@ -49,7 +53,7 @@ elif operation.startswith("links-"):
             value = json.load(sys.stdin)
             if db.execute("SELECT 1 FROM sqlite_master WHERE name='chat_settings'").fetchone():
                 preference = db.execute("SELECT hidden,scopes FROM chat_settings WHERE id=?", (value['entry']['id'],)).fetchone()
-                if preference and preference[0]:
+                if preference and preference[0] and not db.execute("SELECT 1 FROM chat_links WHERE key=?", (sys.argv[3],)).fetchone():
                     raise ValueError("Chat rimossa da Oaclis")
                 if preference and preference[1]:
                     value['scopes'] = json.loads(preference[1])
@@ -80,7 +84,7 @@ elif operation.startswith("analysis-"):
         value["scopes"] = json.loads(row[1]) if row else {"chat":True,"paths":True,"apps":True}
         if db.execute("SELECT 1 FROM sqlite_master WHERE name='chat_settings'").fetchone():
             preference = db.execute("SELECT scopes FROM chat_settings WHERE id=?", (key.split(':', 1)[-1],)).fetchone()
-            if preference and preference[0]:
+            if preference and preference[0] and not db.execute("SELECT 1 FROM chat_links WHERE key=?", (sys.argv[3],)).fetchone():
                 value['scopes'] = json.loads(preference[0])
         print(json.dumps(value))
 elif operation == "load":

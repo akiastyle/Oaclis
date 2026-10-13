@@ -566,6 +566,12 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         association(&value, &devices::load(config.join("devices.json"))?)?;
                     environment::database(&config, &key, "links-save", Some(&value))
                 }
+                (&Method::Post, "/api/chat/visibility") => {
+                    let value = body(&mut request)?;
+                    let id = value["id"].as_str().ok_or_else(|| invalid("Chat richiesta"))?;
+                    if !devices::identifier(id) || !value["hidden"].is_boolean() { return Err(invalid("Visibilità non valida")); }
+                    environment::database(&config, id, "chat-visibility", Some(&value))
+                }
                 (&Method::Post, "/api/chat/hide") | (&Method::Post, "/api/device/delete") => {
                     let value = body(&mut request)?;
                     let id = value["id"].as_str().ok_or_else(|| invalid("Oggetto richiesto"))?;

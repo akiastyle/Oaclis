@@ -62,6 +62,19 @@ class SharedSettingsTests(unittest.TestCase):
         self.assertEqual(offsets['chat-one:master:peer-0'],{'x':-60,'y':20})
         before=client.exchange()['records']; self.assertEqual(before,client.exchange()['records'])
 
+    def test_visibility_propagates_without_deleting_links_or_appearance(self):
+        self.converge()
+        root = self.stores[0]
+        for hidden in (1, 0):
+            with sqlite3.connect(root.config / 'appearance.sqlite') as db:
+                db.execute("UPDATE chat_settings SET hidden=? WHERE id='chat-one'", (hidden,))
+            self.converge()
+            for store in self.stores:
+                with sqlite3.connect(store.config / 'appearance.sqlite') as db:
+                    self.assertEqual(db.execute("SELECT hidden FROM chat_settings WHERE id='chat-one'").fetchone()[0], hidden)
+                    self.assertEqual(db.execute('SELECT count(*) FROM chat_links').fetchone()[0], 1)
+                    self.assertIsNotNone(db.execute("SELECT value FROM appearance WHERE key='chat:chat-one'").fetchone())
+
     def test_offline_rename_and_deletion_converge_without_resurrection(self):
         self.converge()
         client=self.stores[1]

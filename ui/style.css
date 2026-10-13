@@ -1147,3 +1147,11 @@ select {
 .scope-row > .operation-indicator { position: absolute; left: 0; top: 0; pointer-events: none; }
 @keyframes operation-glow { to { box-shadow: 0 0 9px 2px var(--operation-pending); } }
 @media (prefers-reduced-motion: reduce) { .operation-indicator[data-state="busy"] { animation: none; } }
+
+#chat-popover > .chat-visibility {
+  position: absolute;
+  top: var(--space-4);
+  right: calc(var(--space-4) + var(--size-20) + var(--space-9) * 2 + var(--space-4));
+}
+#chat-popover > h2 { padding-right: calc((var(--size-20) + var(--space-9) * 2) * 2 + var(--space-8)); }
+.library-row.hidden-chat .library-item { opacity: 0.5; }
