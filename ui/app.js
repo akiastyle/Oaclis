@@ -729,8 +729,14 @@ function drawChatLink(connection, index, lane = 0) {
   edit.title = "Modifica chat";
   edit.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
   edit.onclick = guard(async () => {
-    const result = await api("catalog", { device_id: connection.source });
-    editChat(result.chats.find(c => c.id === connection.entry.id) || connection.entry, edit, connection.source);
+    const cached = connection.source === sourceId ? visibleChats : connection.source === "master" ? data.chats : [];
+    editChat(cached.find(c => c.id === connection.entry.id) || connection.entry, edit, connection.source);
+    const panel = $("#chat-popover");
+    try {
+      const result = await api("catalog", { device_id: connection.source });
+      const fresh = result.chats.find(c => c.id === connection.entry.id);
+      if (fresh && panel.isConnected) renderScopeDetails(panel, fresh);
+    } catch (_) { /* Cached details remain usable while the source is unreachable. */ }
   });
   marker.append(main, edit, activityIndicator(connection.entry, connection.source, "all"), open);
   main.querySelector(".chat-badge").style.color = appearance(connection.entry).color || "var(--ink)";

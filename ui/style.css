@@ -987,6 +987,7 @@ select {
 .link-badge:hover .link-edit, .link-badge:focus-within .link-edit, .link-open { opacity: 1; visibility: visible; }
 .chat-link:has(.link-badge:hover), .chat-link:has(.link-badge:focus-within) { z-index: 3; }
 .context-popover {
+  --surface-enter-opacity: 1;
   position: fixed;
   inset: auto;
   margin: 0;
@@ -1072,7 +1073,7 @@ select {
   animation: surface-enter var(--duration-ui) var(--ease-ui);
 }
 @keyframes surface-enter {
-  from { opacity: 0; translate: 0 var(--space-8); }
+  from { opacity: var(--surface-enter-opacity, 0); translate: 0 var(--space-8); }
   to { opacity: 1; translate: 0 0; }
 }
 .map-node[data-dragging="true"], .chat-terminal[data-dragging="true"],
