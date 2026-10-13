@@ -193,6 +193,7 @@ $("#show-hidden").onclick = () => {
 };
 function openPanel() {
   $("#panel").hidden = false;
+  if (!$("#panel").matches(":popover-open")) $("#panel").showPopover();
 }
 function showLibrary() {
   closeConnectionPopover();
@@ -208,6 +209,7 @@ function closePanel() {
   closeConnectionPopover();
   const origin = sourceId;
   catalogRequest++;
+  if ($("#panel").matches(":popover-open")) $("#panel").hidePopover();
   $("#panel").hidden = true;
   $("#panel").tether?.remove();
   sourceId = null;
@@ -223,7 +225,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && document.activeElement?.closest(".chat-terminal")) { closeChatTerminal(document.activeElement.closest(".chat-terminal")); return; }
   if (e.key === "Escape" && $("#device-settings")) { closeDeviceSettings(); return; }
   if (e.key === "Escape" && $("#connection-popover")) { closeConnectionPopover(); return; }
-  if (e.key === "Escape" && $("#chat-popover")) { closeChatEditor(); return; }
+  if (e.key === "Escape" && $(".chat-editor")) { closeChatEditor(); return; }
   if (e.key === "Escape" && !$("#panel").hidden) closePanel();
 });
 $("#back").onclick = showLibrary;
@@ -235,7 +237,7 @@ async function openDevice(id) {
   showLibrary();
   openPanel();
   $("#panel").opener = [...document.querySelectorAll(".map-node")].find(node => node.dataset.id === id);
-  bindPanelReference($("#panel"));
+  bindPanelDrag($("#panel"), true);
   renderConnections();
   await loadChats();
   if (sourceId === id && !$("#panel").hidden) $("#search").focus();
@@ -402,6 +404,17 @@ function activityIndicator(entry, origin, scope) {
   if (value.state === "success") setTimeout(() => { if (indicator.isConnected) indicator.hidden = true; }, 1000);
   return indicator;
 }
+function updateScopeText(box, lines) {
+  const content = JSON.stringify(lines);
+  if (box.dataset.content === content) return false;
+  const selection = window.getSelection();
+  if (selection?.rangeCount && !selection.isCollapsed && selection.getRangeAt(0).intersectsNode(box)) return false;
+  box.replaceChildren(...lines.map(text => {
+    const line = document.createElement("div"); line.textContent = text; return line;
+  }));
+  box.dataset.content = content;
+  return true;
+}
 function renderScopeDetails(panel, entry) {
   panel.scopeEntry = entry;
   const origin = panel.dataset.sourceDevice || "master";
@@ -409,14 +422,12 @@ function renderScopeDetails(panel, entry) {
   const activity = entry.modified_ns ? new Date(Number(entry.modified_ns) / 1e6).toLocaleString("it-IT") : "Non disponibile";
   const chat = panel.querySelector('[data-detail="chat"]');
   if (!chat) return;
-  chat.textContent = ((entry.bytes || 0) / 1048576).toLocaleString("it-IT", { maximumFractionDigits: 2 }) + " MB · Ultima attività: " + activity;
+  let changed = updateScopeText(chat, [((entry.bytes || 0) / 1048576).toLocaleString("it-IT", { maximumFractionDigits: 2 }) + " MB · Ultima attività: " + activity]);
   const state = result.status === "failed" ? "Analisi non riuscita. " + (result.error || "") : result.status === "pending" ? "Analisi in corso…" : "Analisi da eseguire";
   const write = (scope, items, empty) => {
     const box = panel.querySelector('[data-detail="' + scope + '"]');
-    box.replaceChildren();
-    if (result.status !== "ready") { box.textContent = state; return; }
-    if (!items.length) { box.textContent = empty; return; }
-    for (const text of items) { const line = document.createElement("div"); line.textContent = text; box.append(line); }
+    const lines = result.status !== "ready" ? [state] : items.length ? items : [empty];
+    changed = updateScopeText(box, lines) || changed;
   };
   write("paths", manifest.paths || [], "Nessun percorso individuato");
   write("apps", [...(manifest.apps?.length ? manifest.apps : manifest.packages || []), ...(manifest.plugins || []).map(p => p.name), ...(manifest.configs || []).map(c => c.path), ...(manifest.app_notes || []), ...(manifest.uncertainties || [])], "Nessuna app aggiuntiva individuata");
@@ -425,7 +436,7 @@ function renderScopeDetails(panel, entry) {
     row.querySelector(".operation-indicator")?.remove();
     row.append(activityIndicator(entry, origin, scope));
   }
-  positionContext(panel, panel.opener);
+  if (changed) positionContext(panel, panel.opener);
 }
 async function saveChatScopes(entry, scopes, origin = sourceId || "master") {
   const result = await api("scopes", { source_device_id: origin, chat_id: entry.id, scopes });
@@ -441,7 +452,10 @@ async function removePresentation(kind, id) {
       'Le chat Codex, i file trasferiti e le app resteranno intatti.')) return;
   await saveLinks;
   await api(kind === "chat" ? "chat/hide" : "device/delete", { id });
-  closeChatEditor(); closeDeviceSettings(); closeConnectionPopover();
+  document.querySelectorAll(".chat-editor").forEach(panel => {
+    if (kind === "chat" ? panel.dataset.objectId === id : panel.dataset.sourceDevice === id) closeChatEditor(panel);
+  });
+  closeDeviceSettings(); closeConnectionPopover();
   if (link && (kind === "chat" ? link.entry.id === id : [link.source, link.target].includes(id))) link = null;
   document.querySelectorAll('.chat-terminal').forEach(panel => {
     if (kind === "chat" ? panel.dataset.chatId === id : panel.dataset.deviceId === id) closeChatTerminal(panel);
@@ -475,9 +489,12 @@ function positionContext(popover, anchor) {
   popover.style.top = Math.max(8, Math.min(top, innerHeight - rect.height - 8)) + "px";
 }
 function bindPanelDrag(panel, reference = false) {
-  const heading = panel.querySelector("h2");
+  const heading = panel.querySelector("h2, .panel-bar");
   panel.classList.add("draggable-panel");
   const move = (left, top) => {
+    if (panel.id === "panel" && panel.dataset.moved !== "true") {
+      panel.style.width = panel.offsetWidth + "px"; panel.style.right = "auto";
+    }
     panel.dataset.moved = "true";
     panel.style.left = Math.max(8, Math.min(left, innerWidth - panel.offsetWidth - 8)) + "px";
     panel.style.top = Math.max(8, Math.min(top, innerHeight - panel.offsetHeight - 8)) + "px";
@@ -485,13 +502,13 @@ function bindPanelDrag(panel, reference = false) {
   heading.tabIndex = 0;
   heading.onkeydown = event => {
     const directions = { ArrowLeft: [-10, 0], ArrowRight: [10, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] };
-    if (!directions[event.key]) return;
+    if (!directions[event.key] || event.target !== heading) return;
     event.preventDefault();
     const [x, y] = directions[event.key];
     move(panel.offsetLeft + x, panel.offsetTop + y);
   };
   heading.onpointerdown = event => {
-    if (event.button !== 0) return;
+    if (event.button !== 0 || event.target.closest("button, input, textarea, select")) return;
     event.preventDefault();
     panel.hidePopover(); panel.showPopover();
     const start = { x: event.clientX, y: event.clientY, left: panel.offsetLeft, top: panel.offsetTop };
@@ -514,10 +531,10 @@ function bindPanelReference(panel) {
   panel.tether?.remove();
   const original = panel.opener.closest(".map-node, .link-badge, .library-row") || panel.opener;
   const nodeId = original.dataset.id, linkKey = original.dataset.linkKey;
-  const chatId = original.querySelector("[data-chat-id]")?.dataset.chatId;
+  const chatId = original.querySelector("[data-chat-id]")?.dataset.chatId, chatSource = original.dataset.sourceDevice;
   const resolve = () => nodeId ? [...document.querySelectorAll(".map-node")].find(n => n.dataset.id === nodeId)
     : linkKey ? [...document.querySelectorAll(".link-badge")].find(n => n.dataset.linkKey === linkKey)
-    : chatId ? [...document.querySelectorAll(".library-item")].find(n => n.dataset.chatId === chatId)?.closest(".library-row") : original;
+    : chatId ? [...document.querySelectorAll(".library-item")].find(n => n.dataset.chatId === chatId && n.closest(".library-row").dataset.sourceDevice === chatSource)?.closest(".library-row") : original;
   const tether = document.createElement("div");
   tether.className = "panel-tether";
   tether.setAttribute("popover", "manual"); tether.setAttribute("aria-hidden", "true");
@@ -539,8 +556,10 @@ function bindPanelReference(panel) {
     tether.style.visibility = object?.isConnected ? "visible" : "hidden";
     if (object?.isConnected) {
       const a = object.getBoundingClientRect(), b = panel.getBoundingClientRect();
-      const start = edge(a, { x: b.left + b.width / 2, y: b.top + b.height / 2 });
-      const end = edge(b, { x: a.left + a.width / 2, y: a.top + a.height / 2 });
+      const heading = panel.querySelector("h2, .panel-bar").getBoundingClientRect();
+      const end = { x: a.left + a.width / 2 <= b.left + b.width / 2 ? b.left : b.right,
+        y: heading.top + heading.height / 2 };
+      const start = edge(a, end);
       for (const [name, value] of Object.entries({ x1: start.x, y1: start.y, x2: end.x, y2: end.y })) line.setAttribute(name, value);
     }
     requestAnimationFrame(update);
@@ -565,8 +584,7 @@ function closeConnectionPopover() {
   selected = null;
   if (anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
-function closeChatEditor() {
-  const popover = $("#chat-popover");
+function closeChatEditor(popover = document.activeElement?.closest(".chat-editor") || [...document.querySelectorAll(".chat-editor")].at(-1)) {
   if (!popover) return;
   const anchor = popover.opener;
   clearInterval(popover.detailsTimer);
@@ -574,16 +592,21 @@ function closeChatEditor() {
   if (anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
 function editChat(entry, anchor, origin = sourceId || "master") {
-  closeChatEditor();
+  const existing = [...document.querySelectorAll(".chat-editor")].find(panel => panel.dataset.objectId === entry.id && panel.dataset.sourceDevice === origin);
+  if (existing) {
+    existing.opener = anchor; bindPanelReference(existing);
+    existing.querySelector('[name="label"]').focus();
+    return existing;
+  }
   const value = data.appearance?.["chat:" + entry.id] || {};
   const scopes = data.chat_settings?.[entry.id]?.scopes || chatLinks.find(v => v.entry.id === entry.id)?.scopes || {};
   const panel = document.createElement("div");
-  panel.id = "chat-popover"; panel.opener = anchor; panel.dataset.objectId = entry.id; panel.dataset.sourceDevice = origin;
+  panel.id = "chat-editor-" + crypto.randomUUID(); panel.classList.add("chat-editor"); panel.opener = anchor; panel.dataset.objectId = entry.id; panel.dataset.sourceDevice = origin;
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Personalizza chat");
-  panel.innerHTML = '<button type="button" class="icon-button chat-visibility" aria-label="Nascondi chat"></button><button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form id="appearance-form"><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>';
+  panel.innerHTML = '<button type="button" class="icon-button chat-visibility" aria-label="Nascondi chat"></button><button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
   bindPanelDrag(panel, true);
-  panel.querySelector('.popover-close').onclick = closeChatEditor;
+  panel.querySelector('.popover-close').onclick = () => closeChatEditor(panel);
   const visibility = panel.querySelector('.chat-visibility');
   const updateVisibility = () => {
     const hidden = data.chat_settings?.[entry.id]?.hidden === true;
@@ -611,7 +634,7 @@ function editChat(entry, anchor, origin = sourceId || "master") {
   const save = async value => {
     const key = "chat:" + entry.id;
     await api("appearance", { key, value }); data.appearance ??= {}; data.appearance[key] = value;
-    closeChatEditor(); renderLibrary(); renderLink(true);
+    closeChatEditor(panel); renderLibrary(); renderLink(true);
   };
   panel.querySelector('form').onsubmit = guard(async event => { event.preventDefault(); await save({ label: event.target.elements.label.value, ...readAppearance() }); });
   panel.querySelector('.delete-presentation').onclick = guard(() => removePresentation("chat", entry.id));
@@ -623,6 +646,7 @@ function editChat(entry, anchor, origin = sourceId || "master") {
     finally { panel.querySelectorAll('[data-scope]').forEach(b => b.disabled = false); }
   }));
   panel.querySelector('[name="label"]').focus();
+  return panel;
 }
 function renderLink(force = false) {
   if (document.querySelector('.link-badge[data-dragging="true"]')) return;
@@ -730,8 +754,7 @@ function drawChatLink(connection, index, lane = 0) {
   edit.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
   edit.onclick = guard(async () => {
     const cached = connection.source === sourceId ? visibleChats : connection.source === "master" ? data.chats : [];
-    editChat(cached.find(c => c.id === connection.entry.id) || connection.entry, edit, connection.source);
-    const panel = $("#chat-popover");
+    const panel = editChat(cached.find(c => c.id === connection.entry.id) || connection.entry, edit, connection.source);
     try {
       const result = await api("catalog", { device_id: connection.source });
       const fresh = result.chats.find(c => c.id === connection.entry.id);
@@ -840,7 +863,7 @@ function openChatTerminal(connection, anchor, deviceId) {
   const count = document.querySelectorAll(".chat-terminal").length - 1;
   panel.style.left = Math.max(8, Math.min(parseFloat(panel.style.left) + count * 24, innerWidth - panel.offsetWidth - 8)) + "px";
   panel.style.top = Math.max(8, Math.min(parseFloat(panel.style.top) + count * 24, innerHeight - panel.offsetHeight - 8)) + "px";
-  bindPanelDrag(panel);
+  bindPanelDrag(panel, true);
   panel.querySelector(".popover-close").onclick = () => closeChatTerminal(panel);
   const screen = panel.querySelector("pre"), form = panel.querySelector("form");
   const payload = { device_id: deviceId, chat_id: connection.entry.id };
@@ -951,11 +974,11 @@ function renderLibrary() {
         .forEach((n) => n.classList.remove("drop-target"));
     };
     const row = document.createElement("div");
-    row.className = "library-row";
+    row.className = "library-row"; row.dataset.sourceDevice = sourceId;
     const rowColor = appearance(entry).color;
     if (rowColor)
       row.style.backgroundColor =
-        "color-mix(in srgb, " + rowColor + " 14%, var(--panel))";
+        "color-mix(in srgb, " + rowColor + " 14%, transparent)";
     const edit = document.createElement("button");
     edit.className = "icon-button";
     edit.setAttribute("aria-label", "Personalizza " + chatLabel(entry));
@@ -1381,8 +1404,9 @@ async function poll() {
   data.job = next.job;
   data.analyses = next.analyses || {};
   data.transfers = next.transfers || {};
-  const editor = $("#chat-popover");
-  if (editor?.scopeEntry) { renderScopeDetails(editor, editor.scopeEntry); editor.updateVisibility?.(); }
+  for (const editor of document.querySelectorAll(".chat-editor")) {
+    if (editor.scopeEntry) { renderScopeDetails(editor, editor.scopeEntry); editor.updateVisibility?.(); }
+  }
   if (next.discovery) await updateDiscovery(next.discovery);
   renderConnections();
   for (const marker of document.querySelectorAll(".link-badge")) {
@@ -1414,8 +1438,11 @@ setInterval(async () => {
   try {
     const result = await api("catalog", { device_id: id });
     if (sourceId !== id || version !== catalogRequest) return;
-    const editor = $("#chat-popover");
-    if (editor) { const entry = result.chats.find(c => c.id === editor.dataset.objectId); if (entry) renderScopeDetails(editor, entry); }
+    for (const editor of document.querySelectorAll(".chat-editor")) {
+      if (editor.dataset.sourceDevice !== id) continue;
+      const entry = result.chats.find(c => c.id === editor.dataset.objectId);
+      if (entry) renderScopeDetails(editor, entry);
+    }
     if (JSON.stringify(result.chats) !== JSON.stringify(visibleChats) || visibleChats.length === 0) {
       visibleChats = result.chats;
       renderLibrary();

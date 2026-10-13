@@ -290,6 +290,9 @@ svg {
   opacity: var(--opacity-disabled);
 }
 #panel {
+  inset: auto;
+  margin: 0;
+  padding: 0;
   position: fixed;
   top: var(--space-22);
   right: var(--space-24);
@@ -1105,7 +1108,7 @@ select {
 .discovery-reject, .discovery-manual { margin-top: var(--space-12); }
 .discovery-network { width: 100%; }
 
-.draggable-panel h2 { cursor: move; touch-action: none; user-select: none; }
+.draggable-panel h2, .draggable-panel .panel-bar { cursor: move; touch-action: none; user-select: none; }
 .draggable-panel[data-dragging="true"], .draggable-panel[data-dragging="true"] * { transition: none; }
 .panel-tether { position: fixed; inset: 0; width: 100vw; height: 100dvh; margin: 0; padding: 0; border: 0; background: transparent; pointer-events: none; overflow: hidden; }
 .panel-tether svg { width: 100%; height: 100%; }
@@ -1149,10 +1152,16 @@ select {
 @keyframes operation-glow { to { box-shadow: 0 0 9px 2px var(--operation-pending); } }
 @media (prefers-reduced-motion: reduce) { .operation-indicator[data-state="busy"] { animation: none; } }
 
-#chat-popover > .chat-visibility {
+.chat-editor > .chat-visibility {
   position: absolute;
   top: var(--space-4);
   right: calc(var(--space-4) + var(--size-20) + var(--space-9) * 2 + var(--space-4));
 }
-#chat-popover > h2 { padding-right: calc((var(--size-20) + var(--space-9) * 2) * 2 + var(--space-8)); }
+.chat-editor > h2 { padding-right: calc((var(--size-20) + var(--space-9) * 2) * 2 + var(--space-8)); }
 .library-row.hidden-chat .library-item { opacity: 0.5; }
+
+#panel {
+  --glass-opacity: var(--glass-device-opacity);
+  --glass-blur: var(--glass-device-blur);
+  --surface-enter-opacity: 1;
+}
