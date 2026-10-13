@@ -559,9 +559,17 @@ function renderLink(force = false) {
       [v.source, v.target].sort().join(":") === [link.source, link.target].sort().join(":"));
     if (existing === -1) links.push(link); else links[existing] = link;
   }
-  links.forEach((value, index) => drawChatLink(value, index));
+  const lanes = new Map();
+  links.forEach((value, index) => {
+    const anchors = value.operation === "sync"
+      ? [value.source, value.target].sort().join(":") + ":sync"
+      : [value.source, value.target].join(":") + ":send";
+    const lane = lanes.get(anchors) || 0;
+    lanes.set(anchors, lane + 1);
+    drawChatLink(value, index, lane);
+  });
 }
-function drawChatLink(connection, index) {
+function drawChatLink(connection, index, lane = 0) {
   const nodes = [...document.querySelectorAll(".map-node")];
   const from = nodes.find((n) => n.dataset.id === connection.source),
     to = nodes.find((n) => n.dataset.id === connection.target);
@@ -578,7 +586,7 @@ function drawChatLink(connection, index) {
     y1 = start.top + start.height / 2 - base.top,
     y2 = end.top + end.height / 2 - base.top;
   const dx = x2 - x1, dy = y2 - y1, distance = Math.max(1, Math.hypot(dx, dy));
-  const reach = Math.max(45, Math.min(150, distance * 0.35));
+  const reach = Math.max(45, Math.min(150, distance * 0.35)) + lane * 80;
   const curve = `M${x1} ${y1} C${x1 + startSide * reach} ${y1} ${x2 + endSide * reach} ${y2} ${x2} ${y2}`;
   const layer = document.createElement("div");
   layer.className = "chat-link";
