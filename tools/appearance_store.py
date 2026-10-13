@@ -11,12 +11,16 @@ if operation in ("preferences-get", "chat-hide", "chat-visibility", "chat-scopes
     with sqlite3.connect(path) as db:
         db.execute("CREATE TABLE IF NOT EXISTS chat_settings (id TEXT PRIMARY KEY, hidden INTEGER NOT NULL DEFAULT 0, scopes TEXT)")
         db.execute("CREATE TABLE IF NOT EXISTS chat_links (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        db.execute("CREATE TABLE IF NOT EXISTS chat_visibility (id TEXT PRIMARY KEY, hidden INTEGER NOT NULL DEFAULT 0)")
         key = sys.argv[3] if len(sys.argv) > 3 else ""
         if operation == "chat-visibility":
             value = json.load(sys.stdin)
             if type(value.get('hidden')) is not bool:
                 raise ValueError("Visibilità non valida")
-            db.execute("INSERT INTO chat_settings(id,hidden) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET hidden=excluded.hidden", (key, int(value['hidden'])))
+            db.execute("INSERT INTO chat_visibility VALUES(?,?) ON CONFLICT(id) DO UPDATE SET hidden=excluded.hidden", (key, int(value['hidden'])))
+            db.execute("INSERT INTO chat_settings(id,hidden) VALUES(?,0) ON CONFLICT(id) DO NOTHING", (key,))
+            if not value['hidden']:
+                db.execute("UPDATE chat_settings SET hidden=0 WHERE id=?", (key,))
         if operation == "chat-hide":
             db.execute("INSERT INTO chat_settings(id,hidden) VALUES(?,1) ON CONFLICT(id) DO UPDATE SET hidden=1", (key,))
         if operation == "chat-scopes":
@@ -44,7 +48,8 @@ if operation in ("preferences-get", "chat-hide", "chat-visibility", "chat-scopes
                     source, _, chat = analysis_key.partition(':')
                     if (chat == key if operation == 'chat-hide' else source == key):
                         db.execute("DELETE FROM analysis WHERE key=?", (analysis_key,))
-        preferences = {identifier: {'hidden': bool(hidden), **({'scopes': json.loads(scopes)} if scopes else {})} for identifier, hidden, scopes in db.execute("SELECT id,hidden,scopes FROM chat_settings")}
+        visibility = dict(db.execute('SELECT id,hidden FROM chat_visibility'))
+        preferences = {identifier: {'hidden': bool(hidden or visibility.get(identifier, False)), **({'scopes': json.loads(scopes)} if scopes else {})} for identifier, hidden, scopes in db.execute("SELECT id,hidden,scopes FROM chat_settings")}
         print(json.dumps({'preferences': preferences, 'links': [json.loads(value) for (value,) in db.execute("SELECT value FROM chat_links ORDER BY key")]}))
 elif operation.startswith("links-"):
     with sqlite3.connect(path) as db:

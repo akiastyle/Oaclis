@@ -67,7 +67,7 @@ def validate(records):
             scopes = value.get('scopes')
             if scopes is not None and (set(scopes) != {'chat', 'paths', 'apps'} or any(type(v) is not bool for v in scopes.values())):
                 raise ValueError('Categorie non valide')
-        if parts[0] == 'preference' and ('hidden' in value and type(value['hidden']) is not bool):
+        if parts[0] == 'preference' and any(name in value and type(value[name]) is not bool for name in ('hidden', 'list_hidden')):
             raise ValueError('Visibilità chat non valida')
         if parts[0] == 'link':
             name = value.get('entry', {}).get('name')
@@ -123,8 +123,9 @@ class Store:
         for key, value in appearances.items():
             if key.startswith('chat:'):
                 snapshot[key] = value
+        visibility = dict(db.execute('SELECT id,hidden FROM chat_visibility'))
         for chat, hidden, scopes in db.execute('SELECT id,hidden,scopes FROM chat_settings'):
-            snapshot['preference:' + chat] = {'hidden': bool(hidden), **({'scopes': json.loads(scopes)} if scopes else {})}
+            snapshot['preference:' + chat] = {'hidden': bool(hidden), 'list_hidden': bool(visibility.get(chat, False)), **({'scopes': json.loads(scopes)} if scopes else {})}
         for _, raw in db.execute('SELECT key,value FROM chat_links'):
             value = json.loads(raw)
             if value['source'] not in mapping or value['target'] not in mapping:
@@ -153,6 +154,7 @@ class Store:
             with sqlite3.connect(database, timeout=10) as db:
                 db.execute('CREATE TABLE IF NOT EXISTS appearance (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
                 db.execute('CREATE TABLE IF NOT EXISTS chat_settings (id TEXT PRIMARY KEY, hidden INTEGER NOT NULL DEFAULT 0, scopes TEXT)')
+                db.execute('CREATE TABLE IF NOT EXISTS chat_visibility (id TEXT PRIMARY KEY, hidden INTEGER NOT NULL DEFAULT 0)')
                 db.execute('CREATE TABLE IF NOT EXISTS chat_links (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
                 db.execute('BEGIN IMMEDIATE')
                 current = self.snapshot(db, mapping, saved)
@@ -207,6 +209,8 @@ class Store:
                     db.execute('DELETE FROM chat_settings WHERE id=?', (identifier_,))
                 else:
                     db.execute('INSERT OR REPLACE INTO chat_settings VALUES(?,?,?)', (identifier_, int(value.get('hidden', False)), json.dumps(value['scopes']) if 'scopes' in value else None))
+                    if 'list_hidden' in value:
+                        db.execute('INSERT OR REPLACE INTO chat_visibility VALUES(?,?)', (identifier_, int(value['list_hidden'])))
         for key, record in records.items():
             kind, identifier_ = key.split(':', 1)
             value = record['value']
