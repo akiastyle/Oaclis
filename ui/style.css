@@ -1118,3 +1118,4 @@ select {
 
 .connection-lines > path { stroke-linecap: butt; }
 .chat-link:has(.link-badge[data-dragging="true"]) .connection-lines > path { transition: none; }
+.link-edit { opacity: 1; visibility: visible; }
