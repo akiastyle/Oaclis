@@ -1,3 +1,4 @@
+mod automation;
 pub mod appearance;
 pub mod chat;
 pub mod compare;

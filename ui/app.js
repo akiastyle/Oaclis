@@ -372,7 +372,7 @@ function activityState(entry, origin, scope) {
   if (previous?.status === "busy" && status === "idle") until = Date.now() + 1000;
   operationStates.set(stateKey, { status, until });
   return { state: status === "idle" && until > Date.now() ? "success" : status,
-    label: status === "busy" ? (checking ? "Check in corso" : "Sincronizzazione in corso") : status === "failed" ? "Operazione non riuscita" : "Completato" };
+    label: status === "busy" ? (checking ? "Check in corso" : "Sincronizzazione in corso") : status === "failed" ? (transferring && job.status === "failed" ? job.message : analysis.error) || "Operazione non riuscita" : "Completato" };
 }
 function activityIndicator(entry, origin, scope) {
   const value = activityState(entry, origin, scope);
@@ -1206,50 +1206,15 @@ function field(label, name, value = "") {
     '" required></label>'
   );
 }
-const pendingTransfers = new Map();
 async function selectChat(entry, targetId, operation = "copy") {
-  const origin = sourceId;
-  const scopes = data.chat_settings?.[entry.id]?.scopes || { chat: true, paths: true, apps: true };
-  const association = { source: origin, target: targetId, operation, entry: { id: entry.id, name: entry.name }, scopes, transfer_pending: true };
-  const key = [origin, targetId, entry.id].join(":");
+  const association = { source: sourceId, target: targetId, operation, entry: { id: entry.id, name: entry.name },
+    scopes: data.chat_settings?.[entry.id]?.scopes || { chat: true, paths: true, apps: true }, transfer_pending: true };
   try {
     await saveLinks;
     chatLinks = await api("links", association);
     link = null;
     renderLink();
-    pendingTransfers.set(key, association);
-    checkPendingTransfers();
   } catch (error) { notice("Associazione non salvata: " + error.message); }
-}
-let checkingTransfers = false;
-async function checkPendingTransfers() {
-  if (checkingTransfers || data.job.status === "running") return;
-  checkingTransfers = true;
-  try {
-    for (const association of chatLinks.filter(v => v.transfer_pending)) pendingTransfers.set([association.source, association.target, association.entry.id].join(":"), association);
-    for (const [key, association] of pendingTransfers) {
-      const remote = association.source === "master" ? association.target : association.source;
-      if (data.connections[remote] !== "online") continue;
-      if (!chatLinks.some(v => v.entry.id === association.entry.id && v.source === association.source && v.target === association.target)) { pendingTransfers.delete(key); continue; }
-      const catalog = await api("catalog", { device_id: association.source });
-      const entry = catalog.chats.find(c => c.id === association.entry.id);
-      if (!entry) { chatLinks = await api("links", { ...association, transfer_pending: false }); pendingTransfers.delete(key); notice("Chat sorgente non disponibile."); continue; }
-      if (entry.analysis?.status === "failed") { chatLinks = await api("links", { ...association, transfer_pending: false }); pendingTransfers.delete(key); notice("Analisi non riuscita: controlla Sincronizza nella modifica della chat."); continue; }
-      if (entry.analysis?.status !== "ready") continue;
-      const scopes = data.chat_settings?.[entry.id]?.scopes || association.scopes;
-      try {
-        await api("run", { source_device_id: association.source, device_id: association.target, operation: association.operation, chat_id: entry.id, scopes });
-      } catch (error) {
-        chatLinks = await api("links", { ...association, transfer_pending: false });
-        pendingTransfers.delete(key);
-        throw error;
-      }
-      chatLinks = await api("links", { ...association, transfer_pending: false });
-      pendingTransfers.delete(key);
-      break;
-    }
-  } catch (error) { notice(error.message); }
-  finally { checkingTransfers = false; }
 }
 function editDevice(device = {}, anchor = $("#add-device")) {
   const settings = data.ssh_settings?.[device.id] || {}, value = data.appearance?.["device:" + device.id] || {};
@@ -1383,7 +1348,6 @@ async function poll() {
     marker.querySelector(".operation-indicator")?.replaceWith(activityIndicator({ id }, source, "all"));
   }
   renderJob();
-  await checkPendingTransfers();
 }
 let polling = false;
 setInterval(async () => {
@@ -1397,7 +1361,7 @@ setInterval(async () => {
     polling = false;
   }
 }, 2000);
-setInterval(() => api("check", {}).catch((e) => notice(e.message)), 15000);
+
 let refreshing = false;
 setInterval(async () => {
   if (refreshing || !sourceId || $("#panel").hidden || drag || catalogFailures.has(sourceId) ||

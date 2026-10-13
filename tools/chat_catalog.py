@@ -43,7 +43,7 @@ if settings.is_file():
             records = {key: json.loads(value) for key, value in db.execute("SELECT key,value FROM analysis WHERE value IS NOT NULL")}
             for chat in chats:
                 record = records.get("master:" + chat["id"], {"status": "missing"})
-                revision = "environment-v2:master:{}:{}:{}".format(json.dumps(chat["path"], ensure_ascii=False), chat["bytes"], json.dumps(chat["modified_ns"]))
+                revision = "environment-v3:master:{}:{}:{}".format(json.dumps(chat["path"], ensure_ascii=False), chat["bytes"], json.dumps(chat["modified_ns"]))
                 if record.get("status") in ("ready", "failed") and record.get("revision") != revision:
                     record = {"status": "pending"}
                 chat["analysis"] = record
