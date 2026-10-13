@@ -1387,14 +1387,15 @@ function openDiscovery() {
 function renderDiscovery() {
   const panel = $("#discovery-popover"); if (!panel) return;
   const content = panel.querySelector('.discovery-content');
-  const html = (discovery.wsl ? '<button type="button" class="discovery-network" ' + (discovery.network?.status === 'pending' ? 'disabled' : '') + '>Configura rete WSL</button><small>' + (discovery.network?.status === 'ready' ? 'Rete configurata.' : discovery.network?.status === 'pending' ? 'Attendi la conferma di Windows…' : 'Richiede conferma amministrativa di Windows.') + '</small>' : '') +
+  const html = (discovery.setup_needed || discovery.network?.status === 'pending' ? '<button type="button" class="discovery-network" ' + (discovery.network?.status === 'pending' ? 'disabled' : '') + '>Prepara collegamento</button><small>' + (discovery.network?.status === 'pending' ? 'Attendi la conferma di Windows…' : 'La rete virtuale richiede un inoltro. Windows chiederà la conferma amministrativa.') + '</small>' : '') +
     (discovery.network?.error ? '<p class="discovery-error">' + esc(discovery.network.error) + '</p>' : '') +
     (discovery.error ? '<p class="discovery-error">' + esc(discovery.error) + '</p>' : '') +
     (discovery.ignored ? '<button type="button" class="discovery-restore">Mostra dispositivi rifiutati</button>' : '') +
     (discovery.peers.length ? discovery.peers.map(peer => '<section class="discovery-peer"><strong>' + esc(peer.name) + '</strong><small>' + esc(peer.address) + '</small>' +
       (peer.connected ? '<p>Collegamento autorizzato</p>' : '<p>Confronta questo codice sui due dispositivi.</p><strong class="pairing-code">' + esc(peer.code) + '</strong>' +
-        (peer.accepted ? '<p>In attesa della conferma sull’altro dispositivo.</p>' : '<button type="button" class="primary discovery-accept" data-peer="' + esc(peer.id) + '">Il codice coincide · Accetta</button>') +
-        '<button type="button" class="discovery-reject" data-peer="' + esc(peer.id) + '">Rifiuta</button>') + '</section>').join('') : '<p>Ricerca di Oaclis nella rete…</p>');
+        (peer.accepted ? '<p>' + (peer.remote_accepted ? 'Autorizzato. Preparazione SSH in corso.' : 'In attesa della conferma sull’altro dispositivo.') + '</p>' : '<button type="button" class="primary discovery-accept" data-peer="' + esc(peer.id) + '">Il codice coincide · Accetta</button>') +
+        (peer.ssh_ready === false ? '<small>SSH da attivare sul dispositivo.</small>' : '') +
+        '<button type="button" class="discovery-reject" data-peer="' + esc(peer.id) + '">Rifiuta</button>') + '</section>').join('') : '<p>Ricerca di Oaclis sulla porta 23232…</p>');
   if (content.dataset.view === html) return;
   content.innerHTML = html; content.dataset.view = html;
   content.querySelector('.discovery-network')?.addEventListener('click', guard(async () => {

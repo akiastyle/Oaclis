@@ -131,9 +131,9 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     };
     if !matches!(role.as_str(), "master" | "client") { return Err(invalid("Ruolo Oaclis non valido")); }
     let brand_icon = if role == "master" { "oaclis-crown" } else { "oaclis-whale" };
-    let token = fs::read_to_string("/proc/sys/kernel/random/uuid")?
-        .trim()
-        .to_owned();
+    let mut random = [0u8; 32];
+    fs::File::open("/dev/urandom")?.read_exact(&mut random)?;
+    let token: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
     let server = Server::http("0.0.0.0:23232").map_err(io::Error::other)?;
     let peers = crate::peers::start(home.clone());
     let job = Arc::new(Mutex::new(json!({"status":"idle"})));

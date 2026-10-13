@@ -153,7 +153,7 @@ Questo passaggio scarica il progetto; non installa né avvia ancora Oaclis.
 
 ## Collegamento fra due dispositivi
 
-Questa sezione è ancora in lavorazione: alcune correzioni del rilevamento LAN descritte sotto sono solo locali e non sono incluse nell'aggiornamento dei due script di preparazione. Il collegamento reale tra dispositivi resta da collaudare.
+Il rilevamento tramite tabella dei vicini e annuncio TCP è stato verificato dal Jetson verso ROG. Il collegamento autorizzato fra tutti i dispositivi resta da collaudare.
 
 Il flusso è lo stesso per master e client: avviare Oaclis su ciascuno, aprire `http://localhost:23232`, attendere che appaia l’altro dispositivo, confrontare il codice e accettare su entrambi. La ricerca è automatica, sulla **porta 23232**. Il pannello è accessibile anche da **+**. Una sola conferma lascia il collegamento in attesa; nessuna chat viene trasferita durante l’abbinamento.
 
