@@ -356,13 +356,45 @@ function scopeFields(scopes = {}, entry = {}) {
     [["chat", "chat", "Chat"], ["paths", "folder", "Percorsi"], ["apps", "box", "App, plugin e configurazioni"]].map(([scope, icon, label]) =>
       '<div class="scope-row"><button type="button" class="scope-toggle" data-scope="' + scope + '" aria-pressed="' + (scopes[scope] !== false) + '" aria-label="' + label + '" title="' + label + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + icons[icon] + '</svg></button><div class="scope-detail" data-detail="' + scope + '" tabindex="0" aria-label="' + label + '"></div></div>').join("") + '</div>';
 }
+const operationStates = new Map();
+function activityState(entry, origin, scope) {
+  const key = origin + ":" + entry.id;
+  const analysis = data.analyses?.[key] || entry.analysis || {};
+  const job = data.job?.chat_id === entry.id ? data.job : data.transfers?.[key] || {};
+  const transferring = job.chat_id === entry.id && job.source_device_id === origin &&
+    (scope === "all" || job.scopes?.[scope] === true);
+  const checking = scope !== "chat" && analysis.status === "pending";
+  const status = transferring && job === data.job && job.status === "running" || checking ? "busy" :
+    analysis.status === "failed" && scope !== "chat" || transferring && job.status === "failed" ? "failed" : "idle";
+  const stateKey = key + ":" + scope;
+  const previous = operationStates.get(stateKey);
+  let until = previous?.until || 0;
+  if (previous?.status === "busy" && status === "idle") until = Date.now() + 1000;
+  operationStates.set(stateKey, { status, until });
+  return { state: status === "idle" && until > Date.now() ? "success" : status,
+    label: status === "busy" ? (checking ? "Check in corso" : "Sincronizzazione in corso") : status === "failed" ? "Operazione non riuscita" : "Completato" };
+}
+function activityIndicator(entry, origin, scope) {
+  const value = activityState(entry, origin, scope);
+  const indicator = document.createElement("span");
+  indicator.className = "operation-indicator";
+  indicator.dataset.state = value.state;
+  indicator.hidden = value.state === "idle";
+  indicator.title = value.label;
+  indicator.setAttribute("role", "status");
+  indicator.setAttribute("aria-label", value.label);
+  if (value.state === "success") setTimeout(() => { if (indicator.isConnected) indicator.hidden = true; }, 1000);
+  return indicator;
+}
 function renderScopeDetails(panel, entry) {
-  const result = entry.analysis || {}, manifest = result.manifest || {};
+  panel.scopeEntry = entry;
+  const origin = panel.dataset.sourceDevice || "master";
+  const result = data.analyses?.[origin + ":" + entry.id] || entry.analysis || {}, manifest = result.manifest || {};
   const activity = entry.modified_ns ? new Date(Number(entry.modified_ns) / 1e6).toLocaleString("it-IT") : "Non disponibile";
   const chat = panel.querySelector('[data-detail="chat"]');
   if (!chat) return;
   chat.textContent = ((entry.bytes || 0) / 1048576).toLocaleString("it-IT", { maximumFractionDigits: 2 }) + " MB · Ultima attività: " + activity;
-  const state = result.status === "failed" ? "Analisi non riuscita. " + (result.error || "") : "Analisi in corso…";
+  const state = result.status === "failed" ? "Analisi non riuscita. " + (result.error || "") : result.status === "pending" ? "Analisi in corso…" : "Analisi da eseguire";
   const write = (scope, items, empty) => {
     const box = panel.querySelector('[data-detail="' + scope + '"]');
     box.replaceChildren();
@@ -371,7 +403,12 @@ function renderScopeDetails(panel, entry) {
     for (const text of items) { const line = document.createElement("div"); line.textContent = text; box.append(line); }
   };
   write("paths", manifest.paths || [], "Nessun percorso individuato");
-  write("apps", [...(manifest.packages || []), ...(manifest.plugins || []).map(p => p.name), ...(manifest.configs || []).map(c => c.path)], "Nessuna app aggiuntiva individuata");
+  write("apps", [...(manifest.apps?.length ? manifest.apps : manifest.packages || []), ...(manifest.plugins || []).map(p => p.name), ...(manifest.configs || []).map(c => c.path), ...(manifest.app_notes || []), ...(manifest.uncertainties || [])], "Nessuna app aggiuntiva individuata");
+  for (const scope of ["chat", "paths", "apps"]) {
+    const row = panel.querySelector('[data-detail="' + scope + '"]').parentElement;
+    row.querySelector(".operation-indicator")?.remove();
+    row.append(activityIndicator(entry, origin, scope));
+  }
   positionContext(panel, panel.opener);
 }
 async function saveChatScopes(entry, scopes, origin = sourceId || "master") {
@@ -521,7 +558,7 @@ function editChat(entry, anchor, origin = sourceId || "master") {
   const value = data.appearance?.["chat:" + entry.id] || {};
   const scopes = data.chat_settings?.[entry.id]?.scopes || chatLinks.find(v => v.entry.id === entry.id)?.scopes || {};
   const panel = document.createElement("div");
-  panel.id = "chat-popover"; panel.opener = anchor; panel.dataset.objectId = entry.id;
+  panel.id = "chat-popover"; panel.opener = anchor; panel.dataset.objectId = entry.id; panel.dataset.sourceDevice = origin;
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Personalizza chat");
   panel.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form id="appearance-form"><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
@@ -660,7 +697,7 @@ function drawChatLink(connection, index, lane = 0) {
     const result = await api("catalog", { device_id: connection.source });
     editChat(result.chats.find(c => c.id === connection.entry.id) || connection.entry, edit, connection.source);
   });
-  marker.append(main, edit, open);
+  marker.append(main, edit, activityIndicator(connection.entry, connection.source, "all"), open);
   main.querySelector(".chat-badge").style.color = appearance(connection.entry).color || "var(--ink)";
   marker.style.color = appearance(connection.entry).color || "var(--ink)";
   $("#nodes").prepend(layer);
@@ -1335,8 +1372,16 @@ async function poll() {
   }
   data.connections = next.connections;
   data.job = next.job;
+  data.analyses = next.analyses || {};
+  data.transfers = next.transfers || {};
+  const editor = $("#chat-popover");
+  if (editor?.scopeEntry) renderScopeDetails(editor, editor.scopeEntry);
   if (next.discovery) await updateDiscovery(next.discovery);
   renderConnections();
+  for (const marker of document.querySelectorAll(".link-badge")) {
+    const [id, source] = JSON.parse(marker.dataset.linkKey);
+    marker.querySelector(".operation-indicator")?.replaceWith(activityIndicator({ id }, source, "all"));
+  }
   renderJob();
   await checkPendingTransfers();
 }

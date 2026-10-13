@@ -57,6 +57,16 @@ elif operation.startswith("links-"):
         elif operation == "links-delete":
             db.execute("DELETE FROM chat_links WHERE key=?", (sys.argv[3],))
         print(json.dumps([json.loads(value) for (value,) in db.execute("SELECT value FROM chat_links ORDER BY key")]))
+elif operation in ("transfer-save", "transfer-list"):
+    with sqlite3.connect(path) as db:
+        db.execute("CREATE TABLE IF NOT EXISTS transfers (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+        if operation == "transfer-save":
+            db.execute("INSERT INTO transfers VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (sys.argv[3], json.dumps(json.load(sys.stdin))))
+        print(json.dumps({key: json.loads(value) for key, value in db.execute("SELECT key,value FROM transfers")}))
+elif operation == "analysis-list":
+    with sqlite3.connect(path) as db:
+        exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='analysis'").fetchone()
+        print(json.dumps({key: json.loads(value) for key, value in db.execute("SELECT key,value FROM analysis WHERE value IS NOT NULL")} if exists else {}))
 elif operation.startswith("analysis-"):
     key = sys.argv[3]
     with sqlite3.connect(path) as db:

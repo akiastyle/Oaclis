@@ -173,6 +173,17 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     let token: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
     let server = Server::http("0.0.0.0:23232").map_err(io::Error::other)?;
     let peers = crate::peers::start(home.clone());
+    let saved_transfers = environment::database(&config, "", "transfer-list", None)?;
+    if let Some(records) = saved_transfers.as_object() {
+        for (key, record) in records {
+            if record["status"] == "running" {
+                let mut interrupted = record.clone();
+                interrupted["status"] = json!("failed");
+                interrupted["message"] = json!("Trasferimento interrotto dal riavvio di Oaclis");
+                environment::database(&config, key, "transfer-save", Some(&interrupted))?;
+            }
+        }
+    }
     let job = Arc::new(Mutex::new(json!({"status":"idle"})));
     let connections = Arc::new(Mutex::new(json!({})));
     let analyses = Arc::new(Mutex::new(std::collections::HashSet::<String>::new()));
@@ -265,7 +276,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     json!({"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
                 ),
                 (&Method::Get, "/api/status") => Ok(
-                    json!({"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
+                    json!({"job":*job.lock().unwrap(),"analyses":environment::database(&config,"","analysis-list",None)?,"transfers":environment::database(&config,"","transfer-list",None)?,"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
                         "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":environment::database(&config,"","links-get",None)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}),
                 ),
                 (&Method::Post, "/api/link-position") => {
@@ -337,7 +348,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     let result = remote_catalog(&device)?;
                     if let Some(chats) = result["chats"].as_array() {
                         for chat in chats {
-                            if chat["analysis"]["status"] == "ready" {
+                            if chat["analysis"].is_object() {
                                 let mut record = chat["analysis"].clone();
                                 record["revision"] = json!(environment::revision(chat, Some(&device)));
                                 environment::database(&config, &environment::key(&device.id, chat["id"].as_str().unwrap())?, "analysis-save", Some(&record))?;
@@ -662,11 +673,14 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     if lock["status"] == "running" {
                         return Err(invalid("Un trasferimento è già in corso"));
                     }
-                    *lock = json!({"status":"running","message":"Preparazione","progress":null,
+                    *lock = json!({"status":"running","message":"Preparazione","progress":null,"chat_id":v["chat_id"],"source_device_id":v["source_device_id"].as_str().unwrap_or("master"),"scopes":scopes,
                         "title":chat.as_ref().map(|c|c["name"].clone()).unwrap_or_else(||json!(rule.as_ref().unwrap().name)),
                         "source":if incoming {device.name.as_str()}else{"Questo dispositivo"},
                         "destination":if incoming {"Questo dispositivo"}else{device.name.as_str()}});
+                    let transfer_key = chat.as_ref().map(|c| environment::key(v["source_device_id"].as_str().unwrap_or("master"), c["id"].as_str().unwrap())).transpose()?;
+                    if let Some(key) = &transfer_key { environment::database(&config, key, "transfer-save", Some(&lock))?; }
                     drop(lock);
+                    let transfer_config = config.clone();
                     let job = job.clone();
                     let state = config.join("state");
                     thread::spawn(move || {
@@ -767,6 +781,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                                 lock["message"] = json!(e.to_string());
                             }
                         }
+                        if let Some(key) = &transfer_key { let _ = environment::database(&transfer_config, key, "transfer-save", Some(&lock)); }
                     });
                     Ok(json!({"ok":true}))
                 }

@@ -1119,3 +1119,31 @@ select {
 .connection-lines > path { stroke-linecap: butt; }
 .chat-link:has(.link-badge[data-dragging="true"]) .connection-lines > path { transition: none; }
 .link-edit { opacity: 1; visibility: visible; }
+
+:root {
+  --operation-pending: #ffb703;
+  --operation-success: var(--scope-active);
+  --operation-error: #e56b6f;
+}
+.operation-indicator {
+  width: var(--size-14);
+  height: var(--size-14);
+  flex-shrink: 0;
+  border-radius: var(--radius-round);
+  background: currentColor;
+}
+.operation-indicator[hidden] { display: none; }
+.operation-indicator[data-state="busy"] {
+  color: var(--operation-pending);
+  background: transparent;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: analysis-turn var(--duration-loading) linear infinite, operation-glow var(--drop-pulse-duration) ease-in-out infinite alternate;
+}
+.operation-indicator[data-state="success"] { color: var(--operation-success); }
+.operation-indicator[data-state="failed"] { color: var(--operation-error); }
+.link-badge > .operation-indicator { position: absolute; right: -13px; top: calc(50% - 7px); }
+.scope-row { position: relative; }
+.scope-row > .operation-indicator { position: absolute; left: 0; top: 0; pointer-events: none; }
+@keyframes operation-glow { to { box-shadow: 0 0 9px 2px var(--operation-pending); } }
+@media (prefers-reduced-motion: reduce) { .operation-indicator[data-state="busy"] { animation: none; } }

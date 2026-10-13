@@ -77,6 +77,10 @@ pub struct Manifest {
     pub configs: Vec<Config>,
     pub plugins: Vec<Plugin>,
     pub uncertainties: Vec<String>,
+    #[serde(default)] pub path_notes: Vec<String>,
+    #[serde(default)] pub apps: Vec<String>,
+    #[serde(default)] pub app_notes: Vec<String>,
+    #[serde(default)] pub read_notes: Vec<String>,
     #[serde(default)]
     pub fingerprints: Vec<Fingerprint>,
 }
@@ -194,12 +198,6 @@ impl Manifest {
                 return Err(invalid("Manifest dipendenze esterno al progetto"));
             }
         }
-        if !self.uncertainties.is_empty() {
-            return Err(invalid(format!(
-                "Analisi da completare: {}",
-                self.uncertainties.join("; ")
-            )));
-        }
         Ok(())
     }
 }
@@ -211,7 +209,7 @@ pub fn key(source: &str, chat: &str) -> io::Result<String> {
 }
 pub fn revision(chat: &Value, device: Option<&Device>) -> String {
     format!(
-        "environment-v2:{}:{}:{}:{}",
+        "environment-v3:{}:{}:{}:{}",
         device.map(|d| d.ssh_alias.as_str()).unwrap_or("master"),
         chat["path"],
         chat["bytes"],
@@ -320,6 +318,9 @@ pub fn execute(
     mut notify: impl FnMut(Value),
 ) -> io::Result<Value> {
     manifest.validate()?;
+    if scopes.apps && !manifest.uncertainties.is_empty() {
+        return Err(invalid(format!("App da verificare: {}", manifest.uncertainties.join("; "))));
+    }
     rules::ensure_local(state)?;
     let target_device = if incoming { None } else { Some(device) };
     let identity = python(target_device, SETUP, &["identity"])?;
@@ -573,7 +574,7 @@ mod tests {
             packages: vec!["nodejs".into()],
             configs: vec![],
             plugins: vec![],
-            uncertainties: vec![],
+            uncertainties: vec![], path_notes: vec![], apps: vec![], app_notes: vec![], read_notes: vec![],
             fingerprints: vec![],
         };
         assert!(manifest.validate().is_ok());
