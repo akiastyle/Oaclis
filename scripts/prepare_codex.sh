@@ -31,14 +31,14 @@ prepare_codex() {
     fi
     node --version || return 1
     npm --version || return 1
-    echo 'Installazione: npm install --global @openai/codex@0.162.0'
-    if ! confirm 'Confermare l’installazione di Codex 0.162.0?'; then echo 'Codex non installato.'; return 0; fi
+    echo 'Installazione: npm install --global @openai/codex@0.162.1'
+    if ! confirm 'Confermare l’installazione di Codex 0.162.1?'; then echo 'Codex non installato.'; return 0; fi
     # A user prefix avoids sudo npm and does not change the existing npm configuration.
     if [[ "$(command -v node)" == "${NVM_DIR:-$HOME/.nvm}/versions/node/"* ]]; then
-        npm install --global @openai/codex@0.162.0 || return 1
+        npm install --global @openai/codex@0.162.1 || return 1
     else
         echo 'Codex verrà installato in ~/.local; aggiungere ~/.local/bin al PATH della propria shell se assente.'
-        npm install --global --prefix "$HOME/.local" @openai/codex@0.162.0 || return 1
+        npm install --global --prefix "$HOME/.local" @openai/codex@0.162.1 || return 1
         export PATH="$HOME/.local/bin:$PATH"
     fi
     hash -r

@@ -19,7 +19,7 @@ class CodexSetupTests(unittest.TestCase):
                     else:
                         text='#!/bin/sh\necho "$*" >> "$OACLIS_TEST_LOG"\nif [ "$1" = install ]; then\n'
                         if npm_failure: text+='exit 1\n'
-                        else: text+='printf "#!/bin/sh\\necho codex-cli-0.162.0\\n" > "$OACLIS_TEST_BIN/codex"\n/bin/chmod +x "$OACLIS_TEST_BIN/codex"\n'
+                        else: text+='printf "#!/bin/sh\\necho codex-cli-0.162.1\\n" > "$OACLIS_TEST_BIN/codex"\n/bin/chmod +x "$OACLIS_TEST_BIN/codex"\n'
                         text+='fi\n'
                     path.write_text(text);path.chmod(0o755)
             script='source "$1"; confirm() { read -r answer; [[ "$answer" = s ]]; }; prepare_codex'
@@ -42,7 +42,7 @@ class CodexSetupTests(unittest.TestCase):
 
     def test_npm_install_and_cli_verification(self):
         code,output,actions=self.run_case('s\ns\n')
-        self.assertEqual(code,0,output);self.assertIn('@openai/codex@0.162.0',actions);self.assertIn('Codex verificato',output)
+        self.assertEqual(code,0,output);self.assertIn('@openai/codex@0.162.1',actions);self.assertIn('Codex verificato',output)
 
     def test_npm_failure_is_reported(self):
         code,output,actions=self.run_case('s\ns\n',npm_failure=True)

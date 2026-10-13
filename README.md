@@ -45,7 +45,7 @@ Per eseguire soltanto i controlli, senza installazioni, compilazione o scritture
 bash run.sh --check
 ```
 
-Il controllo distingue Linux/macOS, segnala container e kernel WSL, verifica gli strumenti presenti e Rust. Le installazioni automatiche sono disponibili su Ubuntu/Debian con apt e su macOS con Homebrew già presente; gli strumenti Apple mancanti vengono segnalati. Se Codex non è rilevato, propone un’installazione opzionale di Codex 0.162.0. Verifica Node.js e npm; se mancanti o Node è incompatibile, propone Node.js 22/npm tramite NVM nella home, mostrando anche la modifica della configurazione shell. Ogni installazione richiede conferma. Il rifiuto o un errore nella preparazione di Codex non blocca Oaclis. Non esegue autenticazione né modifica llama.cpp. `--check` termina con codice 1 se mancano prerequisiti.
+Il controllo distingue Linux/macOS, segnala container e kernel WSL, verifica gli strumenti presenti e Rust. Le installazioni automatiche sono disponibili su Ubuntu/Debian con apt e su macOS con Homebrew già presente; gli strumenti Apple mancanti vengono segnalati. Se Codex non è rilevato, propone un’installazione opzionale di Codex 0.162.1. Verifica Node.js e npm; se mancanti o Node è incompatibile, propone Node.js 22/npm tramite NVM nella home, mostrando anche la modifica della configurazione shell. Ogni installazione richiede conferma. Il rifiuto o un errore nella preparazione di Codex non blocca Oaclis. Non esegue autenticazione né modifica llama.cpp. `--check` termina con codice 1 se mancano prerequisiti.
 
 ### Windows — PowerShell
 
