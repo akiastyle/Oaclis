@@ -1,3 +1,4 @@
+# environment_setup.py v1.6.211
 """Native destination preparation. No commands supplied by the language model."""
 import json
 import os

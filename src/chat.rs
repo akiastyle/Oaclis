@@ -1,3 +1,4 @@
+// chat.rs v1.6.147
 use crate::{check_unchanged, invalid, open_regular};
 use serde_json::Value;
 use sha2::{Digest, Sha256};

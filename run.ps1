@@ -1,3 +1,4 @@
+# run.ps1 v1.1.58
 # Windows checks; an explicitly selected WSL prepares and installs Oaclis.
 param([switch]$Check, [string]$Distro)
 $ErrorActionPreference = 'Stop'

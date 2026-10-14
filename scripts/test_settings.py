@@ -1,3 +1,4 @@
+# test_settings.py v1.2.36
 from pathlib import Path
 import json
 import tempfile

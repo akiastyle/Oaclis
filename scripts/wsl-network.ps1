@@ -1,3 +1,4 @@
+# wsl-network.ps1 v1.0.33
 # Run in an elevated PowerShell. Modify only the Oaclis ports and rules.
 param([Parameter(Mandatory=$true)][string]$LanIp, [Parameter(Mandatory=$true)][string]$WslIp)
 $ErrorActionPreference = 'Stop'

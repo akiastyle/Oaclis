@@ -1,3 +1,4 @@
+// web.rs v1.20.992
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -68,7 +69,8 @@ fn catalog(root: &Path) -> io::Result<Vec<Value>> {
         .arg(root)
         .output()?;
     if !output.status.success() {
-        return Err(invalid("Impossibile leggere il catalogo Codex"));
+        let detail = String::from_utf8_lossy(&output.stderr);
+        return Err(io::Error::other(format!("Impossibile leggere il catalogo Codex: {}", detail.lines().last().unwrap_or("errore catalogo"))));
     }
     let value: Value = serde_json::from_slice(&output.stdout).map_err(io::Error::other)?;
     serde_json::from_value(value["chats"].clone()).map_err(io::Error::other)
@@ -86,16 +88,17 @@ fn background_analysis(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::c
                     .and_then(|metadata| metadata.modified())
                     .map(|time| format!("{time:?}"))
                     .unwrap_or_default();
-                if cached["revision"] == revision
-                    && (cached["status"] == "ready"
-                        || (cached["status"] == "failed" && cached["auth_revision"] == auth_revision)) { continue; }
+                if matches!(cached["status"].as_str(), Some("ready" | "failed")) { continue; }
                 {
                     let mut running = active.lock().unwrap();
                     if running.len() >= 2 || !running.insert(key.clone()) { continue; }
                 }
                 let _ = environment::database(&config, &key, "analysis-save", Some(&json!({"status":"pending", "revision":revision})));
                 let result = match environment::analyze(None, chat["path"].as_str().unwrap_or(""), id) {
-                    Ok(manifest) => json!({"status":"ready", "revision":revision, "manifest":manifest, "chat_bytes":chat["bytes"], "chat_modified_ns":chat["modified_ns"]}),
+                    Ok(manifest) => {
+                        if let Err(error) = crate::preparation::capture(&config,id,Path::new(chat["path"].as_str().unwrap_or("")),&manifest) { eprintln!("Oaclis: dimensioni sorgenti: {error}"); }
+                        json!({"status":"ready", "revision":revision, "manifest":manifest, "chat_bytes":chat["bytes"], "chat_modified_ns":chat["modified_ns"]})
+                    },
                     Err(error) => json!({"status":"failed", "revision":revision, "error":error.to_string(), "auth_revision":auth_revision}),
                 };
                 let _ = environment::database(&config, &key, "analysis-save", Some(&result));
@@ -111,6 +114,12 @@ fn remote_catalog(device: &Device) -> io::Result<Value> {
 }
 fn header(name: &str, value: &str) -> Header {
     Header::from_bytes(name, value).unwrap()
+}
+fn error_status(error: &io::Error) -> u16 {
+    match error.kind() {
+        io::ErrorKind::InvalidData | io::ErrorKind::InvalidInput => 400,
+        _ => 503,
+    }
 }
 fn answer(request: Request, status: u16, body: String, content_type: &str) {
     answer_bytes(request, status, body.into_bytes(), content_type);
@@ -141,7 +150,7 @@ fn body(request: &mut Request) -> io::Result<Value> {
     if data.len() > 65536 {
         return Err(invalid("Richiesta troppo grande"));
     }
-    serde_json::from_slice(&data).map_err(io::Error::other)
+    serde_json::from_slice(&data).map_err(|error| invalid(error.to_string()))
 }
 fn ssh_settings(home: &Path, config: &Path, operation: &str, value: &Value) -> io::Result<Value> {
     use std::io::Write;
@@ -303,7 +312,7 @@ pub(crate) fn start_transfer(v: Value, codex: &Path, config: &Path, job: &Arc<Mu
     if lock["status"] == "running" {
         return Err(invalid("Un trasferimento è già in corso"));
     }
-    *lock = json!({"status":"running","message":"Preparazione","progress":null,"chat_id":v["chat_id"],"source_device_id":v["source_device_id"].as_str().unwrap_or("master"),"scopes":scopes,
+    *lock = json!({"status":"running","message":"Preparazione","progress":null,"chat_id":v["chat_id"],"source_device_id":v["source_device_id"].as_str().unwrap_or("master"),"scopes":scopes,"device_id":v["device_id"],
         "title":chat.as_ref().map(|c|c["name"].clone()).unwrap_or_else(||json!(rule.as_ref().unwrap().name)),
         "source":if incoming {device.name.as_str()}else{"Questo dispositivo"},
         "destination":if incoming {"Questo dispositivo"}else{device.name.as_str()}});
@@ -416,9 +425,23 @@ pub(crate) fn start_transfer(v: Value, codex: &Path, config: &Path, job: &Arc<Mu
     Ok(json!({"ok":true}))
 }
 
+fn serve_requests(server: &Server, handler: impl Fn(Request) + Sync) {
+    thread::scope(|scope| {
+        for _ in 0..4 {
+            let handler = &handler;
+            scope.spawn(move || {
+                while let Ok(request) = server.recv() { handler(request); }
+            });
+        }
+    });
+}
+
 pub fn serve(home: PathBuf) -> io::Result<()> {
+    let paused = std::env::var("OACLIS_PAUSED").as_deref() == Ok("1");
     let config = home.join(".config/oaclis");
     fs::create_dir_all(&config)?;
+    environment::database(&config, "", "migrate", None)?;
+    crate::app_inventory::recover_interrupted(&config)?;
     let codex = std::env::var_os("CODEX_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".codex"));
@@ -437,7 +460,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     let saved_transfers = environment::database(&config, "", "transfer-list", None)?;
     if let Some(records) = saved_transfers.as_object() {
         for (key, record) in records {
-            if record["status"] == "running" {
+            if !paused && record["status"] == "running" {
                 let mut interrupted = record.clone();
                 interrupted["status"] = json!("failed");
                 interrupted["message"] = json!("Trasferimento interrotto dal riavvio di Oaclis");
@@ -448,41 +471,44 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     let job = Arc::new(Mutex::new(json!({"status":"idle"})));
     let connections = Arc::new(Mutex::new(json!({})));
     let analyses = Arc::new(Mutex::new(std::collections::HashSet::<String>::new()));
-    background_analysis(codex.clone(), config.clone(), analyses.clone());
-    crate::shared_settings::start(home.clone());
-    crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone());
+    if !paused {
+        background_analysis(codex.clone(), config.clone(), analyses.clone());
+        crate::shared_settings::start(home.clone());
+        crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone());
+    }
     println!("Oaclis UI: http://localhost:23232");
-    for mut request in server.incoming_requests() {
+    let mutations = Mutex::new(());
+    serve_requests(&server, |mut request| {
         if request.method() == &Method::Get && request.url() == "/peer/hello" {
             if !request.remote_addr().is_some_and(|address| crate::peers::local_address(address.ip())) {
                 answer(request, 403, "Rete locale richiesta".into(), "text/plain");
-                continue;
+                return;
             }
             let packet = crate::peers::hello(&peers);
             answer(request, if packet.is_null() { 503 } else { 200 }, packet.to_string(), "application/json");
-            continue;
+            return;
         }
         if !request.remote_addr().is_some_and(|address| address.ip().is_loopback()) || !trusted(&request) {
             answer(request, 403, "Host non consentito".into(), "text/plain");
-            continue;
+            return;
         }
         let url = request.url().to_owned();
         if request.method() == &Method::Get {
             if url == "/assets/oaclis-brand.ttf" {
                 answer_bytes(request, 200, include_bytes!("../ui/assets/oaclis-brand.ttf").to_vec(), "font/ttf");
-                continue;
+                return;
             }
             if url == "/assets/oaclis-crown.png" {
                 answer_bytes(request, 200, include_bytes!("../ui/assets/oaclis-crown.png").to_vec(), "image/png");
-                continue;
+                return;
             }
             if url == "/assets/oaclis-whale.png" {
                 answer_bytes(request, 200, include_bytes!("../ui/assets/oaclis-whale.png").to_vec(), "image/png");
-                continue;
+                return;
             }
             if url == "/favicon.ico" {
                 answer(request, 200, (if role == "master" { include_str!("../ui/assets/oaclis-crown.svg") } else { include_str!("../ui/assets/oaclis-whale.svg") }).into(), "image/svg+xml");
-                continue;
+                return;
             }
             let asset = match url.as_str() {
                 "/assets/oaclis-crown.svg" => Some((include_str!("../ui/assets/oaclis-crown.svg").into(), "image/svg+xml")),
@@ -495,6 +521,8 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     include_str!("../ui/style.css").into(),
                     "text/css; charset=utf-8",
                 )),
+                "/badge-motion.css" => Some((include_str!("../ui/badge-motion.css").into(), "text/css; charset=utf-8")),
+                "/badge-motion.js" => Some((include_str!("../ui/badge-motion.js").into(), "text/javascript; charset=utf-8")),
                 "/app.js" => Some((
                     include_str!("../ui/app.js").into(),
                     "text/javascript; charset=utf-8",
@@ -503,7 +531,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
             };
             if let Some((body, mime)) = asset {
                 answer(request, 200, body, mime);
-                continue;
+                return;
             }
         }
         let authorized = request
@@ -517,8 +545,12 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 "Sessione locale richiesta".into(),
                 "text/plain",
             );
-            continue;
+            return;
         }
+        // Keep settings writes serialized while slow catalogs leave other workers available.
+        let _mutation = if request.method() == &Method::Post && !matches!(url.as_str(), "/api/catalog" | "/api/analysis" | "/api/check" | "/api/terminal") {
+            Some(mutations.lock().unwrap())
+        } else { None };
         let result = (|| -> io::Result<Value> {
             match (request.method(), url.as_str()) {
                 (&Method::Get, "/api/peers") => Ok(crate::peers::snapshot(&peers)),
@@ -535,12 +567,13 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     crate::terminal::request(device.as_ref(), &v)
                 }
                 (&Method::Get, "/api/state") => Ok(
-                    json!({"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
+                    json!({"paused":paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
                 ),
-                (&Method::Get, "/api/status") => Ok(
-                    json!({"job":*job.lock().unwrap(),"analyses":environment::database(&config,"","analysis-list",None)?,"transfers":environment::database(&config,"","transfer-list",None)?,"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
-                        "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":environment::database(&config,"","links-get",None)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}),
-                ),
+                (&Method::Get, "/api/status") => {
+                    let snapshot = environment::database(&config,"","status-read",None)?;
+                    Ok(json!({"paused":paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
+                        "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":snapshot["links"],"chat_settings":snapshot["preferences"],"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}))
+                }
                 (&Method::Post, "/api/link-position") => {
                     let value = body(&mut request)?;
                     crate::shared_settings::write_positions(&config, "link-position", &value)?;
@@ -604,6 +637,14 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     crate::appearance::save(config.join("appearance.json"), &entries)?;
                     Ok(json!({"ok":true}))
                 }
+                (&Method::Post, "/api/app-check") => {
+                    let value=body(&mut request)?;
+                    if paused && value["force"] != true {
+                        let key = environment::key(value["source_device_id"].as_str().unwrap_or("master"), value["chat_id"].as_str().ok_or_else(||invalid("Chat richiesta"))?)?;
+                        return environment::database(&config,&key,"inventory-get",None);
+                    }
+                    crate::app_inventory::request(&config,&value)
+                }
                 (&Method::Post, "/api/catalog") => {
                     let value = body(&mut request)?;
                     if value["device_id"] == "master" {
@@ -645,7 +686,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         )
                     } else {
                         let record = environment::database(&config, &key, "analysis-get", None)?;
-                        if record["status"] == "pending" && !analyses.lock().unwrap().contains(&key)
+                        if !paused && record["status"] == "pending" && !analyses.lock().unwrap().contains(&key)
                         {
                             environment::database(
                                 &config,
@@ -667,6 +708,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         .as_str()
                         .ok_or_else(|| invalid("Chat richiesta"))?;
                     let key = environment::key(source, chat_id)?;
+                    if paused && v["force"] != true { return environment::database(&config,&key,"analysis-get",None); }
                     let device = if source == "master" {
                         None
                     } else {
@@ -691,16 +733,8 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     if analyses.lock().unwrap().contains(&key) {
                         return Ok(cached);
                     }
-                    if cached["status"] == "ready"
-                        && cached["revision"] == revision
-                        && v["force"] != true
-                    {
-                        let manifest: environment::Manifest =
-                            serde_json::from_value(cached["manifest"].clone())
-                                .map_err(io::Error::other)?;
-                        if environment::fresh(device.as_ref(), &manifest)? {
-                            return Ok(cached);
-                        }
+                    if matches!(cached["status"].as_str(), Some("ready" | "failed")) && v["force"] != true {
+                        return Ok(cached);
                     }
                     if analyses.lock().unwrap().len() >= 2 {
                         return Err(invalid("Analisi già in corso; riprova tra poco"));
@@ -722,6 +756,9 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     thread::spawn(move || {
                         let result = match environment::analyze(device.as_ref(), &path, &chat_id) {
                             Ok(manifest) => {
+                                if device.is_none() {
+                                    if let Err(error) = crate::preparation::capture(&config,&chat_id,Path::new(&path),&manifest) { eprintln!("Oaclis: dimensioni sorgenti: {error}"); }
+                                }
                                 json!({"status":"ready","revision":revision,"manifest":manifest})
                             }
                             Err(error) => {
@@ -738,6 +775,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     Ok(pending)
                 }
                 (&Method::Post, "/api/check") => {
+                    if paused { return Ok(connections.lock().unwrap().clone()); }
                     for device in devices::load(config.join("devices.json"))? {
                         let mut lock = connections.lock().unwrap();
                         if lock[&device.id] == "checking" {
@@ -793,6 +831,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     Ok(json!({"ok":true}))
                 }
                 (&Method::Post, "/api/run") => {
+                    if paused { return Err(invalid("Sincronizzazioni in pausa")); }
                     let v = body(&mut request)?;
                     start_transfer(v, &codex, &config, &job)
                 }
@@ -803,17 +842,53 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
             Ok(v) => answer(request, 200, v.to_string(), "application/json"),
             Err(e) => answer(
                 request,
-                400,
+                error_status(&e),
                 json!({"error":e.to_string()}).to_string(),
                 "application/json",
             ),
         }
-    }
+    });
     Ok(())
 }
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn slow_request_does_not_block_a_local_request() {
+        use std::{net::TcpStream, io::{Read, Write}, sync::mpsc, time::Duration};
+        let server = Arc::new(Server::http("127.0.0.1:0").unwrap());
+        let address = server.server_addr().to_ip().unwrap();
+        let (started, wait_started) = mpsc::channel();
+        let (release, wait_release) = mpsc::channel();
+        let wait_release = Mutex::new(wait_release);
+        let worker_server = server.clone();
+        let workers = thread::spawn(move || serve_requests(&worker_server, |request| {
+            if request.url() == "/slow" {
+                started.send(()).unwrap();
+                wait_release.lock().unwrap().recv_timeout(Duration::from_secs(5)).unwrap();
+            }
+            answer(request, 200, "available".into(), "text/plain");
+        }));
+        let mut slow = TcpStream::connect(address).unwrap();
+        slow.write_all(b"GET /slow HTTP/1.0\r\n\r\n").unwrap();
+        wait_started.recv_timeout(Duration::from_secs(2)).unwrap();
+        let mut fast = TcpStream::connect(address).unwrap();
+        fast.set_read_timeout(Some(Duration::from_secs(2))).unwrap();
+        fast.write_all(b"GET /status HTTP/1.0\r\n\r\n").unwrap();
+        let mut response = String::new();
+        let result = fast.read_to_string(&mut response);
+        release.send(()).unwrap();
+        for _ in 0..4 { server.unblock(); }
+        workers.join().unwrap();
+        result.unwrap();
+        assert!(response.contains("available"));
+    }
+    #[test]
+    fn operational_failures_are_not_bad_requests() {
+        assert_eq!(error_status(&invalid("Richiesta non valida")), 400);
+        assert_eq!(error_status(&io::Error::new(io::ErrorKind::ConnectionAborted, "SSH non disponibile")), 503);
+        assert_eq!(error_status(&io::Error::other("database is locked")), 503);
+    }
     #[test]
     fn accepts_local_tunnel_ports_only() {
         for host in ["localhost:23232", "localhost:23233", "127.0.0.1:23234", "[::1]:23233"] {

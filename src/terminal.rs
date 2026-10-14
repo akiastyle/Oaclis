@@ -1,3 +1,4 @@
+// terminal.rs v1.1.24
 //! Terminal transport; Codex and its archive stay on the selected device.
 use crate::{devices::Device, invalid};
 use serde_json::Value;

@@ -1,3 +1,4 @@
+# wsl-discovery.ps1 v1.0.40
 # Runs with Oaclis, without a service or scheduled task.
 param([string]$WslIp, [string]$Instance)
 $ErrorActionPreference = 'Stop'

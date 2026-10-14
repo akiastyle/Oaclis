@@ -1,3 +1,4 @@
+# test_codex_setup.py v1.8.74
 """Exercise optional prompts and npm invocation without installing packages."""
 import os
 from pathlib import Path

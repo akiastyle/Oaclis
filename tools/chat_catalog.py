@@ -1,3 +1,4 @@
+# chat_catalog.py v1.0.51
 """Read Codex chat names and rollout locations; never modify the archive."""
 import json
 import os
@@ -11,7 +12,7 @@ database = root / "state_5.sqlite"
 if not database.exists():
     database = root / "sqlite/state_5.sqlite"
 if database.is_file():
-    with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=2) as db:
+    with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=10) as db:
         for chat_id, name, title, source in db.execute("SELECT id,name,title,source FROM threads"):
             if source and source.startswith("{") and "subagent" in json.loads(source):
                 hidden.add(chat_id)
@@ -38,7 +39,7 @@ for directory, _, files in os.walk(root / "sessions", followlinks=False):
             chats.append({"id": chat_id, "name": names.get(chat_id, "Senza titolo"), "path": str(path), "relative_path": str(path.relative_to(root)), "bytes": path.stat().st_size, "modified_ns": str(path.stat().st_mtime_ns)})
 settings = pathlib.Path(os.environ.get("OACLIS_SETTINGS_DIR", pathlib.Path.home() / ".config/oaclis")) / "appearance.sqlite"
 if settings.is_file():
-    with sqlite3.connect(settings.as_uri() + "?mode=ro", uri=True, timeout=2) as db:
+    with sqlite3.connect(settings.as_uri() + "?mode=ro", uri=True, timeout=10) as db:
         if db.execute("SELECT 1 FROM sqlite_master WHERE name='analysis'").fetchone():
             records = {key: json.loads(value) for key, value in db.execute("SELECT key,value FROM analysis WHERE value IS NOT NULL")}
             for chat in chats:

@@ -1,3 +1,4 @@
+# test_bootstrap.py v1.4.66
 """Bootstrap checks must not install or start anything."""
 from pathlib import Path
 import os

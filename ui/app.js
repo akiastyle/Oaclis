@@ -1,3 +1,4 @@
+// app.js v2.89.1626
 "use strict";
 const $ = (s) => document.querySelector(s);
 const token = $('meta[name="oaclis-token"]').content;
@@ -35,6 +36,8 @@ try {
 const catalogFailures = new Set();
 let chatLinks = [];
 let saveLinks = Promise.resolve();
+let removingPresentation = false;
+let drawingMap = false;
 const master = { id: "master", name: "Questo dispositivo" };
 const devices = () => [{ ...master, name: data.appearance?.["device:master"]?.label || master.name }, ...data.devices];
 const deviceName = (id) => devices().find((d) => d.id === id)?.name || id;
@@ -372,26 +375,19 @@ function bindAppearanceFields(panel) {
 function scopeFields(scopes = {}, entry = {}) {
   return '<div class="scope-tools" role="group" aria-label="Cosa sincronizzare">' +
     [["chat", "chat", "Chat"], ["paths", "folder", "Percorsi"], ["apps", "box", "App, plugin e configurazioni"]].map(([scope, icon, label]) =>
-      '<div class="scope-row"><button type="button" class="scope-toggle" data-scope="' + scope + '" aria-pressed="' + (scopes[scope] !== false) + '" aria-label="' + label + '" title="' + label + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + icons[icon] + '</svg></button><div class="scope-detail" data-detail="' + scope + '" tabindex="0" aria-label="' + label + '"></div></div>').join("") + '</div>';
+      '<div class="scope-row"><button type="button" class="scope-toggle" data-scope="' + scope + '" aria-pressed="' + (scopes[scope] !== false) + '" aria-label="' + label + '" title="' + label + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + icons[icon] + '</svg></button><div class="scope-detail" data-detail="' + scope + '" tabindex="0" aria-label="' + label + '"></div><button type="button" class="icon-button" data-refresh="' + scope + '" aria-label="Aggiorna ' + label + '" title="Aggiorna ' + label + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5"></path></svg></button></div>').join("") + '</div>';
 }
-const operationStates = new Map();
 function activityState(entry, origin, scope) {
   const key = origin + ":" + entry.id;
   const analysis = data.analyses?.[key] || entry.analysis || {};
   const job = data.job?.chat_id === entry.id ? data.job : data.transfers?.[key] || {};
   const transferring = job.chat_id === entry.id && job.source_device_id === origin &&
     (scope === "all" || job.scopes?.[scope] === true);
-  const checking = scope !== "chat" && analysis.status === "pending";
-  const status = transferring && job === data.job && job.status === "running" || checking ? "busy" :
-    analysis.status === "failed" && scope !== "chat" || transferring && job.status === "failed" ? "failed" : "idle";
-  const stateKey = key + ":" + scope;
-  const previous = operationStates.get(stateKey);
-  let until = previous?.until || 0;
-  if (previous?.status === "busy" && status === "idle") until = Date.now() + 1000;
-  operationStates.set(stateKey, { status, until });
-  return { state: status === "idle" && until > Date.now() ? "success" : status,
-    label: status === "busy" ? (checking ? "Check in corso" : "Sincronizzazione in corso") : status === "failed" ? (transferring && job.status === "failed" ? job.message : analysis.error) || "Operazione non riuscita" : "Completato" };
+  const checking = scope !== "chat" && analysis.status === "pending" || (scope === "apps" || scope === "all") && data.app_checks?.[key]?.status === "pending";
+  const busy = !data.paused && transferring && job === data.job && job.status === "running" || checking;
+  return { state: busy ? "busy" : "idle", label: checking ? "Check in corso" : "Sincronizzazione in corso" };
 }
+
 function activityIndicator(entry, origin, scope) {
   const value = activityState(entry, origin, scope);
   const indicator = document.createElement("span");
@@ -401,7 +397,6 @@ function activityIndicator(entry, origin, scope) {
   indicator.title = value.label;
   indicator.setAttribute("role", "status");
   indicator.setAttribute("aria-label", value.label);
-  if (value.state === "success") setTimeout(() => { if (indicator.isConnected) indicator.hidden = true; }, 1000);
   return indicator;
 }
 function updateScopeText(box, lines) {
@@ -414,6 +409,28 @@ function updateScopeText(box, lines) {
   }));
   box.dataset.content = content;
   return true;
+}
+function appCheckLines(check) {
+  const label = item => (item.kind === "skill" ? "Skill · " : item.kind === "plugin" ? "Plugin · " : "") + item.label + (item.version ? " " + item.version : "");
+  if (!check || check.status === "missing") return ["Requisiti non ancora rilevati"];
+  if (check.status === "waiting") return ["In attesa dei percorsi da analizzare"];
+  if (check.status === "pending") return ["Rilevamento requisiti in corso…"];
+  if (["failed", "unavailable"].includes(check.status)) return [check.error];
+  const lines = (check.requirements || []).map(label);
+  lines.push(...(check.configs || []).map(config => config.service + " · " + config.path));
+  return lines.length ? lines : ["Nessuna app aggiuntiva individuata"];
+}
+function requestAppCheck(panel, entry) {
+  const source = panel.dataset.sourceDevice || "master", key = source + ":" + entry.id;
+  if (panel.appCheckInFlight || data.app_checks?.[key]) return;
+  panel.appCheckInFlight = true;
+  api("app-check", { source_device_id: source, chat_id: entry.id }).then(result => {
+    data.app_checks ??= {}; data.app_checks[key] = result;
+    if (panel.isConnected) renderScopeDetails(panel, panel.scopeEntry);
+  }).catch(error => {
+    data.app_checks ??= {}; data.app_checks[key] = { status: "failed", error: error.message };
+    if (panel.isConnected) renderScopeDetails(panel, panel.scopeEntry);
+  }).finally(() => { panel.appCheckInFlight = false; });
 }
 function renderScopeDetails(panel, entry) {
   panel.scopeEntry = entry;
@@ -429,12 +446,25 @@ function renderScopeDetails(panel, entry) {
     const lines = result.status !== "ready" ? [state] : items.length ? items : [empty];
     changed = updateScopeText(box, lines) || changed;
   };
-  write("paths", manifest.paths || [], "Nessun percorso individuato");
-  write("apps", [...(manifest.apps?.length ? manifest.apps : manifest.packages || []), ...(manifest.plugins || []).map(p => p.name), ...(manifest.configs || []).map(c => c.path), ...(manifest.app_notes || []), ...(manifest.uncertainties || [])], "Nessuna app aggiuntiva individuata");
+  const preparation = data.preparations?.[origin + ":" + entry.id];
+  const paths = (manifest.paths || []).map(path => {
+    const size = preparation?.paths?.find(item => item.path === path);
+    return path + (Number.isFinite(size?.bytes) ? " · " + (size.bytes / 1048576).toLocaleString("it-IT", { maximumFractionDigits: 2 }) + " MB" : size?.error ? " · Dimensione non disponibile: " + size.error : "");
+  });
+  write("paths", paths, "Nessun percorso individuato");
+  if (panel.manualRefresh?.apps && data.app_checks?.[origin + ":" + entry.id]?.status !== "pending") panel.manualRefresh.apps = false;
+  write("apps", panel.manualRefresh?.apps ? ["Rilevamento requisiti in corso…"] : appCheckLines(data.app_checks?.[origin + ":" + entry.id]), "Nessuna app aggiuntiva individuata");
+  if (result.status === "ready") requestAppCheck(panel, entry);
   for (const scope of ["chat", "paths", "apps"]) {
     const row = panel.querySelector('[data-detail="' + scope + '"]').parentElement;
     row.querySelector(".operation-indicator")?.remove();
-    row.append(activityIndicator(entry, origin, scope));
+    const refresh = row.querySelector('[data-refresh]');
+    const pending = scope === 'apps' ? data.app_checks?.[origin + ":" + entry.id]?.status === 'pending' : scope === 'paths' && result.status === 'pending';
+    if (panel.manualRefresh?.[scope] && !pending) panel.manualRefresh[scope] = false;
+    if (refresh) refresh.disabled = pending;
+    const indicator = activityIndicator(entry, origin, scope);
+    if (panel.manualRefresh?.[scope]) { indicator.hidden = false; indicator.dataset.state = 'busy'; }
+    row.append(indicator);
   }
   if (changed) positionContext(panel, panel.opener);
 }
@@ -445,13 +475,48 @@ async function saveChatScopes(entry, scopes, origin = sourceId || "master") {
   renderLink(true);
 }
 async function removePresentation(kind, id) {
+  if (removingPresentation) return;
   const entry = visibleChats.find(chat => chat.id === id) || chatLinks.find(link => link.entry.id === id)?.entry || { id, name: id };
   const name = kind === "chat" ? chatLabel(entry) : deviceName(id);
   if (!window.confirm('Eliminare “' + name + '” da Oaclis e rimuovere tutti i suoi collegamenti?\n\n' +
       (kind === "chat" ? 'La chat verrà nascosta da Oaclis.\n' : 'Le impostazioni del dispositivo verranno rimosse.\n') +
       'Le chat Codex, i file trasferiti e le app resteranno intatti.')) return;
-  await saveLinks;
-  await api(kind === "chat" ? "chat/hide" : "device/delete", { id });
+  removingPresentation = true;
+  const matches = connection => kind === "chat" ? connection.entry.id === id : [connection.source, connection.target].includes(id);
+  const removedLinks = chatLinks.filter(matches);
+  const oldDevice = data.devices.find(device => device.id === id);
+  const oldPreference = data.chat_settings?.[id];
+  const oldLink = link;
+  chatLinks = chatLinks.filter(connection => !matches(connection));
+  if (link && matches(link)) link = null;
+  if (kind === "chat") {
+    data.chat_settings ??= {};
+    data.chat_settings[id] = { ...oldPreference, hidden: true };
+  } else data.devices = data.devices.filter(device => device.id !== id);
+  // Remove existing elements directly so the browser can paint before the request finishes.
+  document.querySelectorAll(".link-badge").forEach(marker => {
+    const [chat, source, target] = JSON.parse(marker.dataset.linkKey);
+    if (kind === "chat" ? chat === id : [source, target].includes(id)) disposeChatLink(marker.closest(".chat-link"));
+  });
+  if (kind === "device") document.querySelectorAll(".map-node").forEach(node => { if (node.dataset.id === id) node.remove(); });
+  renderLibrary();
+  try {
+    await saveLinks;
+    const result = await api(kind === "chat" ? "chat/hide" : "device/delete", { id });
+    data.chat_settings = result.preferences;
+    chatLinks = result.links;
+  } catch (error) {
+    for (const connection of removedLinks) {
+      if (!chatLinks.some(current => current.entry.id === connection.entry.id && current.source === connection.source && current.target === connection.target)) chatLinks.push(connection);
+    }
+    if (kind === "chat") {
+      if (oldPreference) data.chat_settings[id] = oldPreference;
+      else delete data.chat_settings[id];
+    } else if (oldDevice && !data.devices.some(device => device.id === id)) data.devices.push(oldDevice);
+    link = oldLink;
+    renderMap(); renderLibrary();
+    throw error;
+  } finally { removingPresentation = false; }
   document.querySelectorAll(".chat-editor").forEach(panel => {
     if (kind === "chat" ? panel.dataset.objectId === id : panel.dataset.sourceDevice === id) closeChatEditor(panel);
   });
@@ -464,7 +529,7 @@ async function removePresentation(kind, id) {
     delete positions[id]; savePositions();
     if (sourceId === id) closePanel();
   }
-  data = await api("state"); chatLinks = data.links || [];
+  delete data.appearance?.[(kind === "chat" ? "chat:" : "device:") + id];
   renderMap(); renderLibrary();
 }
 function positionContext(popover, anchor) {
@@ -630,6 +695,24 @@ function editChat(entry, anchor, origin = sourceId || "master") {
       if (fresh && panel.isConnected) renderScopeDetails(panel, fresh);
     } catch (_) { /* Existing details remain available while the device is offline. */ }
   }, 10000);
+  panel.querySelectorAll('[data-refresh]').forEach(button => button.onclick = guard(async () => {
+    const scope = button.dataset.refresh;
+    button.disabled = true;
+    try {
+      if (scope === 'chat') {
+        const result = await api("catalog", { device_id: origin });
+        const fresh = result.chats.find(chat => chat.id === entry.id);
+        if (!fresh) throw new Error("Chat non trovata sul dispositivo");
+        renderScopeDetails(panel, fresh);
+      } else {
+        const result = await api(scope === 'apps' ? "app-check" : "analyze", { source_device_id: origin, chat_id: entry.id, force: true });
+        const collection = scope === 'apps' ? 'app_checks' : 'analyses';
+        data[collection] ??= {}; data[collection][origin + ":" + entry.id] = result;
+        panel.manualRefresh ??= {}; panel.manualRefresh[scope] = result.status === 'pending';
+        renderScopeDetails(panel, panel.scopeEntry);
+      }
+    } finally { if (!panel.manualRefresh?.[scope]) button.disabled = false; }
+  }));
   const readAppearance = bindAppearanceFields(panel);
   const save = async value => {
     const key = "chat:" + entry.id;
@@ -648,10 +731,33 @@ function editChat(entry, anchor, origin = sourceId || "master") {
   panel.querySelector('[name="label"]').focus();
   return panel;
 }
+function disposeChatLink(layer) {
+  if (!layer) return;
+  layer.querySelector('.link-badge')?.badgeMotion?.destroy();
+  layer.remove();
+}
+function updateBadgeMotion(marker, connection) {
+  const key = connection.source + ':' + connection.entry.id;
+  const current = data.job?.chat_id === connection.entry.id && data.job?.source_device_id === connection.source ? data.job : data.transfers?.[key] || {};
+  const matches = !current.device_id || current.device_id === connection.target;
+  const modules = matches ? current.module_progress || {} : {};
+  const changed = Object.values(modules).some(module => module.changed === true);
+  const checking = data.app_checks?.[key]?.status === 'pending' || !data.paused && data.analyses?.[key]?.status === 'pending';
+  const unfinished = Object.values(modules).some(module => module.changed === true && module.progress < 1);
+  const remote = connection.source === 'master' ? connection.target : connection.source;
+  const paused = changed && unfinished && (data.paused || current.status === 'paused' || current.status === 'failed' || data.connections[remote] === 'offline');
+  const phase = paused ? 'paused' : changed && current.status === 'running' ? 'transferring' : checking ? 'checking' : 'idle';
+  marker.badgeMotion.update({ phase, modules });
+}
 function renderLink(force = false) {
+  if (drawingMap) return;
   if (document.querySelector('.link-badge[data-dragging="true"]')) return;
   if (!force && document.querySelector(".link-badge:hover, .link-badge:focus-within")) return;
-  document.querySelectorAll(".chat-link").forEach(node => node.remove());
+  const layers = new Map([...document.querySelectorAll(".chat-link")].map(node => [node.dataset.renderKey, node]));
+  const geometry = Object.fromEntries([...document.querySelectorAll(".map-node")].map(node => {
+    const rect = node.getBoundingClientRect();
+    return [node.dataset.id, [rect.x, rect.y, rect.width, rect.height]];
+  }));
   const links = [...chatLinks];
   if (link) {
     const existing = links.findIndex(v => v.entry.id === link.entry.id &&
@@ -665,8 +771,17 @@ function renderLink(force = false) {
       : [value.source, value.target].join(":") + ":send";
     const lane = lanes.get(anchors) || 0;
     lanes.set(anchors, lane + 1);
-    drawChatLink(value, index, lane);
+    const key = JSON.stringify([value.entry.id, value.source, value.target]);
+    const positionKey = [value.entry.id, ...[value.source, value.target].sort()].join(":");
+    const signature = JSON.stringify([value, appearance(value.entry), linkPositions[positionKey], geometry[value.source], geometry[value.target], lane, index]);
+    const existing = layers.get(key);
+    layers.delete(key);
+    if (existing && existing.dataset.renderSignature === signature) return;
+    const layer = drawChatLink(value, index, lane, existing);
+    if (layer) { layer.dataset.renderKey = key; layer.dataset.renderSignature = signature; }
+    else if (existing) disposeChatLink(existing);
   });
+  for (const layer of layers.values()) disposeChatLink(layer);
 }
 // Split the original cubic at the badge, preserving its shape and endpoint tangents.
 function curveThroughBadge(points, midpoint) {
@@ -694,7 +809,7 @@ function curveThroughBadge(points, midpoint) {
     return `M${points[0].x} ${points[0].y} C${a.x} ${a.y} ${d.x + dx} ${d.y + dy} ${point.x} ${point.y} C${e.x + dx} ${e.y + dy} ${c.x} ${c.y} ${points[3].x} ${points[3].y}`;
   };
 }
-function drawChatLink(connection, index, lane = 0) {
+function drawChatLink(connection, index, lane = 0, existing = null) {
   const nodes = [...document.querySelectorAll(".map-node")];
   const from = nodes.find((n) => n.dataset.id === connection.source),
     to = nodes.find((n) => n.dataset.id === connection.target);
@@ -713,11 +828,11 @@ function drawChatLink(connection, index, lane = 0) {
   const dx = x2 - x1, dy = y2 - y1, distance = Math.max(1, Math.hypot(dx, dy));
   const reach = Math.max(45, Math.min(150, distance * 0.35)) + lane * 80;
   const curve = `M${x1} ${y1} C${x1 + startSide * reach} ${y1} ${x2 + endSide * reach} ${y2} ${x2} ${y2}`;
-  const layer = document.createElement("div");
+  const layer = existing || document.createElement("div");
   layer.className = "chat-link";
-  if (index === 0) layer.id = "chat-link";
+  layer.id = index === 0 ? "chat-link" : "";
   layer.style.color = appearance(connection.entry).color || "var(--ink)";
-  layer.innerHTML =
+  if (!existing) layer.innerHTML =
     '<svg class="connection-lines" aria-hidden="true"><defs><marker id="link-arrow-' + index + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M1 1L9 5L1 9Z"/></marker></defs><path d="M' +
     curve.slice(1) +
     '" stroke-dasharray="' +
@@ -731,22 +846,23 @@ function drawChatLink(connection, index, lane = 0) {
     "</div>";
   const marker = layer.querySelector(".link-badge");
   marker.dataset.linkKey = JSON.stringify([connection.entry.id, connection.source, connection.target]);
-  marker.replaceChildren();
+  if (!existing) marker.replaceChildren();
   const name = chatLabel(connection.entry);
   marker.title = name;
-  const main = document.createElement("button");
+  const main = marker.querySelector(".link-main") || document.createElement("button");
   main.className = "link-main";
   main.type = "button";
-  main.innerHTML = badge(connection.entry);
+  const badgeHtml = badge(connection.entry);
+  if (main.dataset.badgeHtml !== badgeHtml) { main.innerHTML = badgeHtml; main.dataset.badgeHtml = badgeHtml; }
   main.title = name;
   main.setAttribute("aria-label", "Sposta " + name);
   main.title = "Trascina " + name;
-  const open = document.createElement("button");
+  const open = marker.querySelector(".link-open") || document.createElement("button");
   open.type = "button"; open.className = "link-open icon-button";
   open.setAttribute("aria-label", "Apri " + name); open.title = "Apri console";
   open.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + icons.terminal + '</svg>';
   open.onclick = () => chooseChatTerminal(connection, open);
-  const edit = document.createElement("button");
+  const edit = marker.querySelector(".link-edit") || document.createElement("button");
   edit.type = "button";
   edit.className = "link-edit icon-button";
   edit.setAttribute("aria-label", "Modifica " + name);
@@ -761,11 +877,22 @@ function drawChatLink(connection, index, lane = 0) {
       if (fresh && panel.isConnected) renderScopeDetails(panel, fresh);
     } catch (_) { /* Cached details remain usable while the source is unreachable. */ }
   });
-  marker.append(main, edit, activityIndicator(connection.entry, connection.source, "all"), open);
+  if (!existing) marker.append(main, edit, open);
   main.querySelector(".chat-badge").style.color = appearance(connection.entry).color || "var(--ink)";
   marker.style.color = appearance(connection.entry).color || "var(--ink)";
-  $("#nodes").prepend(layer);
+  if (!existing) {
+    $("#nodes").prepend(layer);
+    marker.badgeMotion = new OaclisBadgeMotion(marker, { chat:icons.chat, paths:icons.folder, apps:icons.box });
+  }
+  updateBadgeMotion(marker, connection);
   const path = layer.querySelector(".connection-lines > path");
+  const arrow = layer.querySelector("marker");
+  arrow.id = 'link-arrow-' + index;
+  path.setAttribute('marker-end', 'url(#' + arrow.id + ')');
+  if (connection.operation === 'sync') path.setAttribute('marker-start', 'url(#' + arrow.id + ')');
+  else path.removeAttribute('marker-start');
+  path.setAttribute('stroke-dasharray', connection.operation === 'sync' ? 'none' : '7 6');
+  path.setAttribute('d', curve);
   const midpoint = path.getPointAtLength(path.getTotalLength() / 2);
   const bend = curveThroughBadge([{ x: x1, y: y1 }, { x: x1 + startSide * reach, y: y1 }, { x: x2 + endSide * reach, y: y2 }, { x: x2, y: y2 }], midpoint);
   const updateCurve = () => path.setAttribute("d", bend({ x: parseFloat(marker.style.left), y: parseFloat(marker.style.top) }));
@@ -808,6 +935,7 @@ function drawChatLink(connection, index, lane = 0) {
     updateCurve();
     save();
   };
+  return layer;
 }
 function closeChatTerminal(panel) {
   if (!panel) return;
@@ -1063,8 +1191,9 @@ function followMapMotion() {
   mapMotionFrame = requestAnimationFrame(frame);
 }
 function renderMap(animate = false) {
+  drawingMap = true;
   const previous = animate ? Object.fromEntries([...document.querySelectorAll(".map-node")].map(n => [n.dataset.id, { x: n.offsetLeft, y: n.offsetTop }])) : {};
-  $("#nodes").replaceChildren();
+  $("#nodes").querySelectorAll(".map-node").forEach(node => node.remove());
   $("#nodes").style.height = mapLayout().canvasHeight + "px";
   devices().forEach((device, index) => {
     const node = document.createElement("div");
@@ -1211,6 +1340,7 @@ function renderMap(animate = false) {
       }
     });
   });
+  drawingMap = false;
   renderConnections();
   if (animate) {
     $("#nodes").getBoundingClientRect();
@@ -1319,67 +1449,6 @@ function editDevice(device = {}, anchor = $("#add-device")) {
 }
 $("#add-device").onclick = () => openDiscovery();
 $("#edit-device").onclick = () => editDevice(data.devices.find(d => d.id === sourceId), $("#edit-device"));
-function formatBytes(bytes) {
-  return bytes > 1e6
-    ? (bytes / 1e6).toFixed(1) + " MB"
-    : Math.round(bytes / 1e3) + " KB";
-}
-let dismissedResult = "";
-function renderJob() {
-  const job = data.job;
-  const running = job.status === "running";
-  document.querySelectorAll(".primary").forEach((b) => {
-    if (b.id !== "start-chat") b.disabled = running;
-  });
-  if (job.status === "idle") {
-    $("#activity").hidden = true;
-    return;
-  }
-  const signature = JSON.stringify(job);
-  if (!running && dismissedResult === signature) return;
-  $("#activity").hidden = false;
-  $("#dismiss-job").hidden = running;
-  const event = job.progress?.event || {},
-    phase = {
-      preparing: "Preparazione",
-      installing: "Preparazione app e configurazioni",
-      transferring: "Trasferimento",
-      verifying: "Verifica",
-      completed: "Verificato",
-    };
-  let text =
-    job.status === "failed"
-      ? job.message
-      : job.status === "completed"
-        ? job.results === "conflict" || job.results?.chat === "conflict"
-          ? "Conflitto: copie conservate."
-          : "Operazione terminata."
-        : phase[event.phase] || "Preparazione";
-  $("#job").innerHTML =
-    "<p>" +
-    esc(text) +
-    "</p>" +
-    (running && (job.title || selected)
-      ? '<p class="path">' + esc(job.title || selected.name) + "</p>"
-      : "") +
-    (running && event.phase === "transferring"
-      ? '<progress aria-label="Avanzamento" max="100" ' +
-        (event.total_known ? 'value="' + event.percent + '"' : "") +
-        '></progress><div class="progress-meta"><span>' +
-        esc(formatBytes(event.processed_bytes)) +
-        " · " +
-        esc(event.rate) +
-        "</span><span>" +
-        (event.remaining_seconds != null
-          ? "~ " + event.remaining_seconds + " s"
-          : "") +
-        "</span></div>"
-      : "");
-}
-$("#dismiss-job").onclick = () => {
-  dismissedResult = JSON.stringify(data.job);
-  $("#activity").hidden = true;
-};
 const lastConnection = {};
 async function poll() {
   const next = await api("status");
@@ -1392,7 +1461,7 @@ async function poll() {
     }
     if (state !== "checking") lastConnection[device.id] = state;
   }
-  if (next.shared && !positionsSaving && !linkPositionSaving && !drag && !document.querySelector('.map-node[data-dragging="true"], .link-badge[data-dragging="true"]')) {
+  if (next.shared && !removingPresentation && !positionsSaving && !linkPositionSaving && !drag && !document.querySelector('.map-node[data-dragging="true"], .link-badge[data-dragging="true"]')) {
     const previous = JSON.stringify([data.devices, data.appearance, chatLinks, data.chat_settings, positions, linkPositions]);
     const shared = next.shared;
     if (previous !== JSON.stringify([shared.devices, shared.appearance, shared.links, shared.chat_settings, shared.positions, shared.link_positions])) {
@@ -1402,8 +1471,11 @@ async function poll() {
   }
   data.connections = next.connections;
   data.job = next.job;
+  data.paused = next.paused;
   data.analyses = next.analyses || {};
+  data.app_checks = next.app_checks || {};
   data.transfers = next.transfers || {};
+  data.preparations = next.preparations || {};
   for (const editor of document.querySelectorAll(".chat-editor")) {
     if (editor.scopeEntry) { renderScopeDetails(editor, editor.scopeEntry); editor.updateVisibility?.(); }
   }
@@ -1411,9 +1483,9 @@ async function poll() {
   renderConnections();
   for (const marker of document.querySelectorAll(".link-badge")) {
     const [id, source] = JSON.parse(marker.dataset.linkKey);
-    marker.querySelector(".operation-indicator")?.replaceWith(activityIndicator({ id }, source, "all"));
+    const connection = chatLinks.find(value => value.entry.id === id && value.source === source && value.target === JSON.parse(marker.dataset.linkKey)[2]);
+    if (connection) updateBadgeMotion(marker, connection);
   }
-  renderJob();
 }
 let polling = false;
 setInterval(async () => {
@@ -1478,7 +1550,6 @@ guard(async () => {
     localStorage.removeItem("oaclis-map");
     renderMap();
   }
-  renderJob();
   await updateDiscovery(await api("peers"), true);
   await api("check", {});
 })();
@@ -1531,7 +1602,7 @@ async function updateDiscovery(next, first = false) {
   const fresh = next.peers.filter(peer => !noticedPeers.has(peer.id));
   for (const peer of fresh) noticedPeers.add(peer.id);
   const newRegistration = next.peers.some(peer => peer.device_id && !data.devices.some(device => device.id === peer.device_id));
-  if (newRegistration) { data = await api('state'); chatLinks = data.links || []; renderMap(); await api('check', {}); }
+  if (newRegistration && !removingPresentation) { data = await api('state'); chatLinks = data.links || []; renderMap(); await api('check', {}); }
   if (fresh.some(peer => !peer.connected)) { notice('Oaclis trovato nella rete'); beep(); }
   if ((first && !data.devices.length) || fresh.some(peer => !peer.accepted && !peer.connected)) {
     if (!document.querySelector('.context-popover:popover-open')) openDiscovery();

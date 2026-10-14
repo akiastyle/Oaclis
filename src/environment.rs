@@ -1,3 +1,4 @@
+// environment.rs v1.13.476
 //! Chat environment analysis and destination preparation, independent of the UI.
 use crate::{
     devices::{self, Device},
@@ -20,7 +21,7 @@ use std::{
 
 const ANALYZER: &str = include_str!("../tools/environment_analysis.py");
 const SETUP: &str = include_str!("../tools/environment_setup.py");
-const STORE: &str = include_str!("../tools/appearance_store.py");
+pub(crate) const STORE: &str = concat!(include_str!("../tools/chat_records.py"), "\n", include_str!("../tools/appearance_store.py"));
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -250,11 +251,12 @@ pub fn database(
     }
     let output = child.wait_with_output()?;
     if !output.status.success() {
-        return Err(invalid("Database ambiente non disponibile"));
+        let detail = String::from_utf8_lossy(&output.stderr);
+        return Err(io::Error::other(format!("Database ambiente non disponibile: {}", detail.lines().last().unwrap_or("errore SQLite"))));
     }
     Ok(serde_json::from_slice(&output.stdout)?)
 }
-fn python(device: Option<&Device>, script: &str, args: &[&str]) -> io::Result<Value> {
+pub(crate) fn python(device: Option<&Device>, script: &str, args: &[&str]) -> io::Result<Value> {
     let bytes = if let Some(device) = device {
         ssh::run(
             device,
@@ -318,9 +320,6 @@ pub fn execute(
     mut notify: impl FnMut(Value),
 ) -> io::Result<Value> {
     manifest.validate()?;
-    if scopes.apps && !manifest.uncertainties.is_empty() {
-        return Err(invalid(format!("App da verificare: {}", manifest.uncertainties.join("; "))));
-    }
     rules::ensure_local(state)?;
     let target_device = if incoming { None } else { Some(device) };
     let identity = python(target_device, SETUP, &["identity"])?;
@@ -342,15 +341,6 @@ pub fn execute(
         .map(|p| mapped(p, &manifest.home, &target_home))
         .collect();
     let mut results = Vec::new();
-    if scopes.apps {
-        notify(json!({"event":{"phase":"installing"}}));
-        let value = json!({"packages":manifest.packages});
-        results.push(python(
-            target_device,
-            SETUP,
-            &["prepare", &value.to_string()],
-        )?);
-    }
     let mut directories: Vec<(PathBuf, PathBuf)> = if scopes.paths {
         manifest
             .paths
@@ -415,26 +405,12 @@ pub fn execute(
         results.push(json!(files));
     }
     if scopes.apps {
+        notify(json!({"event":{"phase":"transferring"}}));
+        let source_device = if incoming { Some(device) } else { None };
+        let input = json!({"paths":manifest.paths,"configs":manifest.configs,"plugins":manifest.plugins});
+        let inventory = python(source_device, include_str!("../tools/app_inventory.py"), &["source", &input.to_string()])?;
         let mut configs = Vec::new();
         for config in &manifest.configs {
-            let file = config
-                .path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .ok_or_else(|| invalid("Nome configurazione non valido"))?;
-            let mut target = if file == ".htaccess" {
-                mapped(&config.path, &manifest.home, &target_home)
-            } else {
-                config
-                    .path
-                    .parent()
-                    .unwrap()
-                    .join(if file.starts_with("oaclis-") {
-                        file.to_owned()
-                    } else {
-                        format!("oaclis-{file}")
-                    })
-            };
             let mut staged = staging::StagedFile::new(state)?;
             if incoming {
                 transfer::fetch_file(device, &config.path, &staged.path, &mut |_| {})?
@@ -444,121 +420,25 @@ pub fn execute(
                 io::copy(&mut source, &mut staged.file)?;
             }
             let mut content = String::new();
-            fs::File::open(&staged.path)?
-                .take(131073)
-                .read_to_string(&mut content)?;
-            if content.len() > 131072 {
-                return Err(invalid("Configurazione troppo grande"));
-            }
-            for (source, destination) in manifest.paths.iter().zip(&destination_paths) {
-                content = content.replace(
-                    source
-                        .to_str()
-                        .ok_or_else(|| invalid("Percorso non UTF-8"))?,
-                    destination
-                        .to_str()
-                        .ok_or_else(|| invalid("Percorso non UTF-8"))?,
-                );
-            }
-            staged.file = fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .open(&staged.path)?;
-            staged.file.set_len(0)?;
-            use std::io::Seek;
-            staged.file.rewind()?;
-            staged.file.write_all(content.as_bytes())?;
-            staged.file.sync_all()?;
-            let receipt = transfer::copy_hash(&mut fs::File::open(&staged.path)?, &mut io::sink())?;
-            if file != ".htaccess" && !file.starts_with("oaclis-") {
-                let original = if incoming {
-                    match crate::open_regular(&config.path) {
-                        Ok((mut f, _)) => Some(transfer::copy_hash(&mut f, &mut io::sink())?),
-                        Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-                        Err(e) => return Err(e),
-                    }
-                } else {
-                    transfer::inspect_remote(device, &config.path)?.map(|(r, _)| r)
-                };
-                if original.as_ref() == Some(&receipt) {
-                    target = config.path.clone();
-                }
-            }
-            let checkpoint = state.join(format!(
-                "config-{}.json",
-                digest(&(device.id.as_str(), incoming, &target))?
-            ));
-            let previous: Option<transfer::Receipt> = match crate::open_regular(&checkpoint) {
-                Ok((file, _)) => Some(serde_json::from_reader(file)?),
-                Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-                Err(e) => return Err(e),
-            };
-            if incoming {
-                rules::ensure_local(target.parent().unwrap())?;
-                let existing = match crate::open_regular(&target) {
-                    Ok((mut file, _)) => Some(transfer::copy_hash(&mut file, &mut io::sink())?),
-                    Err(e) if e.kind() == io::ErrorKind::NotFound => None,
-                    Err(e) => return Err(e),
-                };
-                if existing.as_ref() != Some(&receipt) {
-                    if existing.is_some() && existing != previous {
-                        return Err(invalid("Configurazione web modificata sul destinatario"));
-                    }
-                    let mut local = staging::StagedFile::new(target.parent().unwrap())?;
-                    io::copy(&mut fs::File::open(&staged.path)?, &mut local.file)?;
-                    local.file.sync_all()?;
-                    let script = transfer::publish_command(
-                        target.to_str().unwrap(),
-                        local.path.to_str().unwrap(),
-                        existing.as_ref(),
-                        &receipt,
-                    )?;
-                    if !Command::new("sh").args(["-c", &script]).status()?.success() {
-                        return Err(invalid("Pubblicazione configurazione non riuscita"));
-                    }
-                }
-            } else {
-                rules::ensure_remote(device, target.parent().unwrap())?;
-                let existing =
-                    transfer::inspect_remote(device, &target)?.map(|(receipt, _)| receipt);
-                if existing.as_ref() != Some(&receipt) {
-                    if existing.is_some() && existing != previous {
-                        return Err(invalid("Configurazione web modificata sul destinatario"));
-                    }
-                    transfer::write_file(
-                        device,
-                        &staged.path,
-                        &target,
-                        existing.as_ref(),
-                        Some(&receipt),
-                        &mut |event| notify(json!({"event":event})),
-                    )?;
-                }
-            }
-            if file == ".htaccess" {
-                use std::os::unix::fs::PermissionsExt;
-                if incoming {
-                    fs::set_permissions(&target, fs::Permissions::from_mode(0o644))?;
-                } else {
-                    ssh::run(
-                        device,
-                        &format!(
-                            "[ ! -L {p} ] && chmod 644 -- {p}",
-                            p = ssh::quote(target.to_str().unwrap())
-                        ),
-                    )?;
-                }
-            }
-            staging::save_json(&checkpoint, &receipt)?;
-            configs.push(json!({"path":target,"service":config.service,"modules":config.modules}));
+            fs::File::open(&staged.path)?.take(131073).read_to_string(&mut content)?;
+            if content.len() > 131072 { return Err(invalid("Configurazione troppo grande")); }
+            configs.push(json!({"path":config.path,"service":config.service,"modules":config.modules,"content":content}));
         }
-        notify(json!({"event":{"phase":"installing"}}));
-        let value = json!({"paths":destination_paths,"configs":configs,"plugins":manifest.plugins.iter().filter(|p|p.kind=="plugin").collect::<Vec<_>>()});
-        results.push(python(
-            target_device,
-            SETUP,
-            &["finish", &value.to_string()],
-        )?);
+        let definition = json!({"paths":manifest.paths,"requirements":inventory["requirements"],"configs":configs,"plugins":manifest.plugins});
+        let directory = target_home.join(".config/oaclis/environments");
+        let target = directory.join(format!("{}.json",state.file_name().and_then(|v|v.to_str()).ok_or_else(||invalid("Identificativo ambiente assente"))?));
+        if incoming {
+            rules::ensure_local(&directory)?;
+            staging::save_json(&target, &definition)?;
+        } else {
+            rules::ensure_remote(device, &directory)?;
+            let mut staged = staging::StagedFile::new(state)?;
+            staged.file.write_all(&serde_json::to_vec_pretty(&definition)?)?;
+            staged.file.sync_all()?;
+            let previous = transfer::inspect_remote(device, &target)?.map(|(receipt,_)|receipt);
+            transfer::write_file(device, &staged.path, &target, previous.as_ref(), None, &mut |event|notify(json!({"event":event})))?;
+        }
+        results.push(json!({"definition":target}));
     }
     Ok(json!(results))
 }

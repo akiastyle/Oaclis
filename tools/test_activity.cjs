@@ -1,3 +1,4 @@
+// test_activity.cjs v1.1.14
 const fs=require('fs'),vm=require('vm'),assert=require('assert');
 const s=fs.readFileSync('ui/app.js','utf8');
 const c=vm.createContext({data:{analyses:{},transfers:{},job:{status:'idle'}},Date});

@@ -1,3 +1,4 @@
+// main.rs v1.2.158
 use oaclis::{
     chat::Chat,
     compare,
@@ -22,6 +23,10 @@ fn run() -> Result<(), Box<dyn Error>> {
         [command] if command == "serve" => {
             let home = env::var_os("HOME").ok_or("HOME non definita")?;
             oaclis::web::serve(home.into())?;
+        }
+        [command, id] if command == "prepare" => {
+            let home = env::var_os("HOME").ok_or("HOME non definita")?;
+            println!("{}", serde_json::to_string_pretty(&oaclis::preparation::from_saved(Path::new(&home),id.to_str().ok_or("ID non UTF-8")?)?)?);
         }
         [command, file, id, name, alias] if command == "device-set" => {
             let mut devices = devices::load(Path::new(file))?;
@@ -139,7 +144,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             println!("{}", mapping.map(Path::new(path))?.display());
         }
         [] => println!(
-            "Oaclis\nsetup (ricerca master e configurazione ruolo)\nserve (UI locale sulla porta 23232)\ninspect CHAT\ncompare-chat ORIGINE DESTINAZIONE\ncompare-file ORIGINE DESTINAZIONE\nmap-path CARTELLA_ORIGINE CARTELLA_DESTINAZIONE PERCORSO\ndevice-set CONFIG ID NOME ALIAS_SSH\ndevice-list CONFIG\nsend-file CONFIG ID ORIGINE DESTINAZIONE\nsync-file CONFIG ID LOCALE REMOTO CHECKPOINT\nsync-chat CONFIG ID LOCALE REMOTO CHECKPOINT\nrule-set REGOLE DEFINIZIONE_JSON\nrule-list REGOLE\nrule-run DISPOSITIVI REGOLE ID STATO"
+            "Oaclis\nsetup (ricerca master e configurazione ruolo)\nserve (UI locale sulla porta 23232)\nprepare CHAT_ID (dimensioni sorgenti dai percorsi salvati)\ninspect CHAT\ncompare-chat ORIGINE DESTINAZIONE\ncompare-file ORIGINE DESTINAZIONE\nmap-path CARTELLA_ORIGINE CARTELLA_DESTINAZIONE PERCORSO\ndevice-set CONFIG ID NOME ALIAS_SSH\ndevice-list CONFIG\nsend-file CONFIG ID ORIGINE DESTINAZIONE\nsync-file CONFIG ID LOCALE REMOTO CHECKPOINT\nsync-chat CONFIG ID LOCALE REMOTO CHECKPOINT\nrule-set REGOLE DEFINIZIONE_JSON\nrule-list REGOLE\nrule-run DISPOSITIVI REGOLE ID STATO"
         ),
         _ => return Err("Comando non valido; eseguire oaclis senza argomenti per l'elenco".into()),
     }

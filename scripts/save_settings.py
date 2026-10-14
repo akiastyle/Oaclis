@@ -1,3 +1,4 @@
+# save_settings.py v1.1.63
 """Persist bootstrap environment without replacing application settings."""
 import json
 import os

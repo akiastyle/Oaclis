@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# test_sync.py v1.4.109
 """Prove di aggiornamenti, checkpoint e conflitti su dati temporanei in LAN."""
 import hashlib
 import json

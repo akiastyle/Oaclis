@@ -1,3 +1,4 @@
+# ssh_settings.py v1.5.138
 """Explicit connection fields, translated to managed OpenSSH hosts."""
 import ipaddress
 import json

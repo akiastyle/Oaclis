@@ -1,3 +1,4 @@
+// test_panels.cjs v1.0.41
 // UI fixtures only; no real settings, chat transfers, or console commands.
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.OACLIS_PLAYWRIGHT);

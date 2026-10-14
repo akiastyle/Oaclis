@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# run.sh v1.4.101
 # Prepare prerequisites, compile and install. Application startup remains separate.
 set -euo pipefail
 case "${1:-}" in ''|--check) ;; *) echo 'Uso: bash run.sh [--check]' >&2; exit 2;; esac

@@ -1,3 +1,4 @@
+# prepare_codex.sh v1.2.57
 # Sourced by run.sh after the required prerequisites are ready.
 prepare_codex_login() {
     if codex login status >/dev/null 2>&1; then echo 'Codex autenticato.'; return 0; fi

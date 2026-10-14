@@ -1,3 +1,4 @@
+# test_pairing.py v1.7.101
 """Pairing must never grant SSH access on a single approval or forged packet."""
 import json
 from pathlib import Path

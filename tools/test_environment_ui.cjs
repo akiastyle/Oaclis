@@ -1,3 +1,4 @@
+// test_environment_ui.cjs v1.1.102
 // Bounded UI check; analysis, installation and transfers are intercepted.
 const assert = require("node:assert/strict");
 const { chromium } = require(process.env.OACLIS_PLAYWRIGHT);

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# test_install.sh v1.0.25
 set -euo pipefail
 repo=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 test_dir=$(mktemp -d)

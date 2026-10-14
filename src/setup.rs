@@ -1,3 +1,4 @@
+// setup.rs v1.7.141
 //! First-run role selection. Discovery never authorizes SSH or copies chats.
 use crate::{invalid, peers, staging};
 use serde_json::{Value, json};

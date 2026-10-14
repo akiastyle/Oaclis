@@ -1,3 +1,4 @@
+# test_shared_settings.py v1.8.123
 """Settings replication with isolated homes; never use real SSH or Codex."""
 import importlib.util
 import json
@@ -26,9 +27,9 @@ class SharedSettingsTests(unittest.TestCase):
             store.exchange()
         root = self.stores[0]
         with sqlite3.connect(root.config / 'appearance.sqlite') as db:
-            db.execute('INSERT OR REPLACE INTO appearance VALUES(?,?)', ('device:master',json.dumps({'label':'ROG','color':'#3d5a80','icon':'desktop'})))
-            db.execute('INSERT OR REPLACE INTO appearance VALUES(?,?)', ('chat:chat-one',json.dumps({'label':'Oaclis','color':'#ee6c4d','icon':'chat'})))
-            db.execute('INSERT OR REPLACE INTO chat_settings VALUES(?,?,?)', ('chat-one',0,json.dumps({'chat':True,'paths':False,'apps':True})))
+            db.execute('INSERT INTO appearance(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', ('device:master',json.dumps({'label':'ROG','color':'#3d5a80','icon':'desktop'})))
+            db.execute('INSERT INTO appearance(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', ('chat:chat-one',json.dumps({'label':'Oaclis','color':'#ee6c4d','icon':'chat'})))
+            shared.set_switches(db,'chat-one',{'chat':True,'paths':False,'apps':True})
             link={'source':'master','target':'peer-1','operation':'sync','entry':{'id':'chat-one','name':'Originale'},'scopes':{'chat':True,'paths':False,'apps':True},'transfer_pending':True}
             db.execute('INSERT OR REPLACE INTO chat_links VALUES(?,?)', ('chat-one:master:peer-1',json.dumps(link)))
         shared.atomic(root.config / 'positions.json', {'master':{'x':200,'y':100},'peer-1':{'x':400,'y':500}})
@@ -67,11 +68,11 @@ class SharedSettingsTests(unittest.TestCase):
         root = self.stores[0]
         for hidden in (1, 0):
             with sqlite3.connect(root.config / 'appearance.sqlite') as db:
-                db.execute("INSERT OR REPLACE INTO chat_visibility VALUES('chat-one',?)", (hidden,))
+                db.execute("UPDATE appearance SET hidden=? WHERE key='chat:chat-one'", (hidden,))
             self.converge()
             for store in self.stores:
                 with sqlite3.connect(store.config / 'appearance.sqlite') as db:
-                    self.assertEqual(db.execute("SELECT hidden FROM chat_visibility WHERE id='chat-one'").fetchone()[0], hidden)
+                    self.assertEqual(db.execute("SELECT hidden FROM appearance WHERE key='chat:chat-one'").fetchone()[0], hidden)
                     self.assertEqual(db.execute('SELECT count(*) FROM chat_links').fetchone()[0], 1)
                     self.assertIsNotNone(db.execute("SELECT value FROM appearance WHERE key='chat:chat-one'").fetchone())
 
@@ -79,7 +80,7 @@ class SharedSettingsTests(unittest.TestCase):
         self.converge()
         client=self.stores[1]
         with sqlite3.connect(client.config / 'appearance.sqlite') as db:
-            db.execute('INSERT OR REPLACE INTO appearance VALUES(?,?)',('device:master',json.dumps({'label':'KDell nuovo','icon':'laptop'})))
+            db.execute('INSERT INTO appearance(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',('device:master',json.dumps({'label':'KDell nuovo','icon':'laptop'})))
             db.execute('DELETE FROM chat_links')
         self.converge()
         for store in self.stores:
@@ -95,6 +96,25 @@ class SharedSettingsTests(unittest.TestCase):
         packet['sender']=self.stores[0].id
         packet['records']={'position:device':{'clock':[1,'peer'],'value':{'x':float('nan'),'y':1}}}
         with self.assertRaisesRegex(ValueError,'Posizione'):self.stores[1].exchange(packet)
+
+    def test_source_data_do_not_replace_switches_graphics_or_another_source(self):
+        self.converge()
+        root,client=self.stores[:2]
+        for store,label in [(root,'Python 3.12'),(client,'Python 3.14')]:
+            with sqlite3.connect(store.config/'appearance.sqlite') as db:
+                shared.save_inventory(db,'master:chat-one',{'status':'ready','requirements':[{'label':label}]},store.config)
+        with sqlite3.connect(client.config/'appearance.sqlite') as db:
+            shared.set_switches(db,'chat-one',{'chat':True,'paths':True,'apps':False})
+        self.converge()
+        for store in self.stores:
+            with sqlite3.connect(store.config/'appearance.sqlite') as db:
+                value=shared.chat_object(db,'chat-one')
+                self.assertEqual(value['apps']['enabled'],0)
+                self.assertEqual(value['paths']['enabled'],1)
+                sources=value['apps']['sources']
+                self.assertEqual(sources[root.id]['requirements'][0]['label'],'Python 3.12')
+                self.assertEqual(sources[client.id]['requirements'][0]['label'],'Python 3.14')
+                self.assertEqual(json.loads(db.execute("SELECT value FROM appearance WHERE key='chat:chat-one'").fetchone()[0])['label'],'Oaclis')
 
     def test_concurrent_updates_resolve_deterministically(self):
         a={'chat:x':{'clock':[3,'a'],'value':{'label':'A'}}}

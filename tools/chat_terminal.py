@@ -1,3 +1,4 @@
+# chat_terminal.py v1.2.67
 """Persistent Codex terminal on this host; browser disconnects only detach."""
 import json
 import os

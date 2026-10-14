@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# install.sh v1.0.24
 set -euo pipefail
 role=${1:-client}
 case "$role" in client|master|--unconfigured) ;; *) echo 'Uso: bash scripts/install.sh [client|master|--unconfigured]' >&2; exit 2;; esac

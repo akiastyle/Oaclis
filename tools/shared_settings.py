@@ -1,3 +1,4 @@
+# shared_settings.py v1.11.323
 """Replicate presentation settings over mutually approved SSH; no chat/auth files."""
 import fcntl
 import hashlib
@@ -10,8 +11,11 @@ import sqlite3
 import subprocess
 import sys
 
+if 'unified_ensure' not in globals():
+    from chat_records import *
+
 LIMIT = 16 * 1024 * 1024
-KINDS = {'device', 'chat', 'preference', 'link', 'position', 'linkposition'}
+KINDS = {'device', 'chat', 'preference', 'link', 'position', 'linkposition', 'chatdata'}
 
 def read(path, default):
     if path.is_symlink():
@@ -36,7 +40,7 @@ def validate(records):
         raise ValueError('Impostazioni condivise non valide')
     for key, record in records.items():
         parts = key.split(':')
-        if parts[0] not in KINDS or any(not identifier(p) for p in parts[1:]) or len(parts) != (4 if parts[0] in ('link', 'linkposition') else 2):
+        if parts[0] not in KINDS or any(not identifier(p) for p in parts[1:]) or len(parts) != (4 if parts[0] in ('link', 'linkposition') else 3 if parts[0] == 'chatdata' else 2):
             raise ValueError('Oggetto condiviso non valido')
         clock = record.get('clock') if isinstance(record, dict) else None
         if not isinstance(clock, list) or len(clock) != 2 or type(clock[0]) is not int or not 0 <= clock[0] < 2**53 or not identifier(clock[1]):
@@ -46,6 +50,8 @@ def validate(records):
             continue
         if not isinstance(value, dict):
             raise ValueError('Valore condiviso non valido')
+        if parts[0] == 'chatdata' and (set(value) - set(MODULES) or any(not isinstance(v, dict) for v in value.values())):
+            raise ValueError('Dati sorgenti non validi')
         if parts[0] == 'device':
             name = value.get('name')
             if not isinstance(name, str) or not name.strip() or len(name) > 160 or any(ord(c) < 32 for c in name):
@@ -105,7 +111,10 @@ class Store:
         return mapping
 
     def snapshot(self, db, mapping, saved):
-        appearances = {k: json.loads(v) for k, v in db.execute('SELECT key,value FROM appearance')}
+        appearances = {}
+        for key, raw in db.execute('SELECT key,value FROM appearance'):
+            value = json.loads(raw)
+            if value: appearances[key] = value
         devices = [{'id': 'master', 'name': appearances.get('device:master', {}).get('label') or os.uname().nodename}, *read(self.config / 'devices.json', [])]
         snapshot = {}
         for device in devices:
@@ -123,9 +132,13 @@ class Store:
         for key, value in appearances.items():
             if key.startswith('chat:'):
                 snapshot[key] = value
-        visibility = dict(db.execute('SELECT id,hidden FROM chat_visibility'))
-        for chat, hidden, scopes in db.execute('SELECT id,hidden,scopes FROM chat_settings'):
-            snapshot['preference:' + chat] = {'hidden': bool(hidden), 'list_hidden': bool(visibility.get(chat, False)), **({'scopes': json.loads(scopes)} if scopes else {})}
+        for key, hidden, raw in db.execute("SELECT key,hidden,sync FROM appearance WHERE key LIKE 'chat:%'"):
+            chat = key[5:]; value = json.loads(raw)
+            if value.get('removed'): snapshot.pop(key, None)
+            snapshot['preference:' + chat] = {'hidden':bool(value.get('removed')), 'list_hidden':bool(hidden), 'scopes':{name:bool(value.get(name,{}).get('enabled',1)) for name in MODULES}}
+            sources = {source for name in MODULES for source in value.get(name,{}).get('sources',{})}
+            for source in sources:
+                snapshot['chatdata:' + chat + ':' + source] = {name:value[name]['sources'][source] for name in MODULES if source in value.get(name,{}).get('sources',{})}
         for _, raw in db.execute('SELECT key,value FROM chat_links'):
             value = json.loads(raw)
             if value['source'] not in mapping or value['target'] not in mapping:
@@ -152,11 +165,9 @@ class Store:
             if database.is_symlink():
                 raise ValueError('Database tramite link non consentito')
             with sqlite3.connect(database, timeout=10) as db:
-                db.execute('CREATE TABLE IF NOT EXISTS appearance (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
-                db.execute('CREATE TABLE IF NOT EXISTS chat_settings (id TEXT PRIMARY KEY, hidden INTEGER NOT NULL DEFAULT 0, scopes TEXT)')
-                db.execute('CREATE TABLE IF NOT EXISTS chat_visibility (id TEXT PRIMARY KEY, hidden INTEGER NOT NULL DEFAULT 0)')
-                db.execute('CREATE TABLE IF NOT EXISTS chat_links (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
                 db.execute('BEGIN IMMEDIATE')
+                unified_ensure(db, self.config)
+                db.execute('CREATE TABLE IF NOT EXISTS chat_links (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
                 current = self.snapshot(db, mapping, saved)
                 records, baseline = saved['records'], saved['baseline']
                 clock = max([r['clock'][0] for r in records.values()] + [1000000 if not records and (self.config / 'role').read_text().strip() == 'master' else 0])
@@ -195,22 +206,36 @@ class Store:
                 else:
                     appearance = dict({'icon': 'desktop', 'color': ''}, **value.get('appearance', {}))
                     appearance['label'] = value['name']
-                    db.execute('INSERT OR REPLACE INTO appearance VALUES(?,?)', ('device:' + local, json.dumps(appearance)))
+                    db.execute('INSERT INTO appearance(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', ('device:' + local, json.dumps(appearance)))
                     if local != 'master':
                         device = devices.get(local, {'id': local, 'ssh_alias': 'oaclis-unconfigured-' + local})
                         device['name'] = value['name']; devices[local] = device
             elif kind == 'chat':
                 if value is None:
-                    db.execute('DELETE FROM appearance WHERE key=?', (key,))
+                    db.execute("UPDATE appearance SET value='{}' WHERE key=?", (key,))
                 else:
-                    db.execute('INSERT OR REPLACE INTO appearance VALUES(?,?)', (key, json.dumps(dict({'label': '', 'icon': '', 'color': ''}, **value))))
+                    db.execute('INSERT INTO appearance(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (key, json.dumps(dict({'label': '', 'icon': '', 'color': ''}, **value))))
             elif kind == 'preference':
+                current = chat_object(db, identifier_)
                 if value is None:
-                    db.execute('DELETE FROM chat_settings WHERE id=?', (identifier_,))
+                    current.pop('removed', None); save_chat_object(db, identifier_, current)
+                    set_switches(db, identifier_, dict.fromkeys(MODULES, True))
+                    hidden = False
                 else:
-                    db.execute('INSERT OR REPLACE INTO chat_settings VALUES(?,?,?)', (identifier_, int(value.get('hidden', False)), json.dumps(value['scopes']) if 'scopes' in value else None))
-                    if 'list_hidden' in value:
-                        db.execute('INSERT OR REPLACE INTO chat_visibility VALUES(?,?)', (identifier_, int(value['list_hidden'])))
+                    if value.get('hidden'): current['removed'] = 1
+                    else: current.pop('removed', None)
+                    save_chat_object(db, identifier_, current)
+                    if 'scopes' in value: set_switches(db, identifier_, value['scopes'])
+                    hidden = value.get('hidden', False) or value.get('list_hidden', False)
+                db.execute('UPDATE appearance SET hidden=? WHERE key=?', (int(hidden), 'chat:' + identifier_))
+            elif kind == 'chatdata':
+                chat, source = identifier_.split(':', 1)
+                current = chat_object(db, chat)
+                for name in MODULES:
+                    sources = current.setdefault(name, {}).setdefault('sources', {})
+                    if value is None or name not in value: sources.pop(source, None)
+                    else: sources[source] = value[name]
+                save_chat_object(db, chat, current)
         for key, record in records.items():
             kind, identifier_ = key.split(':', 1)
             value = record['value']

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# test_ssh.py v1.4.121
 """Prova SSH su dati dimostrativi, senza modificare archivi o progetti reali."""
 
 import json

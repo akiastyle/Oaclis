@@ -1,3 +1,4 @@
+<!-- index.html v1.0.142 -->
 <!doctype html>
 <html lang="it">
   <head>
@@ -8,6 +9,8 @@
     <link rel="icon" href="/assets/__BRAND_ICON__.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/assets/__BRAND_ICON__.png" />
     <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/badge-motion.css" />
+    <script src="/badge-motion.js" defer></script>
     <script src="/app.js" defer></script>
   </head>
   <body>
@@ -135,17 +138,6 @@
       </div>
       <div id="details" hidden></div>
     </aside>
-    <section id="activity" hidden aria-label="Trasferimento in corso">
-      <div id="job"></div>
-      <button
-        id="dismiss-job"
-        class="icon-button"
-        aria-label="Chiudi risultato"
-        hidden
-      >
-        <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg>
-      </button>
-    </section>
     <div id="notice" hidden role="status" aria-live="polite"></div>
   </body>
 </html>

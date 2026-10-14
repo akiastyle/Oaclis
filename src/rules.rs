@@ -1,3 +1,4 @@
+// rules.rs v1.18.509
 use crate::{
     devices::{self, Device},
     invalid, open_regular,
@@ -178,6 +179,26 @@ fn local_files(rule: &Rule, directory: &Path, files: &mut BTreeSet<PathBuf>) -> 
     }
     Ok(())
 }
+/// Size only the files selected by the existing transfer policy; do not hash contents.
+pub(crate) fn selected_size(root: &Path) -> io::Result<(u64, u64)> {
+    let rule = Rule { id:"preparation".into(), name:"Preparazione".into(), device_id:"master".into(),
+        local_root:root.into(), remote_root:root.into(), operation:Operation::Copy,
+        direction:Direction::Send, include:vec![], exclude:vec![] };
+    rule.validate()?;
+    for ancestor in root.ancestors() {
+        if !ancestor.symlink_metadata()?.is_dir() { return Err(invalid("Cartella sorgente non regolare o link")); }
+    }
+    let mut files = BTreeSet::new();
+    local_files(&rule, root, &mut files)?;
+    let mut bytes = 0u64;
+    for file in &files {
+        let metadata = root.join(file).symlink_metadata()?;
+        if !metadata.is_file() { return Err(invalid("File sorgente cambiato durante la lettura")); }
+        bytes = bytes.checked_add(metadata.len()).ok_or_else(||invalid("Dimensione troppo grande"))?;
+    }
+    Ok((bytes, files.len() as u64))
+}
+
 fn reserved_path(path: &Path) -> bool {
     path.components().any(|part| {
         let Component::Normal(name) = part else {

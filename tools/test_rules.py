@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# test_rules.py v1.3.94
 """Regole persistenti e cartelle su dati temporanei nelle due WSL."""
 import json
 from pathlib import Path

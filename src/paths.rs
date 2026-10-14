@@ -1,3 +1,4 @@
+// paths.rs v1.5.77
 use crate::invalid;
 use std::io;
 use std::path::{Component, Path, PathBuf};

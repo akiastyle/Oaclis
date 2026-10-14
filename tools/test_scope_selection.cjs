@@ -1,3 +1,4 @@
+// test_scope_selection.cjs v1.0.32
 // Read-only browser regression: polling must not discard selected details.
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.OACLIS_PLAYWRIGHT);

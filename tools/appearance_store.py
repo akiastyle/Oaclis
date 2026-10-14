@@ -1,103 +1,133 @@
-"""Local presentation database; uses the same Python runtime as the chat catalog."""
+# appearance_store.py v1.2.132
+"""Oaclis storage adapter; chat metadata lives in the appearance record."""
 import json
 import os
 import sqlite3
 import sys
 from pathlib import Path
+if 'unified_ensure' not in globals():
+    from chat_records import *
 
 path, operation = Path(sys.argv[1]), sys.argv[2]
+key = sys.argv[3] if len(sys.argv) > 3 else ''
+config = path.parent
 os.umask(0o077)
-if operation in ("preferences-get", "chat-hide", "chat-visibility", "chat-scopes", "device-forget"):
-    with sqlite3.connect(path) as db:
-        db.execute("CREATE TABLE IF NOT EXISTS chat_settings (id TEXT PRIMARY KEY, hidden INTEGER NOT NULL DEFAULT 0, scopes TEXT)")
-        db.execute("CREATE TABLE IF NOT EXISTS chat_links (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        db.execute("CREATE TABLE IF NOT EXISTS chat_visibility (id TEXT PRIMARY KEY, hidden INTEGER NOT NULL DEFAULT 0)")
-        key = sys.argv[3] if len(sys.argv) > 3 else ""
-        if operation == "chat-visibility":
-            value = json.load(sys.stdin)
-            if type(value.get('hidden')) is not bool:
-                raise ValueError("Visibilità non valida")
-            db.execute("INSERT INTO chat_visibility VALUES(?,?) ON CONFLICT(id) DO UPDATE SET hidden=excluded.hidden", (key, int(value['hidden'])))
-            db.execute("INSERT INTO chat_settings(id,hidden) VALUES(?,0) ON CONFLICT(id) DO NOTHING", (key,))
-            if not value['hidden']:
-                db.execute("UPDATE chat_settings SET hidden=0 WHERE id=?", (key,))
-        if operation == "chat-hide":
-            db.execute("INSERT INTO chat_settings(id,hidden) VALUES(?,1) ON CONFLICT(id) DO UPDATE SET hidden=1", (key,))
-        if operation == "chat-scopes":
-            scopes = json.dumps(json.load(sys.stdin))
-            db.execute("INSERT INTO chat_settings(id,scopes) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET scopes=excluded.scopes", (key, scopes))
-            if db.execute("SELECT 1 FROM sqlite_master WHERE name='analysis'").fetchone():
-                for (analysis_key,) in db.execute("SELECT key FROM analysis").fetchall():
-                    if analysis_key.split(':', 1)[-1] == key:
-                        db.execute("UPDATE analysis SET scopes=? WHERE key=?", (scopes, analysis_key))
-        for link_key, raw in db.execute("SELECT key,value FROM chat_links").fetchall():
-            link = json.loads(raw)
-            matches = link['entry']['id'] == key if operation.startswith('chat-') else key in (link['source'], link['target'])
-            if not matches:
-                continue
-            if operation in ('chat-hide', 'device-forget'):
-                db.execute("DELETE FROM chat_links WHERE key=?", (link_key,))
-            elif operation == 'chat-scopes':
-                link['scopes'] = json.loads(scopes)
-                db.execute("UPDATE chat_links SET value=? WHERE key=?", (json.dumps(link), link_key))
-        if operation in ('chat-hide', 'device-forget'):
-            if db.execute("SELECT 1 FROM sqlite_master WHERE name='appearance'").fetchone():
-                db.execute("DELETE FROM appearance WHERE key=?", (('chat:' if operation == 'chat-hide' else 'device:') + key,))
-            if db.execute("SELECT 1 FROM sqlite_master WHERE name='analysis'").fetchone():
-                for (analysis_key,) in db.execute("SELECT key FROM analysis").fetchall():
-                    source, _, chat = analysis_key.partition(':')
-                    if (chat == key if operation == 'chat-hide' else source == key):
-                        db.execute("DELETE FROM analysis WHERE key=?", (analysis_key,))
-        visibility = dict(db.execute('SELECT id,hidden FROM chat_visibility'))
-        preferences = {identifier: {'hidden': bool(hidden or visibility.get(identifier, False)), **({'scopes': json.loads(scopes)} if scopes else {})} for identifier, hidden, scopes in db.execute("SELECT id,hidden,scopes FROM chat_settings")}
-        print(json.dumps({'preferences': preferences, 'links': [json.loads(value) for (value,) in db.execute("SELECT value FROM chat_links ORDER BY key")]}))
-elif operation.startswith("links-"):
-    with sqlite3.connect(path) as db:
-        db.execute("CREATE TABLE IF NOT EXISTS chat_links (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        if operation == "links-save":
-            value = json.load(sys.stdin)
-            if db.execute("SELECT 1 FROM sqlite_master WHERE name='chat_settings'").fetchone():
-                preference = db.execute("SELECT hidden,scopes FROM chat_settings WHERE id=?", (value['entry']['id'],)).fetchone()
-                if preference and preference[0] and not db.execute("SELECT 1 FROM chat_links WHERE key=?", (sys.argv[3],)).fetchone():
-                    raise ValueError("Chat rimossa da Oaclis")
-                if preference and preference[1]:
-                    value['scopes'] = json.loads(preference[1])
-            db.execute("INSERT INTO chat_links(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (sys.argv[3], json.dumps(value)))
-        elif operation == "links-delete":
-            db.execute("DELETE FROM chat_links WHERE key=?", (sys.argv[3],))
-        print(json.dumps([json.loads(value) for (value,) in db.execute("SELECT value FROM chat_links ORDER BY key")]))
-elif operation in ("transfer-save", "transfer-list"):
-    with sqlite3.connect(path) as db:
-        db.execute("CREATE TABLE IF NOT EXISTS transfers (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        if operation == "transfer-save":
-            db.execute("INSERT INTO transfers VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (sys.argv[3], json.dumps(json.load(sys.stdin))))
-        print(json.dumps({key: json.loads(value) for key, value in db.execute("SELECT key,value FROM transfers")}))
-elif operation == "analysis-list":
-    with sqlite3.connect(path) as db:
-        exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='analysis'").fetchone()
-        print(json.dumps({key: json.loads(value) for key, value in db.execute("SELECT key,value FROM analysis WHERE value IS NOT NULL")} if exists else {}))
-elif operation.startswith("analysis-"):
-    key = sys.argv[3]
-    with sqlite3.connect(path) as db:
-        db.execute("CREATE TABLE IF NOT EXISTS analysis (key TEXT PRIMARY KEY, value TEXT, scopes TEXT NOT NULL DEFAULT '{\"chat\":true,\"paths\":true,\"apps\":true}')")
-        if operation == "analysis-save":
-            db.execute("INSERT INTO analysis(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, json.dumps(json.load(sys.stdin))))
-        elif operation == "analysis-scopes":
-            db.execute("INSERT INTO analysis(key,scopes) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET scopes=excluded.scopes", (key, json.dumps(json.load(sys.stdin))))
-        row = db.execute("SELECT value,scopes FROM analysis WHERE key=?", (key,)).fetchone()
-        value = json.loads(row[0]) if row and row[0] else {"status":"missing"}
-        value["scopes"] = json.loads(row[1]) if row else {"chat":True,"paths":True,"apps":True}
-        if db.execute("SELECT 1 FROM sqlite_master WHERE name='chat_settings'").fetchone():
-            preference = db.execute("SELECT scopes FROM chat_settings WHERE id=?", (key.split(':', 1)[-1],)).fetchone()
-            if preference and preference[0] and not db.execute("SELECT 1 FROM chat_links WHERE key=?", (sys.argv[3],)).fetchone():
-                value['scopes'] = json.loads(preference[0])
-        print(json.dumps(value))
-elif operation == "load":
-    with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True) as db:
-        exists = db.execute("SELECT 1 FROM sqlite_master WHERE name='appearance'").fetchone()
-        print(json.dumps(dict((key, json.loads(value)) for key, value in db.execute("SELECT key, value FROM appearance")) if exists else {}))
-else:
-    entries = json.load(sys.stdin)
-    with sqlite3.connect(path) as db:
-        db.execute("CREATE TABLE IF NOT EXISTS appearance (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-        db.executemany("INSERT INTO appearance VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", [(key, json.dumps(value)) for key, value in entries.items()])
+READS = {'analysis-list', 'inventory-list', 'inventory-get', 'transfer-list', 'links-get', 'preferences-get', 'status-read', 'preparation-get', 'load', 'analysis-get'}
+
+def values(db, table):
+    exists = db.execute("SELECT 1 FROM sqlite_master WHERE name=?", (table,)).fetchone()
+    return {key:json.loads(raw) for key,raw in db.execute('SELECT key,value FROM ' + table + ' WHERE value IS NOT NULL ORDER BY key')} if exists else {}
+
+def read_data(db):
+    columns = {row[1] for row in db.execute('PRAGMA table_info(appearance)')}
+    if 'sync' in columns:
+        inventories, preparations = unified_data(db, config)
+        preferences = unified_preferences(db)
+    else:
+        inventories, preparations = values(db, 'app_checks'), values(db, 'preparations')
+        preferences = {}
+        tables = {row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        visibility = dict(db.execute('SELECT id,hidden FROM chat_visibility')) if 'chat_visibility' in tables else {}
+        if 'chat_settings' in tables:
+            preferences = {chat:{'hidden':bool(hidden or visibility.get(chat,False)), **({'scopes':json.loads(scopes)} if scopes else {})} for chat,hidden,scopes in db.execute('SELECT id,hidden,scopes FROM chat_settings')}
+    return {'preferences':preferences, 'links':list(values(db,'chat_links').values()), 'analyses':values(db,'analysis'), 'app_checks':inventories, 'preparations':preparations, 'transfers':values(db,'transfers')}
+
+if operation in READS:
+    data = {'preferences':{},'links':[],'analyses':{},'app_checks':{},'preparations':{},'transfers':{}}
+    with sqlite3.connect(path.absolute().as_uri() + '?mode=ro',uri=True,timeout=10) if path.is_file() else __import__('contextlib').nullcontext(None) as db:
+        if db:
+            db.execute('BEGIN')
+            if operation == 'load':
+                rows = values(db,'appearance')
+                columns = {row[1] for row in db.execute('PRAGMA table_info(appearance)')}
+                if 'sync' in columns:
+                    removed = {key for key,raw in db.execute('SELECT key,sync FROM appearance') if json.loads(raw).get('removed')}
+                    rows = {key:value for key,value in rows.items() if key not in removed}
+                print(json.dumps(rows));sys.exit(0)
+            data = read_data(db)
+        if operation in ('status-read','preferences-get'):
+            result = data if operation == 'status-read' else {name:data[name] for name in ('preferences','links')}
+        elif operation == 'analysis-get':
+            result = data['analyses'].get(key, {'status':'missing'})
+            scopes = data['preferences'].get(key.split(':',1)[-1],{}).get('scopes')
+            if scopes is None and db and 'scopes' in {row[1] for row in db.execute('PRAGMA table_info(analysis)')}:
+                row = db.execute('SELECT scopes FROM analysis WHERE key=?',(key,)).fetchone()
+                scopes = json.loads(row[0]) if row and row[0] else None
+            result['scopes'] = scopes or dict.fromkeys(MODULES,True)
+        elif operation in ('inventory-get','preparation-get'):
+
+            result = data['app_checks' if operation=='inventory-get' else 'preparations'].get(key,{'status':'missing'})
+        else:
+            field = {'inventory-list':'app_checks','analysis-list':'analyses','transfer-list':'transfers','links-get':'links','load':'appearance'}[operation]
+            result = data.get(field,{})
+        print(json.dumps(result))
+    sys.exit(0)
+
+with sqlite3.connect(path,timeout=10) as db:
+    db.execute('BEGIN IMMEDIATE')
+    unified_ensure(db, config)
+    if operation == 'migrate':
+        result = {'ok':True}
+    elif operation in ('inventory-save','preparation-save'):
+        value = json.load(sys.stdin)
+        (save_inventory if operation=='inventory-save' else save_preparation)(db,key,value,config)
+        result = value
+    elif operation in ('chat-visibility','chat-hide','chat-scopes','device-forget'):
+        if operation.startswith('chat-'):
+            value = chat_object(db,key)
+            save_chat_object(db,key,value)
+            if operation == 'chat-scopes':
+                scopes = json.load(sys.stdin)
+                if set(scopes)!=set(MODULES) or any(type(v)is not bool for v in scopes.values()):
+                    raise ValueError('Moduli non validi')
+                set_switches(db,key,scopes)
+            else:
+                hidden = True if operation=='chat-hide' else json.load(sys.stdin)['hidden']
+                if type(hidden)is not bool: raise ValueError('Visibilità non valida')
+                if operation=='chat-hide': value['removed']=1
+                elif not hidden: value.pop('removed',None)
+                save_chat_object(db,key,value)
+                db.execute('UPDATE appearance SET hidden=? WHERE key=?',(int(hidden),'chat:'+key))
+        links = values(db,'chat_links')
+        for link_key,link in links.items():
+            match = link['entry']['id']==key if operation.startswith('chat-') else key in (link['source'],link['target'])
+            if not match: continue
+            if operation in ('chat-hide','device-forget'): db.execute('DELETE FROM chat_links WHERE key=?',(link_key,))
+            elif operation=='chat-scopes':
+                link['scopes']=scopes;db.execute('UPDATE chat_links SET value=? WHERE key=?',(json.dumps(link),link_key))
+        if operation=='device-forget': db.execute('DELETE FROM appearance WHERE key=?',('device:'+key,))
+        if operation in ('chat-hide','device-forget'):
+            for analysis_key in values(db,'analysis'):
+                source,chat=analysis_key.split(':',1)
+                if chat==key if operation=='chat-hide' else source==key: db.execute('DELETE FROM analysis WHERE key=?',(analysis_key,))
+        data=read_data(db);result={name:data[name] for name in ('preferences','links')}
+    elif operation.startswith('links-'):
+        db.execute('CREATE TABLE IF NOT EXISTS chat_links (key TEXT PRIMARY KEY,value TEXT NOT NULL)')
+        if operation=='links-save':
+            value=json.load(sys.stdin);chat=value['entry']['id'];record=chat_object(db,chat)
+            if record.get('removed') and not db.execute('SELECT 1 FROM chat_links WHERE key=?',(key,)).fetchone(): raise ValueError('Chat rimossa da Oaclis')
+            preference=unified_preferences(db).get(chat)
+            if preference:value['scopes']=preference['scopes']
+            db.execute('INSERT INTO chat_links VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,json.dumps(value)))
+        elif operation=='links-delete':db.execute('DELETE FROM chat_links WHERE key=?',(key,))
+        result=list(values(db,'chat_links').values())
+    elif operation=='transfer-save':
+        db.execute('CREATE TABLE IF NOT EXISTS transfers (key TEXT PRIMARY KEY,value TEXT NOT NULL)')
+        db.execute('INSERT INTO transfers VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,json.dumps(json.load(sys.stdin))))
+        result=values(db,'transfers')
+    elif operation.startswith('analysis-'):
+        db.execute('CREATE TABLE IF NOT EXISTS analysis (key TEXT PRIMARY KEY,value TEXT)')
+        if operation=='analysis-save':
+            db.execute('INSERT INTO analysis(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,json.dumps(json.load(sys.stdin))))
+            chat=key.split(':',1)[-1];record=chat_object(db,chat)
+            for name in MODULES:record.setdefault(name,{}).setdefault('enabled',1)
+            save_chat_object(db,chat,record)
+        elif operation=='analysis-scopes':set_switches(db,key.split(':',1)[-1],json.load(sys.stdin))
+        result=values(db,'analysis').get(key,{'status':'missing'})
+        result['scopes']=unified_preferences(db).get(key.split(':',1)[-1],{}).get('scopes',dict.fromkeys(MODULES,True))
+    elif operation=='save':
+        entries=json.load(sys.stdin)
+        db.executemany('INSERT INTO appearance(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',[(key,json.dumps(value)) for key,value in entries.items()])
+        result=None
+    else:raise ValueError('Operazione DB non valida')
+    if result is not None:print(json.dumps(result))

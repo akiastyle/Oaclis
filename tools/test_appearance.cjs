@@ -1,3 +1,4 @@
+// test_appearance.cjs v1.0.176
 const assert = require("node:assert/strict");
 const { chromium } = require(process.env.OACLIS_PLAYWRIGHT);
 (async () => {

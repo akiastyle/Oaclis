@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# test_rsync.py v1.3.88
 """Prove isolate del trasporto Rust/rsync nelle due direzioni fra le WSL."""
 import hashlib
 import json

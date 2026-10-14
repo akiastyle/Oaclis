@@ -1,3 +1,4 @@
+// peers.rs v1.13.225
 //! Signed LAN discovery; pairing requires an explicit approval on both devices.
 use crate::invalid;
 use serde_json::{Value, json};

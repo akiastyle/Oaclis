@@ -1,3 +1,4 @@
+// compare.rs v1.5.100
 use crate::{chat::Chat, check_unchanged, open_regular};
 use sha2::{Digest, Sha256};
 use std::io::{self, Read};

@@ -1,3 +1,5 @@
+// lib.rs v1.3.55
+mod app_inventory;
 mod automation;
 pub mod appearance;
 pub mod chat;
@@ -6,6 +8,7 @@ pub mod devices;
 pub mod environment;
 pub mod paths;
 pub mod progress;
+pub mod preparation;
 pub mod rules;
 mod ssh;
 pub mod sync;

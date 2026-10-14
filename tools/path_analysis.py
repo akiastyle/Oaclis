@@ -1,3 +1,4 @@
+# path_analysis.py v1.0.9
 """Read-only trial using the same selector as Oaclis background analysis."""
 import json
 import pathlib

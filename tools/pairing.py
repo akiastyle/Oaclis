@@ -1,3 +1,4 @@
+# pairing.py v1.19.318
 """LAN identities, signed discovery and mutually approved OpenSSH access."""
 import base64
 import fcntl

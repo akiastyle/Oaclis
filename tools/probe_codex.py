@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# probe_codex.py v1.3.150
 """Diagnostica temporanea: prova copie JSONL in un Codex isolato e senza rete."""
 
 import hashlib

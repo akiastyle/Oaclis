@@ -1,3 +1,4 @@
+/* style.css v2.0.1148 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -42,7 +43,7 @@
   --space-9: 9px;
 
   /* Dimensions */
-  --activity-height: 180px;
+
   --device-height-mobile: 84px;
   --device-height: 90px;
   --device-width-mobile: 160px;
@@ -82,7 +83,7 @@
   --z-device-drag: 2;
   --z-toolbar: 30;
   --z-panel: 40;
-  --z-activity: 50;
+
   --z-notice: 60;
 
   /* Effects */
@@ -448,34 +449,10 @@ details {
 summary {
   cursor: pointer;
 }
-#activity {
-  position: fixed;
-  bottom: var(--space-22);
-  right: var(--space-24);
-  z-index: var(--z-activity);
-  width: var(--drawer-width);
-  max-height: var(--activity-height);
-  overflow: auto;
-  padding: var(--space-18);
-  background: var(--panel);
-  box-shadow: var(--shadow-surface);
-  border: var(--border-width) solid var(--line);
-  border-radius: var(--radius-toolbar);
-  font-size: var(--font-small);
-}
-#job p {
-  margin: 0 0 var(--space-8);
-  overflow-wrap: anywhere;
-}
-#job .path {
-  margin: 0;
-}
-#dismiss-job {
-  position: absolute;
-  right: var(--space-6);
-  top: var(--space-6);
-  padding: var(--space-5);
-}
+
+
+
+
 progress {
   width: 100%;
   height: var(--size-5);
@@ -535,12 +512,7 @@ select {
     width: auto;
     max-height: calc(100dvh - var(--mobile-clearance));
   }
-  #activity {
-    bottom: var(--space-70);
-    right: var(--space-14);
-    left: var(--space-14);
-    width: auto;
-  }
+
   #notice {
     bottom: var(--space-16);
     left: auto;
@@ -701,10 +673,18 @@ select {
 }
 .scope-row {
   display: grid;
-  grid-template-columns: var(--size-40) minmax(0, 1fr);
+  grid-template-columns: var(--size-28) var(--size-28) minmax(0, 1fr);
   gap: var(--space-12);
   align-items: start;
 }
+.scope-row > .scope-toggle { grid-column: 1; grid-row: 1; }
+.scope-row > [data-refresh] {
+  grid-column: 2;
+  grid-row: 1;
+  width: var(--size-28);
+  height: var(--size-28);
+}
+.scope-row > .scope-detail { grid-column: 3; grid-row: 1; }
 .scope-detail {
   max-height: var(--scope-detail-height);
   overflow: auto;
@@ -729,8 +709,8 @@ select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--size-40);
-  height: var(--size-40);
+  width: var(--size-28);
+  height: var(--size-28);
   border: var(--border-width) solid var(--line);
   border-radius: var(--radius-icon);
   background: var(--panel);
@@ -824,7 +804,6 @@ select {
 .map-node.selected,
 .map-node.drop-target,
 #panel,
-#activity,
 #notice,
 .connection-port,
 .link-badge,
@@ -857,7 +836,7 @@ select {
 #notice { --glass-base: var(--ink); }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .toolbar, .map-node, .map-node.selected, .map-node.drop-target, #panel, #activity, #notice,
+  .toolbar, .map-node, .map-node.selected, .map-node.drop-target, #panel, #notice,
   .connection-port, .link-badge {
     background: var(--glass-base);
   }
@@ -1071,7 +1050,6 @@ select {
 #palette-menu:popover-open,
 #panel:not([hidden]),
 #notice:not([hidden]),
-#activity:not([hidden]),
 .context-popover details[open] > :not(summary) {
   animation: surface-enter var(--duration-ui) var(--ease-ui);
 }
@@ -1126,8 +1104,6 @@ select {
 
 :root {
   --operation-pending: #ffb703;
-  --operation-success: var(--scope-active);
-  --operation-error: #e56b6f;
 }
 .operation-indicator {
   width: var(--size-14);
@@ -1144,8 +1120,6 @@ select {
   border-top-color: transparent;
   animation: analysis-turn var(--duration-loading) linear infinite, operation-glow var(--drop-pulse-duration) ease-in-out infinite alternate;
 }
-.operation-indicator[data-state="success"] { color: var(--operation-success); }
-.operation-indicator[data-state="failed"] { color: var(--operation-error); }
 .link-badge > .operation-indicator { position: absolute; right: -13px; top: calc(50% - 7px); }
 .scope-row { position: relative; }
 .scope-row > .operation-indicator { position: absolute; left: 0; top: 0; pointer-events: none; }

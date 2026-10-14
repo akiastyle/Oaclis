@@ -1,3 +1,4 @@
+// devices.rs v1.6.66
 use crate::{invalid, open_regular};
 use serde::{Deserialize, Serialize};
 use std::io;

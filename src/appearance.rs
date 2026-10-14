@@ -1,3 +1,4 @@
+// appearance.rs v1.6.180
 //! Oaclis presentation overrides, separate from Codex metadata and transfer rules.
 use crate::{devices, invalid, open_regular};
 use serde::{Deserialize, Serialize};
@@ -66,7 +67,7 @@ pub fn load(path: impl AsRef<Path>) -> io::Result<Appearances> {
     match open_regular(&db) {
         Ok(_) => {
             let output = Command::new("python3")
-                .args(["-c", include_str!("../tools/appearance_store.py")])
+                .args(["-c", crate::environment::STORE])
                 .arg(&db)
                 .arg("load")
                 .output()?;
@@ -102,7 +103,7 @@ pub fn save(path: impl AsRef<Path>, entries: &Appearances) -> io::Result<()> {
         Err(e) => return Err(e),
     }
     let mut child = Command::new("python3")
-        .args(["-c", include_str!("../tools/appearance_store.py")])
+        .args(["-c", crate::environment::STORE])
         .arg(&db)
         .arg("save")
         .stdin(Stdio::piped())

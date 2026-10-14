@@ -1,4 +1,5 @@
-use crate::{devices::Device, invalid};
+// ssh.rs v1.3.34
+use crate::devices::Device;
 use std::io;
 use std::process::Command;
 
@@ -16,7 +17,7 @@ pub(crate) fn run(device: &Device, command: &str) -> io::Result<Vec<u8>> {
         .arg(command)
         .output()?;
     if !output.status.success() {
-        return Err(invalid(format!(
+        return Err(io::Error::new(io::ErrorKind::ConnectionAborted, format!(
             "SSH: {}",
             String::from_utf8_lossy(&output.stderr)
         )));
