@@ -1,4 +1,4 @@
-# test_shared_settings.py v1.8.123
+# test_shared_settings.py v1.9.138
 """Settings replication with isolated homes; never use real SSH or Codex."""
 import importlib.util
 import json
@@ -115,6 +115,21 @@ class SharedSettingsTests(unittest.TestCase):
                 self.assertEqual(sources[root.id]['requirements'][0]['label'],'Python 3.12')
                 self.assertEqual(sources[client.id]['requirements'][0]['label'],'Python 3.14')
                 self.assertEqual(json.loads(db.execute("SELECT value FROM appearance WHERE key='chat:chat-one'").fetchone()[0])['label'],'Oaclis')
+
+    def test_link_lifecycle_replicates_without_rearming_a_completed_transfer(self):
+        self.converge()
+        owner=self.stores[0]
+        with sqlite3.connect(owner.config/'appearance.sqlite') as db:
+            key,raw=db.execute('SELECT key,value FROM chat_links').fetchone();link=json.loads(raw)
+            link['flow']={'executor':owner.id,'generation':'initial','initialized':True,'phase':'aligned','requested':False}
+            link['transfer_pending']=False
+            db.execute('UPDATE chat_links SET value=? WHERE key=?',(json.dumps(link),key))
+        self.converge()
+        for store in self.stores:
+            with sqlite3.connect(store.config/'appearance.sqlite') as db:
+                link=json.loads(db.execute('SELECT value FROM chat_links').fetchone()[0])
+                self.assertEqual(link['flow']['executor'],owner.id)
+                self.assertTrue(link['flow']['initialized']);self.assertFalse(link['transfer_pending'])
 
     def test_concurrent_updates_resolve_deterministically(self):
         a={'chat:x':{'clock':[3,'a'],'value':{'label':'A'}}}

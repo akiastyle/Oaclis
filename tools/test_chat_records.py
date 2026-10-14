@@ -1,4 +1,4 @@
-# test_chat_records.py v1.5.69
+# test_chat_records.py v1.6.87
 import json
 from pathlib import Path
 import sqlite3
@@ -58,6 +58,24 @@ class ChatRecords(unittest.TestCase):
         self.assertTrue(self.call('preferences-get')['preferences']['fixture']['hidden'])
         self.assertEqual(self.call('load')['chat:fixture']['label'],'Renamed')
         self.assertEqual(self.call('inventory-get','master:fixture')['checked_at'],20)
+
+    def test_observation_and_link_progress_preserve_preferences_and_generation(self):
+        self.call('migrate')
+        self.call('chat-observed','master:fixture',{'bytes':222,'modified_ns':'789','sha256':'proof'})
+        self.assertEqual(self.call('preparation-get','master:fixture')['paths'],self.preparation['paths'])
+        self.assertEqual(self.call('inventory-get','laptop:fixture'),self.other)
+        self.assertEqual(self.call('load')['chat:fixture']['label'],'Keep')
+        link={'entry':{'id':'fixture','name':'Title'},'source':'master','target':'laptop','operation':'sync','label':'Custom','flow':{'generation':'new','initialized':False}}
+        self.call('links-save','fixture:laptop:master',link)
+        self.call('links-flow','fixture:laptop:master',{'generation':'old','initialized':True})
+        self.assertFalse(self.call('links-get')[0]['flow']['initialized'])
+        self.call('links-flow','fixture:laptop:master',{'generation':'new','initialized':True,'phase':'aligned'})
+        stored=self.call('links-get')[0]
+        self.assertEqual(stored['label'],'Custom');self.assertFalse(stored['transfer_pending'])
+        self.assertEqual(stored['scopes'],{'chat':True,'paths':False,'apps':False})
+        self.call('links-delete','fixture:laptop:master')
+        self.call('links-flow','fixture:laptop:master',{'generation':'new','initialized':True})
+        self.assertEqual(self.call('links-get'),[])
 
     def test_bad_legacy_json_rolls_back_the_schema_and_data(self):
         with sqlite3.connect(self.db) as db:db.execute("UPDATE app_checks SET value='broken' WHERE key='master:fixture'")

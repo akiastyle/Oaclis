@@ -1,85 +1,83 @@
-// automation.rs v1.6.110
-//! Saved links run independently of the browser, through the same transfer entry point.
-use crate::{devices, environment, web};
+// automation.rs v1.10.265
+//! Initial alignment runs once. Later bidirectional changes await explicit Play.
+use crate::{devices, environment, link_flow, peers, web};
 use serde_json::{Value, json};
 use std::{collections::HashMap, path::PathBuf, sync::{Arc, Mutex}, thread, time::{Duration, Instant}};
 
-fn eligible(link: &Value) -> bool {
-    // The source owns recurring synchronization; only locally requested receives run here.
-    if link["operation"] == "sync" {
-        link["source"] == "master"
-    } else {
-        link["transfer_pending"] == true
-    }
+fn eligible(link: &Value, executor: &str) -> bool {
+    link["flow"]["executor"] == executor && (link["flow"]["initialized"] != true || link["operation"] == "sync")
 }
 
-fn due(previous: Option<&(String, Instant, bool)>, signature: &str) -> bool {
-    !previous.is_some_and(|(old, time, failed)| old == signature && (*failed || time.elapsed() < Duration::from_secs(60)))
-}
-fn conflict(value: &Value) -> bool {
+pub(crate) fn conflict(value: &Value) -> bool {
     value == "conflict" || value.as_object().is_some_and(|v| v.values().any(conflict))
         || value.as_array().is_some_and(|v| v.iter().any(conflict))
 }
 
-pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, connections: Arc<Mutex<Value>>) {
+pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, connections: Arc<Mutex<Value>>, discovery: peers::Peers, checks: bool, transfers: bool) {
     thread::spawn(move || {
-        let mut attempts: HashMap<String, (String, Instant, bool)> = HashMap::new();
-        let mut online_before: HashMap<String, bool> = HashMap::new();
-        let mut epochs: HashMap<String, u64> = HashMap::new();
+        let mut checked: HashMap<String, Instant> = HashMap::new();
         loop {
-            if let Ok(devices) = devices::load(config.join("devices.json")) {
-                for device in devices {
-                    let online = crate::ssh::run(&device, "true").is_ok();
-                    connections.lock().unwrap()[&device.id] = json!(if online { "online" } else { "offline" });
-                    if online && !online_before.get(&device.id).copied().unwrap_or(false) {
-                        *epochs.entry(device.id.clone()).or_default() += 1;
-                    }
-                    online_before.insert(device.id, online);
+            let snapshot = peers::snapshot(&discovery);
+            let local = snapshot["local_id"].as_str().unwrap_or("");
+            let online = snapshot["peers"].as_array().cloned().unwrap_or_default();
+            let status: Value = std::fs::read(config.join("shared-status.json")).ok().and_then(|s|serde_json::from_slice(&s).ok()).unwrap_or(Value::Null);
+            let pairing: Value = std::fs::read(config.join("pairing.json")).ok().and_then(|s|serde_json::from_slice(&s).ok()).unwrap_or(Value::Null);
+            let recent = std::fs::metadata(config.join("shared-status.json")).and_then(|m|m.modified()).ok().and_then(|t|t.elapsed().ok()).is_some_and(|age|age < Duration::from_secs(30));
+            let settings: Value = std::fs::read(config.join("settings.json")).ok().and_then(|s|serde_json::from_slice(&s).ok()).unwrap_or(Value::Null);
+            let interval = Duration::from_secs(settings["chat_match_interval_seconds"].as_u64().unwrap_or(60).clamp(10,3600));
+            if let Ok(all_devices) = devices::load(config.join("devices.json")) {
+                for device in &all_devices {
+                    let approved = pairing["approved"].as_object().is_some_and(|all|all.values().any(|v|v["device_id"] == device.id));
+                    let present = online.iter().any(|p|p["device_id"] == device.id && p["connected"] == true)
+                        || approved && recent && status["errors"].is_object() && status["errors"][&device.id].is_null();
+                    let blocked = recent && !status["errors"][&device.id].is_null();
+                    connections.lock().unwrap()[&device.id] = json!(if present && !blocked {"online"} else {"offline"});
                 }
-            }
-            if job.lock().unwrap()["status"] != "running" {
-                if let Ok(links) = environment::database(&config, "", "links-get", None) {
-                    for link in links.as_array().into_iter().flatten().filter(|link| eligible(link)) {
-                        let source = link["source"].as_str().unwrap_or("");
-                        let target = link["target"].as_str().unwrap_or("");
-                        let remote = if source == "master" { target } else { source };
-                        if !online_before.get(remote).copied().unwrap_or(false) { continue; }
-                        let id = link["entry"]["id"].as_str().unwrap_or("");
-                        let Ok(key) = environment::key(source, id) else { continue; };
-                        let Ok(analysis) = environment::database(&config, &key, "analysis-get", None) else { continue; };
-                        if analysis["status"] != "ready" { continue; }
-                        let attempt_key = format!("{key}:{target}");
-                        let signature = format!("{}:{}:{}", epochs.get(remote).unwrap_or(&0), analysis["revision"], link["scopes"]);
-                        if !due(attempts.get(&attempt_key), &signature) { continue; }
-                        let request = json!({"source_device_id":source,"device_id":target,"operation":link["operation"],"chat_id":id,"scopes":link["scopes"]});
-                        match web::start_transfer(request.clone(), &codex, &config, &job) {
-                            Ok(_) => {
-                                while job.lock().unwrap()["status"] == "running" { thread::sleep(Duration::from_millis(250)); }
-                                let failed = { let state = job.lock().unwrap(); state["status"] == "failed" || conflict(&state["results"]) };
-                                attempts.insert(attempt_key, (signature, Instant::now(), failed));
-                                if !failed && link["transfer_pending"] == true {
-                                    // Re-read: do not resurrect a deleted link or overwrite edits made during transfer.
-                                    if let Ok(current) = environment::database(&config, "", "links-get", None) {
-                                        if let Some(mut saved) = current.as_array().and_then(|all| all.iter().find(|v| v["source"] == link["source"] && v["target"] == link["target"] && v["entry"]["id"] == link["entry"]["id"])).cloned() {
-                                            saved["transfer_pending"] = json!(false);
-                                            let mut pair = [source, target]; pair.sort();
-                                            let storage_key = format!("{id}:{}:{}",pair[0],pair[1]);
-                                            let _ = environment::database(&config, &storage_key, "links-save", Some(&saved));
-                                        }
-                                    }
-                                }
+                if job.lock().unwrap()["status"] != "running" {
+                    if let Ok(links) = environment::database(&config,"","links-get",None) {
+                        for link in links.as_array().into_iter().flatten().filter(|link|eligible(link,local)) {
+                            let Ok(key) = link_flow::key(link) else {continue;};
+                            let remote = if link["source"] == "master" {&link["target"]} else {&link["source"]};
+                            let Some(device) = all_devices.iter().find(|d|remote == &json!(d.id)) else {continue;};
+                            let mut flow = link["flow"].clone();
+                            if connections.lock().unwrap()[&device.id] != "online" {
+                                if flow["phase"] != "offline" {flow["phase"]=json!("offline");let _=link_flow::save(&config,link,flow);}
+                                continue;
                             }
-                            Err(error) => {
-                                attempts.insert(attempt_key, (signature, Instant::now(), true));
-                                let mut failed = request;
-                                failed["status"] = json!("failed"); failed["message"] = json!(error.to_string());
-                                let _ = environment::database(&config, &key, "transfer-save", Some(&failed));
+                            let requested = flow["requested"] == true;
+                            let first = flow["initialized"] != true;
+                            if first && flow["phase"] == "failed" && !requested {continue;}
+                            if !checks && !requested && !(first && transfers) {continue;}
+                            if !requested && flow["phase"] != "offline" && checked.get(&key).is_some_and(|time|time.elapsed()<interval) {continue;}
+                            checked.insert(key.clone(),Instant::now());
+                            let mut flow = match link_flow::inspect(&config,&codex,device,link,requested) {
+                                Ok(flow)=>flow,
+                                Err(error)=>{
+                                    flow["phase"]=json!("waiting");flow["error"]=json!(error.to_string());
+                                    let _=link_flow::save(&config,link,flow);continue;
+                                }
+                            };
+                            if !link_flow::should_transfer(link,&flow,transfers) {continue;}
+                            let request=match link_flow::request(link,&flow) {Ok(v)=>v,Err(_)=>continue};
+                            flow["phase"]=json!("transferring");flow["requested"]=json!(false);
+                            if link_flow::save(&config,link,flow.clone()).is_err() {continue;}
+                            match web::start_transfer(request,&codex,&config,&job) {
+                                Ok(_)=>{
+                                    while job.lock().unwrap()["status"]=="running" {thread::sleep(Duration::from_millis(250));}
+                                    // Completion updates the persisted flow, even if the browser is closed.
+                                },
+                                Err(error)=>{
+                                    let waiting=error.to_string().starts_with("Attendi");
+                                    flow["phase"]=json!(if waiting {"waiting_inventory"} else {"failed"});
+                                    flow["error"]=json!(error.to_string());
+                                    let _=link_flow::save(&config,link,flow);
+                                }
                             }
                         }
                     }
                 }
             }
-            thread::sleep(Duration::from_secs(10));
+            thread::sleep(Duration::from_secs(1));
         }
     });
 }
@@ -88,24 +86,11 @@ pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, con
 mod tests {
     use super::*;
     #[test]
-    fn retries_wait_for_a_change_or_reconnection_after_failure() {
-        let previous = ("connection-1:revision-1".to_string(), Instant::now(), true);
-        assert!(!due(Some(&previous), "connection-1:revision-1"));
-        assert!(due(Some(&previous), "connection-2:revision-1"));
-        assert!(due(Some(&previous), "connection-1:revision-2"));
-        let completed = (previous.0.clone(), Instant::now() - Duration::from_secs(61), false);
-        assert!(due(Some(&completed), &completed.0));
-        assert!(conflict(&json!({"chat":"conflict"})));
-        assert!(!conflict(&json!({"chat":"identical"})));
-    }
-    #[test]
-    fn only_sync_repeats_after_the_first_transfer() {
-        for operation in ["copy", "send", "sync"] {
-            assert!(eligible(&json!({"source":"master","operation":operation,"transfer_pending":true})));
-            assert_eq!(eligible(&json!({"source":"master","operation":operation,"transfer_pending":false})), operation == "sync");
-        }
-        assert!(!eligible(&json!({"source":"peer","operation":"sync","transfer_pending":false})));
-        assert!(!eligible(&json!({"source":"peer","operation":"sync","transfer_pending":true})));
-        assert!(eligible(&json!({"source":"peer","operation":"copy","transfer_pending":true})));
+    fn only_initial_alignment_is_automatic_and_one_way_finishes() {
+        let mut link=json!({"operation":"send","flow":{"executor":"a","initialized":false}});
+        assert!(eligible(&link,"a"));assert!(!eligible(&link,"b"));
+        link["flow"]["initialized"]=json!(true);assert!(!eligible(&link,"a"));
+        link["operation"]=json!("sync");assert!(eligible(&link,"a"));
+        assert!(conflict(&json!({"chat":"conflict"})));assert!(!conflict(&json!({"chat":"identical"})));
     }
 }

@@ -1,4 +1,4 @@
-// web.rs v2.20.1017
+// web.rs v2.20.1093
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -63,7 +63,7 @@ fn association(value: &Value, devices: &[Device]) -> io::Result<(String, Value)>
 }
 
 const CATALOG: &str = include_str!("../tools/chat_catalog.py");
-fn catalog(root: &Path) -> io::Result<Vec<Value>> {
+pub(crate) fn catalog(root: &Path) -> io::Result<Vec<Value>> {
     let output = std::process::Command::new("python3")
         .args(["-c", CATALOG])
         .arg(root)
@@ -88,7 +88,10 @@ fn background_analysis(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::c
                     .and_then(|metadata| metadata.modified())
                     .map(|time| format!("{time:?}"))
                     .unwrap_or_default();
-                if matches!(cached["status"].as_str(), Some("ready" | "failed")) { continue; }
+                if matches!(cached["status"].as_str(), Some("ready" | "failed")) {
+                    if cached["status"] == "ready" { let _ = crate::app_inventory::request(&config,&json!({"chat_id":id})); }
+                    continue;
+                }
                 {
                     let mut running = active.lock().unwrap();
                     if running.len() >= 2 || !running.insert(key.clone()) { continue; }
@@ -102,13 +105,14 @@ fn background_analysis(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::c
                     Err(error) => json!({"status":"failed", "revision":revision, "error":error.to_string(), "auth_revision":auth_revision}),
                 };
                 let _ = environment::database(&config, &key, "analysis-save", Some(&result));
+                if result["status"] == "ready" { let _ = crate::app_inventory::request(&config,&json!({"chat_id":id})); }
                 active.lock().unwrap().remove(&key);
             }
         }
         thread::sleep(std::time::Duration::from_secs(60));
     });
 }
-fn remote_catalog(device: &Device) -> io::Result<Value> {
+pub(crate) fn remote_catalog(device: &Device) -> io::Result<Value> {
     let command = format!("python3 -c {}", crate::ssh::quote(CATALOG));
     serde_json::from_slice(&crate::ssh::run(device, &command)?).map_err(io::Error::other)
 }
@@ -241,30 +245,23 @@ pub(crate) fn start_transfer(v: Value, codex: &Path, config: &Path, job: &Arc<Mu
     if rule.is_none() && !scopes.any() {
         return Err(invalid("Seleziona almeno una categoria"));
     }
-    let manifest = if let Some(chat) = &chat {
+    let manifest = if let Some(chat) = &chat && (scopes.paths || scopes.apps) {
         let source = v["source_device_id"].as_str().unwrap_or("master");
         let key = environment::key(source, chat["id"].as_str().unwrap())?;
-        let cached = environment::database(&config, &key, "analysis-get", None)?;
+        let mut cached = environment::database(&config, &key, "analysis-get", None)?;
+        if cached["status"] != "ready" && incoming && chat["analysis"]["status"] == "ready" {
+            cached=chat["analysis"].clone();
+            environment::database(&config,&key,"analysis-save",Some(&cached))?;
+        }
         if cached["status"] != "ready" {
             return Err(invalid("Attendi il completamento dell’analisi"));
-        }
-        if cached["revision"]
-            != environment::revision(
-                chat,
-                if incoming { Some(&device) } else { None },
-            )
-        {
-            return Err(invalid("La chat è aggiornata: ripeti l’analisi"));
         }
         let manifest: environment::Manifest =
             serde_json::from_value(cached["manifest"].clone())
                 .map_err(io::Error::other)?;
         manifest.validate()?;
-        if !environment::fresh(
-            if incoming { Some(&device) } else { None },
-            &manifest,
-        )? {
-            return Err(invalid("I requisiti sono aggiornati: ripeti l’analisi"));
+        if scopes.apps && environment::database(&config,&key,"inventory-get",None)?["status"] != "ready" {
+            return Err(invalid("Attendi il rilevamento delle app sulla sorgente"));
         }
         Some(manifest)
     } else {
@@ -312,7 +309,7 @@ pub(crate) fn start_transfer(v: Value, codex: &Path, config: &Path, job: &Arc<Mu
     if lock["status"] == "running" {
         return Err(invalid("Un trasferimento è già in corso"));
     }
-    *lock = json!({"status":"running","message":"Preparazione","progress":null,"chat_id":v["chat_id"],"source_device_id":v["source_device_id"].as_str().unwrap_or("master"),"scopes":scopes,"device_id":v["device_id"],
+    *lock = json!({"status":"running","link_key":v["link_key"],"generation":v["generation"],"message":"Preparazione","progress":null,"chat_id":v["chat_id"],"source_device_id":v["source_device_id"].as_str().unwrap_or("master"),"scopes":scopes,"device_id":v["device_id"],
         "title":chat.as_ref().map(|c|c["name"].clone()).unwrap_or_else(||json!(rule.as_ref().unwrap().name)),
         "source":if incoming {device.name.as_str()}else{"Questo dispositivo"},
         "destination":if incoming {"Questo dispositivo"}else{device.name.as_str()}});
@@ -321,6 +318,8 @@ pub(crate) fn start_transfer(v: Value, codex: &Path, config: &Path, job: &Arc<Mu
     drop(lock);
     let transfer_config = config.to_path_buf();
     let job = job.clone();
+    let flow_key = v["link_key"].as_str().map(str::to_owned);
+    let flow_generation = v["generation"].clone();
     let state = config.join("state");
     thread::spawn(move || {
         let result = (|| -> io::Result<Value> {
@@ -335,7 +334,7 @@ pub(crate) fn start_transfer(v: Value, codex: &Path, config: &Path, job: &Arc<Mu
             } else {
                 let chat = chat.unwrap();
                 fs::create_dir_all(&state)?;
-                let environment_results = environment::execute(
+                let transfer_environment = || -> io::Result<Value> { if scopes.paths || scopes.apps { environment::execute(
                     &device,
                     &manifest.unwrap(),
                     scopes,
@@ -347,9 +346,9 @@ pub(crate) fn start_transfer(v: Value, codex: &Path, config: &Path, job: &Arc<Mu
                         chat["id"].as_str().unwrap()
                     )),
                     |progress| job.lock().unwrap()["progress"] = progress,
-                )?;
+                ) } else { Ok(json!([])) } };
                 if !scopes.chat {
-                    return Ok(json!({"environment":environment_results}));
+                    return Ok(json!({"environment":transfer_environment()?}));
                 }
                 let source = Path::new(chat["path"].as_str().unwrap());
                 if incoming || synchronize {
@@ -386,7 +385,7 @@ pub(crate) fn start_transfer(v: Value, codex: &Path, config: &Path, job: &Arc<Mu
                         },
                     )?;
                     return Ok(
-                        json!({"chat":outcome,"environment":environment_results}),
+                        json!({"chat":outcome,"environment":if outcome == crate::sync::Outcome::Conflict {json!([])} else {transfer_environment()?}}),
                     );
                 }
                 crate::chat::Chat::read(source)?;
@@ -406,7 +405,7 @@ pub(crate) fn start_transfer(v: Value, codex: &Path, config: &Path, job: &Arc<Mu
                         job.lock().unwrap()["progress"] = json!({"event":event})
                     },
                 )?;
-                Ok(json!({"chat":receipt,"environment":environment_results}))
+                Ok(json!({"chat":receipt,"environment":transfer_environment()?}))
             }
         })();
         let mut lock = job.lock().unwrap();
@@ -420,7 +419,9 @@ pub(crate) fn start_transfer(v: Value, codex: &Path, config: &Path, job: &Arc<Mu
                 lock["message"] = json!(e.to_string());
             }
         }
+        if crate::automation::conflict(&lock["results"]) {lock["status"]=json!("failed");lock["message"]=json!("Copie divergenti: nessuna sovrascrittura");}
         if let Some(key) = &transfer_key { let _ = environment::database(&transfer_config, key, "transfer-save", Some(&lock)); }
+        if let Some(key) = &flow_key { let _ = crate::link_flow::finish(&transfer_config,key,&flow_generation,lock["status"]=="completed",lock["message"].as_str().unwrap_or("Trasferimento non completato")); }
     });
     Ok(json!({"ok":true}))
 }
@@ -445,6 +446,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     fs::create_dir_all(&config)?;
     environment::database(&config, "", "migrate", None)?;
     crate::app_inventory::recover_interrupted(&config)?;
+    crate::link_flow::recover(&config)?;
     let codex = std::env::var_os("CODEX_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| home.join(".codex"));
@@ -478,9 +480,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     if !checks_paused {
         background_analysis(codex.clone(), config.clone(), analyses.clone());
     }
-    if !paused {
-        crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone());
-    }
+    crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone(), peers.clone(), !checks_paused, !paused);
     println!("Oaclis UI: http://localhost:23232");
     let mutations = Mutex::new(());
     serve_requests(&server, |mut request| {
@@ -598,10 +598,26 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         association(&value, &devices::load(config.join("devices.json"))?)?;
                     environment::database(&config, &key, "links-delete", None)
                 }
+                (&Method::Post, "/api/links/play") => {
+                    if paused { return Err(invalid("Trasferimenti in pausa")); }
+                    let value=body(&mut request)?;
+                    let (key,_)=association(&value,&devices::load(config.join("devices.json"))?)?;
+                    let links=environment::database(&config,"","links-get",None)?;
+                    let link=links.as_array().and_then(|all|all.iter().find(|link|crate::link_flow::key(link).is_ok_and(|k|k==key))).ok_or_else(||invalid("Collegamento non trovato"))?;
+                    if link["operation"] != "sync" && link["flow"]["initialized"]==true { return Err(invalid("Trasferimento monodirezionale già completato")); }
+                    if link["flow"]["phase"]=="conflict" {return Err(invalid("Le chat divergono: scegliere quale copia mantenere"));}
+                    if link["flow"]["phase"]=="transferring" {return Err(invalid("Trasferimento già in corso"));}
+                    let mut flow=link["flow"].clone();flow["requested"]=json!(true);
+                    crate::link_flow::save(&config,link,flow)?;
+                    environment::database(&config,"","links-get",None)
+                }
                 (&Method::Post, "/api/links") => {
                     let value = body(&mut request)?;
-                    let (key, value) =
+                    let (key, mut value) =
                         association(&value, &devices::load(config.join("devices.json"))?)?;
+                    let links=environment::database(&config,"","links-get",None)?;
+                    value["flow"]=links.as_array().and_then(|all|all.iter().find(|link|crate::link_flow::key(link).is_ok_and(|k|k==key))).map(|link|link["flow"].clone())
+                        .unwrap_or_else(||crate::link_flow::initial(crate::peers::snapshot(&peers)["local_id"].as_str().unwrap_or("")));
                     environment::database(&config, &key, "links-save", Some(&value))
                 }
                 (&Method::Post, "/api/chat/visibility") => {

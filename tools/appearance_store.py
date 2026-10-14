@@ -1,4 +1,4 @@
-# appearance_store.py v1.2.132
+# appearance_store.py v1.2.159
 """Oaclis storage adapter; chat metadata lives in the appearance record."""
 import json
 import os
@@ -68,6 +68,15 @@ with sqlite3.connect(path,timeout=10) as db:
     unified_ensure(db, config)
     if operation == 'migrate':
         result = {'ok':True}
+    elif operation == 'chat-observed':
+        observed=json.load(sys.stdin)
+        source,chat=key.split(':',1)
+        source=source_mapping(config).get(source,source)
+        value=chat_object(db,chat)
+        record=value.setdefault('chat',{}).setdefault('sources',{}).setdefault(source,{})
+        record.update({name:observed[name] for name in ('bytes','modified_ns','sha256')})
+        save_chat_object(db,chat,value)
+        result=observed
     elif operation in ('inventory-save','preparation-save'):
         value = json.load(sys.stdin)
         (save_inventory if operation=='inventory-save' else save_preparation)(db,key,value,config)
@@ -103,11 +112,27 @@ with sqlite3.connect(path,timeout=10) as db:
         data=read_data(db);result={name:data[name] for name in ('preferences','links')}
     elif operation.startswith('links-'):
         db.execute('CREATE TABLE IF NOT EXISTS chat_links (key TEXT PRIMARY KEY,value TEXT NOT NULL)')
-        if operation=='links-save':
+        if operation=='links-flow':
+            update=json.load(sys.stdin)
+            row=db.execute('SELECT value FROM chat_links WHERE key=?',(key,)).fetchone()
+            if row:
+                saved=json.loads(row[0])
+                if saved.get('flow',{}).get('generation') == update.get('generation'):
+                    saved['flow']=update
+                    saved['transfer_pending']=not bool(update.get('initialized'))
+                    db.execute('UPDATE chat_links SET value=? WHERE key=?',(json.dumps(saved),key))
+        elif operation=='links-save':
             value=json.load(sys.stdin);chat=value['entry']['id'];record=chat_object(db,chat)
+            existing=db.execute('SELECT value FROM chat_links WHERE key=?',(key,)).fetchone()
+            if existing:
+                existing=json.loads(existing[0])
+                if any(existing.get(name)!=value.get(name) for name in ('source','target','operation')):
+                    raise ValueError('Elimina e ricrea il collegamento per cambiarne la direzione')
+                if 'flow' in existing:value['flow']=existing['flow']
             if record.get('removed') and not db.execute('SELECT 1 FROM chat_links WHERE key=?',(key,)).fetchone(): raise ValueError('Chat rimossa da Oaclis')
             preference=unified_preferences(db).get(chat)
             if preference:value['scopes']=preference['scopes']
+            if 'flow' in value:value['transfer_pending']=not bool(value['flow'].get('initialized'))
             db.execute('INSERT INTO chat_links VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,json.dumps(value)))
         elif operation=='links-delete':db.execute('DELETE FROM chat_links WHERE key=?',(key,))
         result=list(values(db,'chat_links').values())

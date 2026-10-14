@@ -1,4 +1,4 @@
-// app.js v2.89.1630
+// app.js v2.89.1662
 "use strict";
 const $ = (s) => document.querySelector(s);
 const token = $('meta[name="oaclis-token"]').content;
@@ -738,15 +738,17 @@ function disposeChatLink(layer) {
 }
 function updateBadgeMotion(marker, connection) {
   const key = connection.source + ':' + connection.entry.id;
-  const current = data.job?.chat_id === connection.entry.id && data.job?.source_device_id === connection.source ? data.job : data.transfers?.[key] || {};
-  const matches = !current.device_id || current.device_id === connection.target;
+  const pair = [connection.entry.id, ...[connection.source, connection.target].sort()].join(':');
+  const active = data.job?.link_key === pair;
+  const current = active || data.job?.chat_id === connection.entry.id && data.job?.source_device_id === connection.source ? data.job : data.transfers?.[key] || {};
+  const matches = active || !current.device_id || current.device_id === connection.target;
   const modules = matches ? current.module_progress || {} : {};
   const changed = Object.values(modules).some(module => module.changed === true);
-  const checking = data.app_checks?.[key]?.status === 'pending' || !(data.checks_paused ?? data.paused) && data.analyses?.[key]?.status === 'pending';
+  const checking = connection.flow?.phase === 'checking' || data.app_checks?.[key]?.status === 'pending' || !(data.checks_paused ?? data.paused) && data.analyses?.[key]?.status === 'pending';
   const unfinished = Object.values(modules).some(module => module.changed === true && module.progress < 1);
   const remote = connection.source === 'master' ? connection.target : connection.source;
   const paused = changed && unfinished && (data.paused || current.status === 'paused' || current.status === 'failed' || data.connections[remote] === 'offline');
-  const phase = paused ? 'paused' : changed && current.status === 'running' ? 'transferring' : checking ? 'checking' : 'idle';
+  const phase = paused ? 'paused' : connection.flow?.phase === 'transferring' || matches && current.status === 'running' ? 'transferring' : checking ? 'checking' : 'idle';
   marker.badgeMotion.update({ phase, modules });
 }
 function renderLink(force = false) {
@@ -877,7 +879,23 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
       if (fresh && panel.isConnected) renderScopeDetails(panel, fresh);
     } catch (_) { /* Cached details remain usable while the source is unreachable. */ }
   });
-  if (!existing) marker.append(main, edit, open);
+  const play = marker.querySelector(".link-play") || document.createElement("button");
+  play.type = "button"; play.className = "link-play icon-button";
+  const phase = connection.flow?.phase;
+  play.hidden = !["ready", "failed"].includes(phase) || connection.operation !== "sync" && connection.flow?.initialized;
+  play.disabled = data.paused || phase === "transferring" || connection.flow?.requested === true;
+  play.dataset.ready = String(phase === "ready");
+  play.title = phase === "failed" ? "Riprova trasferimento" : "Sincronizza verso la copia rimasta indietro";
+  play.setAttribute("aria-label", play.title);
+  play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg>';
+  play.onclick = guard(async () => {
+    play.disabled = true;
+    try { chatLinks = await api("links/play", connection); renderLink(true); }
+    finally { if (play.isConnected) renderLink(true); }
+  });
+  marker.title = name + (connection.flow?.error ? " · " + connection.flow.error : phase === "conflict" ? " · Le copie divergono: scegliere quale mantenere" : phase === "offline" ? " · In attesa del dispositivo" : "");
+  if (!existing) marker.append(main, edit, play, open);
+  else if (!play.isConnected) marker.append(play);
   main.querySelector(".chat-badge").style.color = appearance(connection.entry).color || "var(--ink)";
   marker.style.color = appearance(connection.entry).color || "var(--ink)";
   if (!existing) {

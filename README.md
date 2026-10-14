@@ -508,3 +508,43 @@ Le impostazioni viaggiano tramite il collegamento SSH già autorizzato, senza av
 trasferimenti dei contenuti. Per compatibilità, `OACLIS_PAUSED=1` resta il valore
 predefinito di pausa per check e trasferimenti quando le rispettive variabili non
 sono specificate; non sospende la replica delle impostazioni.
+
+## Ciclo dei collegamenti
+
+Il pairing e la replica delle impostazioni sono separati dai contenuti. Il pairing
+non copia indiscriminatamente tutte le chat: esegue il primo allineamento dei
+collegamenti definiti dall'utente, appena i device e gli inventari necessari sono
+pronti e il flusso dei trasferimenti è abilitato. Anche un collegamento creato dopo
+il pairing segue questo primo allineamento.
+
+- Monodirezionale: un solo trasferimento riuscito, poi stato `transferred`.
+- Bidirezionale: primo allineamento automatico, poi confronto periodico e Play
+  manuale. Riavvii e riconnessioni non ripetono un primo allineamento completato.
+- Offline: attesa, senza tentare il trasferimento. Il Play già richiesto resta in
+  attesa del device; il primo allineamento incompleto rimane da completare.
+- Divergenza: nessuna sovrascrittura. Il badge segnala che occorre scegliere una
+  copia; non seleziona il vincitore confrontando gli orologi.
+
+Il confronto usa dimensione e modifica solo per evitare di rileggere chat
+immutate. Quando cambiano, ogni dispositivo calcola localmente digest e prova di
+prefisso dell'archivio: tramite SSH viaggiano solo queste informazioni, non tutta
+la chat. Se una copia è un'estensione dell'altra, il Play aggiorna quella rimasta
+indietro. Differenze non riconducibili a un'append vengono trattate prudentemente
+come conflitti.
+
+`chat_match_interval_seconds` in `~/.config/oaclis/settings.json` regola il
+controllo periodico: valore predefinito 60 secondi, intervallo 10–3600 secondi.
+L'inventario di Percorsi e App resta persistente: non si rilancia l'analisi AI a
+ogni nuovo messaggio. I rispettivi refresh manuali aggiornano le definizioni.
+
+L'esecuzione usa i moduli abilitati, in ordine Chat → Percorsi → App. Il modulo App
+trasferisce l'inventario della sorgente, le configurazioni e i plugin/skill previsti
+dal motore esistente; questa versione non installa automaticamente i pacchetti di
+sistema sulla destinazione.
+
+Lo stato del ciclo risiede in `chat_links.value.flow`, viene replicato con il
+collegamento e contiene l'esecutore, una generazione, il primo completamento,
+le prove dell'ultimo confronto e l'eventuale richiesta di Play. La generazione
+impedisce che un lavoro vecchio ricrei un collegamento cancellato e ricreato.
+Il confronto risiede in `src/link_flow.rs`; `src/automation.rs` lo pianifica;
+`tools/chat_match.py` legge gli archivi; il motore SSH/rsync esegue i trasferimenti.

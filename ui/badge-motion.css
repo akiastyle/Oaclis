@@ -1,4 +1,4 @@
-/* badge-motion.css v1.0.56 */
+/* badge-motion.css v1.0.73 */
 :root {
   --badge-ring-gap: 2px;
   --badge-ring-width: 2px;
@@ -55,3 +55,20 @@
 
 .motion-badge:not([data-motion-phase="idle"]):not([data-motion-phase="checking"]) .link-edit,
 .motion-badge:not([data-motion-phase="idle"]):not([data-motion-phase="checking"]) .link-open { opacity:0; pointer-events:none; }
+
+:root { --link-ready-color: var(--scope-active); }
+.motion-badge .link-play {
+  position: absolute; left: 58px; top: 12px; width: 20px; height: 20px;
+  padding: 4px; z-index: 2; border-radius: var(--radius-icon);
+  color: var(--link-ready-color);
+  background: color-mix(in srgb,var(--panel) var(--glass-opacity),transparent);
+  backdrop-filter: blur(var(--glass-blur));
+}
+.motion-badge .link-play svg { width:100%; height:100%; }
+.motion-badge .link-play[data-ready="true"] { animation: link-ready-pulse 1.5s ease-in-out infinite; }
+.motion-badge .link-play[hidden],
+.motion-badge[data-motion-phase="transferring"] .link-play,
+.motion-badge[data-motion-phase="paused"] .link-play,
+.motion-badge[data-motion-phase="finishing"] .link-play { display:none; }
+@keyframes link-ready-pulse { 50% { box-shadow:0 0 var(--space-8) var(--link-ready-color); } }
+@media (prefers-reduced-motion: reduce) { .motion-badge .link-play { animation:none; } }

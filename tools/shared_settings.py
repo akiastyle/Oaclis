@@ -1,4 +1,4 @@
-# shared_settings.py v1.11.323
+# shared_settings.py v1.11.325
 """Replicate presentation settings over mutually approved SSH; no chat/auth files."""
 import fcntl
 import hashlib
@@ -248,7 +248,7 @@ class Store:
                     db.execute('DELETE FROM chat_links WHERE key=?', (local_key,))
                     continue
                 pending = db.execute('SELECT value FROM chat_links WHERE key=?', (local_key,)).fetchone()
-                adapted = dict(value, source=reverse[value['source']], target=reverse[value['target']], transfer_pending=json.loads(pending[0]).get('transfer_pending', False) if pending else False)
+                adapted = dict(value, source=reverse[value['source']], target=reverse[value['target']], transfer_pending=not value['flow'].get('initialized',False) if 'flow' in value else json.loads(pending[0]).get('transfer_pending', False) if pending else False)
                 preference = records.get('preference:' + chat, {}).get('value') or {}
                 if 'scopes' in preference:
                     adapted['scopes'] = preference['scopes']
