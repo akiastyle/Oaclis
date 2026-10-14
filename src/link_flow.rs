@@ -1,6 +1,6 @@
-// link_flow.rs v1.14.191
+// link_flow.rs v1.14.197
 //! Link lifecycle: compare immutable proofs, persist intent, never transfer from a poll.
-use crate::{devices::Device, environment, invalid, web};
+use crate::{devices::Device, environment, invalid, catalog};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{io, path::Path, time::{SystemTime, UNIX_EPOCH}};
@@ -50,8 +50,8 @@ pub(crate) fn compare_proofs(source: Option<&Value>, target: Option<&Value>) -> 
 
 pub(crate) fn inspect(config: &Path, codex: &Path, device: &Device, link: &Value, force: bool) -> io::Result<Value> {
     let id = link["entry"]["id"].as_str().ok_or_else(||invalid("Chat richiesta"))?;
-    let local = web::catalog(codex)?;
-    let remote = web::remote_catalog(device)?;
+    let local = catalog::local(codex)?;
+    let remote = catalog::remote(device)?;
     let find = |list: &Value| list.as_array().and_then(|all|all.iter().find(|chat|chat["id"] == id)).cloned();
     let local = find(&json!(local));
     let remote = find(&remote["chats"]);

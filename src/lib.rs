@@ -1,7 +1,10 @@
-// lib.rs v1.3.56
+// lib.rs v1.3.59
 mod app_inventory;
 mod automation;
 mod link_flow;
+mod catalog;
+mod initial_inventory;
+mod transfer_job;
 pub mod appearance;
 pub mod chat;
 pub mod compare;

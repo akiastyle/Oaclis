@@ -1,9 +1,10 @@
-// web.rs v2.20.1093
+// web.rs v2.25.1547
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
     environment, invalid,
     rules::{self, Rule},
+    catalog::{local as catalog, remote as remote_catalog},
 };
 use serde_json::{Value, json};
 use std::{
@@ -62,60 +63,6 @@ fn association(value: &Value, devices: &[Device]) -> io::Result<(String, Value)>
     ))
 }
 
-const CATALOG: &str = include_str!("../tools/chat_catalog.py");
-pub(crate) fn catalog(root: &Path) -> io::Result<Vec<Value>> {
-    let output = std::process::Command::new("python3")
-        .args(["-c", CATALOG])
-        .arg(root)
-        .output()?;
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr);
-        return Err(io::Error::other(format!("Impossibile leggere il catalogo Codex: {}", detail.lines().last().unwrap_or("errore catalogo"))));
-    }
-    let value: Value = serde_json::from_slice(&output.stdout).map_err(io::Error::other)?;
-    serde_json::from_value(value["chats"].clone()).map_err(io::Error::other)
-}
-// Each device analyzes its own archives serially; unchanged failures are not retried.
-fn background_analysis(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::collections::HashSet<String>>>) {
-    thread::spawn(move || loop {
-        if let Ok(chats) = catalog(&codex) {
-            for chat in chats {
-                let Some(id) = chat["id"].as_str() else { continue; };
-                let Ok(key) = environment::key("master", id) else { continue; };
-                let revision = environment::revision(&chat, None);
-                let cached = environment::database(&config, &key, "analysis-get", None).unwrap_or(Value::Null);
-                let auth_revision = fs::metadata(codex.join("auth.json"))
-                    .and_then(|metadata| metadata.modified())
-                    .map(|time| format!("{time:?}"))
-                    .unwrap_or_default();
-                if matches!(cached["status"].as_str(), Some("ready" | "failed")) {
-                    if cached["status"] == "ready" { let _ = crate::app_inventory::request(&config,&json!({"chat_id":id})); }
-                    continue;
-                }
-                {
-                    let mut running = active.lock().unwrap();
-                    if running.len() >= 2 || !running.insert(key.clone()) { continue; }
-                }
-                let _ = environment::database(&config, &key, "analysis-save", Some(&json!({"status":"pending", "revision":revision})));
-                let result = match environment::analyze(None, chat["path"].as_str().unwrap_or(""), id) {
-                    Ok(manifest) => {
-                        if let Err(error) = crate::preparation::capture(&config,id,Path::new(chat["path"].as_str().unwrap_or("")),&manifest) { eprintln!("Oaclis: dimensioni sorgenti: {error}"); }
-                        json!({"status":"ready", "revision":revision, "manifest":manifest, "chat_bytes":chat["bytes"], "chat_modified_ns":chat["modified_ns"]})
-                    },
-                    Err(error) => json!({"status":"failed", "revision":revision, "error":error.to_string(), "auth_revision":auth_revision}),
-                };
-                let _ = environment::database(&config, &key, "analysis-save", Some(&result));
-                if result["status"] == "ready" { let _ = crate::app_inventory::request(&config,&json!({"chat_id":id})); }
-                active.lock().unwrap().remove(&key);
-            }
-        }
-        thread::sleep(std::time::Duration::from_secs(60));
-    });
-}
-pub(crate) fn remote_catalog(device: &Device) -> io::Result<Value> {
-    let command = format!("python3 -c {}", crate::ssh::quote(CATALOG));
-    serde_json::from_slice(&crate::ssh::run(device, &command)?).map_err(io::Error::other)
-}
 fn header(name: &str, value: &str) -> Header {
     Header::from_bytes(name, value).unwrap()
 }
@@ -166,264 +113,6 @@ fn ssh_settings(home: &Path, config: &Path, operation: &str, value: &Value) -> i
     let result: Value = serde_json::from_slice(&output.stdout).map_err(io::Error::other)?;
     if !output.status.success() { return Err(invalid(result["error"].as_str().unwrap_or("Configurazione SSH non riuscita"))); }
     Ok(result)
-}
-
-pub(crate) fn start_transfer(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value>>) -> io::Result<Value> {
-    let ds = devices::load(config.join("devices.json"))?;
-    let rule = if let Some(id) = v["rule_id"].as_str() {
-        Some(
-            rules::load(config.join("rules.json"))?
-                .into_iter()
-                .find(|r| r.id == id)
-                .ok_or_else(|| invalid("Regola non trovata"))?,
-        )
-    } else {
-        None
-    };
-    let incoming = v["source_device_id"]
-        .as_str()
-        .is_some_and(|id| id != "master");
-    if let Some(operation) = v["operation"].as_str()
-        && operation != "copy"
-        && operation != "sync"
-        && operation != "send"
-    {
-        return Err(invalid("Operazione non valida"));
-    }
-    if incoming && v["device_id"] != "master" {
-        return Err(invalid("Il destinatario deve essere questo dispositivo"));
-    }
-    let synchronize = v["operation"] == "sync" || v["operation"] == "send";
-    let direction = if v["operation"] == "send" {
-        if incoming {
-            crate::sync::Direction::Receive
-        } else {
-            crate::sync::Direction::Send
-        }
-    } else {
-        crate::sync::Direction::Both
-    };
-    let device_id = rule
-        .as_ref()
-        .map(|r| r.device_id.as_str())
-        .or_else(|| {
-            if incoming {
-                v["source_device_id"].as_str()
-            } else {
-                v["device_id"].as_str()
-            }
-        })
-        .ok_or_else(|| invalid("Dispositivo richiesto"))?;
-    let device = ds
-        .into_iter()
-        .find(|d| d.id == device_id)
-        .ok_or_else(|| invalid("Dispositivo non trovato"))?;
-    let chat = if rule.is_none() {
-        Some(
-            (if incoming {
-                serde_json::from_value::<Vec<Value>>(
-                    remote_catalog(&device)?["chats"].clone(),
-                )
-                .map_err(io::Error::other)?
-            } else {
-                catalog(codex)?
-            })
-            .into_iter()
-            .find(|c| c["id"] == v["chat_id"])
-            .ok_or_else(|| invalid("Chat non trovata"))?,
-        )
-    } else {
-        None
-    };
-    let scopes: environment::Scopes = v
-        .get("scopes")
-        .cloned()
-        .map(serde_json::from_value)
-        .transpose()
-        .map_err(io::Error::other)?
-        .unwrap_or_default();
-    if rule.is_none() && !scopes.any() {
-        return Err(invalid("Seleziona almeno una categoria"));
-    }
-    let manifest = if let Some(chat) = &chat && (scopes.paths || scopes.apps) {
-        let source = v["source_device_id"].as_str().unwrap_or("master");
-        let key = environment::key(source, chat["id"].as_str().unwrap())?;
-        let mut cached = environment::database(&config, &key, "analysis-get", None)?;
-        if cached["status"] != "ready" && incoming && chat["analysis"]["status"] == "ready" {
-            cached=chat["analysis"].clone();
-            environment::database(&config,&key,"analysis-save",Some(&cached))?;
-        }
-        if cached["status"] != "ready" {
-            return Err(invalid("Attendi il completamento dell’analisi"));
-        }
-        let manifest: environment::Manifest =
-            serde_json::from_value(cached["manifest"].clone())
-                .map_err(io::Error::other)?;
-        manifest.validate()?;
-        if scopes.apps && environment::database(&config,&key,"inventory-get",None)?["status"] != "ready" {
-            return Err(invalid("Attendi il rilevamento delle app sulla sorgente"));
-        }
-        Some(manifest)
-    } else {
-        None
-    };
-    let remote = if let Some(chat) = &chat
-        && scopes.chat
-    {
-        let target = if incoming {
-            json!({"root":codex,"chats":catalog(codex)?})
-        } else {
-            remote_catalog(&device)?
-        };
-        let existing = target["chats"]
-            .as_array()
-            .and_then(|chats| chats.iter().find(|c| c["id"] == chat["id"]))
-            .and_then(|c| c["path"].as_str());
-        let p =
-            if let Some(existing) = existing {
-                PathBuf::from(existing)
-            } else {
-                let relative = Path::new(
-                    chat["relative_path"]
-                        .as_str()
-                        .ok_or_else(|| invalid("Percorso chat mancante"))?,
-                );
-                if !relative.starts_with("sessions")
-                    || !relative
-                        .components()
-                        .all(|c| matches!(c, std::path::Component::Normal(_)))
-                {
-                    return Err(invalid("Percorso chat non valido"));
-                }
-                PathBuf::from(target["root"].as_str().ok_or_else(|| {
-                    invalid("Cartella Codex destinataria mancante")
-                })?)
-                .join(relative)
-            };
-        crate::paths::validate_absolute(&p)?;
-        Some(p)
-    } else {
-        None
-    };
-    let mut lock = job.lock().unwrap();
-    if lock["status"] == "running" {
-        return Err(invalid("Un trasferimento è già in corso"));
-    }
-    *lock = json!({"status":"running","link_key":v["link_key"],"generation":v["generation"],"message":"Preparazione","progress":null,"chat_id":v["chat_id"],"source_device_id":v["source_device_id"].as_str().unwrap_or("master"),"scopes":scopes,"device_id":v["device_id"],
-        "title":chat.as_ref().map(|c|c["name"].clone()).unwrap_or_else(||json!(rule.as_ref().unwrap().name)),
-        "source":if incoming {device.name.as_str()}else{"Questo dispositivo"},
-        "destination":if incoming {"Questo dispositivo"}else{device.name.as_str()}});
-    let transfer_key = chat.as_ref().map(|c| environment::key(v["source_device_id"].as_str().unwrap_or("master"), c["id"].as_str().unwrap())).transpose()?;
-    if let Some(key) = &transfer_key { environment::database(&config, key, "transfer-save", Some(&lock))?; }
-    drop(lock);
-    let transfer_config = config.to_path_buf();
-    let job = job.clone();
-    let flow_key = v["link_key"].as_str().map(str::to_owned);
-    let flow_generation = v["generation"].clone();
-    let state = config.join("state");
-    thread::spawn(move || {
-        let result = (|| -> io::Result<Value> {
-            if let Some(rule) = rule {
-                let results = rules::execute(
-                    &device,
-                    &rule,
-                    &state.join(&rule.id),
-                    |event| job.lock().unwrap()["progress"] = json!(event),
-                )?;
-                Ok(json!(results))
-            } else {
-                let chat = chat.unwrap();
-                fs::create_dir_all(&state)?;
-                let transfer_environment = || -> io::Result<Value> { if scopes.paths || scopes.apps { environment::execute(
-                    &device,
-                    &manifest.unwrap(),
-                    scopes,
-                    incoming,
-                    v["operation"].as_str().unwrap_or("copy"),
-                    &state.join(format!(
-                        "environment-{}-{}",
-                        device.id,
-                        chat["id"].as_str().unwrap()
-                    )),
-                    |progress| job.lock().unwrap()["progress"] = progress,
-                ) } else { Ok(json!([])) } };
-                if !scopes.chat {
-                    return Ok(json!({"environment":transfer_environment()?}));
-                }
-                let source = Path::new(chat["path"].as_str().unwrap());
-                if incoming || synchronize {
-                    let destination = remote.unwrap();
-                    let (local, remote) = if incoming {
-                        (destination, source.to_path_buf())
-                    } else {
-                        (source.to_path_buf(), destination)
-                    };
-                    if incoming && !synchronize && local.try_exists()? {
-                        return Err(invalid(
-                            "La copia locale esiste già; nessuna sovrascrittura",
-                        ));
-                    }
-                    if incoming {
-                        crate::rules::ensure_local(local.parent().ok_or_else(
-                            || invalid("Cartella destinataria mancante"),
-                        )?)?;
-                    }
-                    let checkpoint = state.join(format!(
-                        "chat-{}-{}.json",
-                        device.id,
-                        chat["id"].as_str().unwrap()
-                    ));
-                    let outcome = crate::sync::synchronize_with_direction(
-                        &device,
-                        &local,
-                        &remote,
-                        &checkpoint,
-                        crate::sync::Kind::Chat,
-                        direction,
-                        |event| {
-                            job.lock().unwrap()["progress"] = json!({"event":event})
-                        },
-                    )?;
-                    return Ok(
-                        json!({"chat":outcome,"environment":if outcome == crate::sync::Outcome::Conflict {json!([])} else {transfer_environment()?}}),
-                    );
-                }
-                crate::chat::Chat::read(source)?;
-                rules::ensure_remote(
-                    &device,
-                    remote
-                        .as_ref()
-                        .unwrap()
-                        .parent()
-                        .ok_or_else(|| invalid("Cartella destinataria mancante"))?,
-                )?;
-                let receipt = crate::transfer::send_file_with_progress(
-                    &device,
-                    source,
-                    remote.unwrap(),
-                    |event| {
-                        job.lock().unwrap()["progress"] = json!({"event":event})
-                    },
-                )?;
-                Ok(json!({"chat":receipt,"environment":transfer_environment()?}))
-            }
-        })();
-        let mut lock = job.lock().unwrap();
-        match result {
-            Ok(results) => {
-                lock["status"] = json!("completed");
-                lock["results"] = results;
-            }
-            Err(e) => {
-                lock["status"] = json!("failed");
-                lock["message"] = json!(e.to_string());
-            }
-        }
-        if crate::automation::conflict(&lock["results"]) {lock["status"]=json!("failed");lock["message"]=json!("Copie divergenti: nessuna sovrascrittura");}
-        if let Some(key) = &transfer_key { let _ = environment::database(&transfer_config, key, "transfer-save", Some(&lock)); }
-        if let Some(key) = &flow_key { let _ = crate::link_flow::finish(&transfer_config,key,&flow_generation,lock["status"]=="completed",lock["message"].as_str().unwrap_or("Trasferimento non completato")); }
-    });
-    Ok(json!({"ok":true}))
 }
 
 fn serve_requests(server: &Server, handler: impl Fn(Request) + Sync) {
@@ -478,7 +167,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     let analyses = Arc::new(Mutex::new(std::collections::HashSet::<String>::new()));
     if !settings_paused { crate::shared_settings::start(home.clone()); }
     if !checks_paused {
-        background_analysis(codex.clone(), config.clone(), analyses.clone());
+        crate::initial_inventory::start(codex.clone(), config.clone(), analyses.clone());
     }
     crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone(), peers.clone(), !checks_paused, !paused);
     println!("Oaclis UI: http://localhost:23232");
@@ -528,6 +217,9 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 )),
                 "/badge-motion.css" => Some((include_str!("../ui/badge-motion.css").into(), "text/css; charset=utf-8")),
                 "/badge-motion.js" => Some((include_str!("../ui/badge-motion.js").into(), "text/javascript; charset=utf-8")),
+                "/panels.js" => Some((include_str!("../ui/panels.js").into(), "text/javascript; charset=utf-8")),
+                "/map.js" => Some((include_str!("../ui/map.js").into(), "text/javascript; charset=utf-8")),
+                "/console.js" => Some((include_str!("../ui/console.js").into(), "text/javascript; charset=utf-8")),
                 "/app.js" => Some((
                     include_str!("../ui/app.js").into(),
                     "text/javascript; charset=utf-8",
@@ -723,77 +415,8 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     }
                 }
                 (&Method::Post, "/api/analyze") => {
-                    let v = body(&mut request)?;
-                    let source = v["source_device_id"].as_str().unwrap_or("master");
-                    let chat_id = v["chat_id"]
-                        .as_str()
-                        .ok_or_else(|| invalid("Chat richiesta"))?;
-                    let key = environment::key(source, chat_id)?;
-                    if checks_paused && v["force"] != true { return environment::database(&config,&key,"analysis-get",None); }
-                    let device = if source == "master" {
-                        None
-                    } else {
-                        Some(
-                            devices::load(config.join("devices.json"))?
-                                .into_iter()
-                                .find(|d| d.id == source)
-                                .ok_or_else(|| invalid("Dispositivo non trovato"))?,
-                        )
-                    };
-                    let list = if let Some(device) = &device {
-                        remote_catalog(device)?["chats"].clone()
-                    } else {
-                        json!(catalog(&codex)?)
-                    };
-                    let chat = list
-                        .as_array()
-                        .and_then(|cs| cs.iter().find(|c| c["id"] == chat_id))
-                        .ok_or_else(|| invalid("Chat non trovata"))?;
-                    let revision = environment::revision(chat, device.as_ref());
-                    let cached = environment::database(&config, &key, "analysis-get", None)?;
-                    if analyses.lock().unwrap().contains(&key) {
-                        return Ok(cached);
-                    }
-                    if matches!(cached["status"].as_str(), Some("ready" | "failed")) && v["force"] != true {
-                        return Ok(cached);
-                    }
-                    if analyses.lock().unwrap().len() >= 2 {
-                        return Err(invalid("Analisi già in corso; riprova tra poco"));
-                    }
-                    let pending = environment::database(
-                        &config,
-                        &key,
-                        "analysis-save",
-                        Some(&json!({"status":"pending","revision":revision})),
-                    )?;
-                    analyses.lock().unwrap().insert(key.clone());
-                    let active = analyses.clone();
-                    let config = config.clone();
-                    let chat_id = chat_id.to_owned();
-                    let path = chat["path"]
-                        .as_str()
-                        .ok_or_else(|| invalid("Archivio chat mancante"))?
-                        .to_owned();
-                    thread::spawn(move || {
-                        let result = match environment::analyze(device.as_ref(), &path, &chat_id) {
-                            Ok(manifest) => {
-                                if device.is_none() {
-                                    if let Err(error) = crate::preparation::capture(&config,&chat_id,Path::new(&path),&manifest) { eprintln!("Oaclis: dimensioni sorgenti: {error}"); }
-                                }
-                                json!({"status":"ready","revision":revision,"manifest":manifest})
-                            }
-                            Err(error) => {
-                                json!({"status":"failed","revision":revision,"error":error.to_string()})
-                            }
-                        };
-                        if let Err(error) =
-                            environment::database(&config, &key, "analysis-save", Some(&result))
-                        {
-                            eprintln!("Oaclis: salvataggio analisi non riuscito: {error}");
-                        }
-                        active.lock().unwrap().remove(&key);
-                    });
-                    Ok(pending)
+                    let value=body(&mut request)?;
+                    crate::initial_inventory::request(&config,&codex,&analyses,checks_paused,value)
                 }
                 (&Method::Post, "/api/check") => {
                     if checks_paused { return Ok(connections.lock().unwrap().clone()); }
@@ -854,7 +477,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Post, "/api/run") => {
                     if paused { return Err(invalid("Sincronizzazioni in pausa")); }
                     let v = body(&mut request)?;
-                    start_transfer(v, &codex, &config, &job)
+                    crate::transfer_job::start(v, &codex, &config, &job)
                 }
                 _ => Err(invalid("Operazione non disponibile")),
             }
@@ -947,62 +570,5 @@ mod tests {
         value["target"] = json!("client");
         assert!(association(&value, &devices).is_err());
     }
-    #[test]
-    fn catalog_skips_links_and_uses_latest_title() {
-        let root = std::env::temp_dir().join(format!("oaclis-catalog-{}", std::process::id()));
-        fs::create_dir_all(root.join("sessions")).unwrap();
-        fs::write(
-            root.join("session_index.jsonl"),
-            "{\"id\":\"01a0568c-cf6c-7d62-bb6d-12c20b4d9b16\",\"thread_name\":\"Titolo\"}\n",
-        )
-        .unwrap();
-        fs::write(
-            root.join(
-                "sessions/rollout-2026-08-31T08-41-03-01a0568c-cf6c-7d62-bb6d-12c20b4d9b16.jsonl",
-            ),
-            "secret content",
-        )
-        .unwrap();
-        let entries = catalog(&root).unwrap();
-        assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0]["name"], "Titolo");
-        assert!(!entries[0].to_string().contains("secret content"));
-        std::os::unix::fs::symlink(
-            root.join("session_index.jsonl"),
-            root.join(
-                "sessions/rollout-2026-08-31T08-41-03-01a0568c-cf6c-7d62-bb6d-12c20b4d9b17.jsonl",
-            ),
-        )
-        .unwrap();
-        fs::write(root.join("session_index.jsonl"), "").unwrap();
-        let unindexed = catalog(&root).unwrap();
-        assert_eq!(unindexed.len(), 1);
-        assert_eq!(unindexed[0]["name"], "Senza titolo");
-        let script = r#"import sqlite3,sys
-with sqlite3.connect(sys.argv[1]) as db:
-    db.execute('CREATE TABLE threads(id TEXT,name TEXT,title TEXT,source TEXT)')
-    db.execute('INSERT INTO threads VALUES(?,?,?,?)',('01a0568c-cf6c-7d62-bb6d-12c20b4d9b16','Titolo Codex','Primo messaggio','cli'))
-    db.execute('INSERT INTO threads VALUES(?,?,?,?)',('01a0568c-cf6c-7d62-bb6d-12c20b4d9b18',None,'','{"subagent":{}}'))"#;
-        assert!(
-            std::process::Command::new("python3")
-                .args(["-c", script])
-                .arg(root.join("state_5.sqlite"))
-                .status()
-                .unwrap()
-                .success()
-        );
-        fs::write(
-            root.join(
-                "sessions/rollout-2026-08-31T08-41-03-01a0568c-cf6c-7d62-bb6d-12c20b4d9b18.jsonl",
-            ),
-            "internal",
-        )
-        .unwrap();
-        let titled = catalog(&root).unwrap();
-        assert_eq!(titled.len(), 1);
-        assert_eq!(titled[0]["name"], "Titolo Codex");
-        assert!(std::process::Command::new("python3").args(["-c","import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.execute(\"UPDATE threads SET name='Titolo aggiornato' WHERE source='cli'\"); db.commit()"]).arg(root.join("state_5.sqlite")).status().unwrap().success());
-        assert_eq!(catalog(&root).unwrap()[0]["name"], "Titolo aggiornato");
-        fs::remove_dir_all(root).unwrap();
-    }
+
 }

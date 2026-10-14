@@ -1,8 +1,8 @@
-// test_delete_ui.cjs v1.15.47
+// test_delete_ui.cjs v1.15.49
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const script = fs.readFileSync(require('node:path').join(__dirname, '../ui/app.js'), 'utf8');
+const script = fs.readFileSync(require('node:path').join(__dirname, '../ui/panels.js'), 'utf8');
 const fn = script.slice(script.indexOf('async function removePresentation('), script.indexOf('function positionContext('));
 async function test(kind, fails) {
   const connection = { entry: { id: 'chat', name: 'Chat' }, source: 'master', target: 'client' };

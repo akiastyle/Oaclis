@@ -14,9 +14,9 @@
 - Never delete or overwrite user files, chat archives, configuration helpers, or DB rows because they look obsolete.
 
 ## Backend Structure
-- Rust entrypoint: `src/main.rs`; browser adapter: `src/web.rs`.
+- Rust entrypoint: `src/main.rs`; HTTP adapter: `src/web.rs`. Catalog reads live in `src/catalog.rs`, initial/manual inventory detection in `src/initial_inventory.rs`, transfer execution in `src/transfer_job.rs`.
 - Keep chat handling, paths, transfers, rules, preparation, settings, and presentation in small independent modules.
-- Python helpers live in `tools/`; frontend assets live in `ui/`.
+- Python helpers live in `tools/`; frontend assets live in `ui/`. `ui/app.js` owns shared state, API helpers and startup/polling; `ui/map.js` owns map/links/library, `ui/panels.js` owns contextual panels, and `ui/console.js` owns chat consoles. These classic deferred scripts share controller globals; keep their loading order in `ui/index.html` and their Rust asset routes consistent.
 - `ui/badge-motion.js` and `ui/badge-motion.css` handle animation only. They do not decide or execute transfers, calculate progress, or access storage.
 - Public HTTP access stays routed through the Rust adapter. Do not expose internal helpers, credentials, or configuration files directly.
 - Prefer existing reliable Linux tools for transport: SSH and rsync. Oaclis owns scheduling; do not add cron jobs or systemd scheduling as a side effect.
@@ -67,6 +67,7 @@
 - `Z` increases by added lines plus removed lines. Replacing one line counts as two. Exclude only the version header from this comparison.
 - `X` increases by one for each new multiple of 1000 crossed by `Z`; do not reset `Z`. Example: `v1.25.990` plus 30 changed lines becomes `v2.25.1020`.
 - These are historical counters: never recount the current file to replace an existing version, and never decrease counters when code is deleted.
+- When extracting a module, inherit the original file's X/Y/Z baseline, then add the extracted functions and new file lines. The original file counts those functions and lines as removals. Do not restart an extracted module at v1.0.0.
 - Compare against the verified original before editing and update only versions of files actually changed. Never add or change cache parameters as part of header versioning.
 - Exclude empty placeholder files, third-party/vendor code, generated/minified assets, mail templates where present, and non-application documents or binary assets.
 - Adding these rules does not authorize a bulk rewrite of existing file headers. Initial project-wide alignment requires a separate user instruction.

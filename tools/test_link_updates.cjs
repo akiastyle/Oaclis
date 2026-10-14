@@ -1,8 +1,8 @@
-// test_link_updates.cjs v1.8.58
+// test_link_updates.cjs v1.8.60
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const text = fs.readFileSync(require('node:path').join(__dirname, '../ui/app.js'), 'utf8');
+const text = fs.readFileSync(require('node:path').join(__dirname, '../ui/map.js'), 'utf8');
 const fn = text.slice(text.indexOf('function renderLink('), text.indexOf('// Split the original cubic'));
 let layers = [], draws = 0;
 const points = { master: 0, a: 100, b: 200 };

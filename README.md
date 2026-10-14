@@ -548,3 +548,19 @@ le prove dell'ultimo confronto e l'eventuale richiesta di Play. La generazione
 impedisce che un lavoro vecchio ricrei un collegamento cancellato e ricreato.
 Il confronto risiede in `src/link_flow.rs`; `src/automation.rs` lo pianifica;
 `tools/chat_match.py` legge gli archivi; il motore SSH/rsync esegue i trasferimenti.
+
+## Moduli del codice
+
+- `src/web.rs`: route HTTP, autenticazione locale e asset dell'interfaccia.
+- `src/catalog.rs`: lettura dei cataloghi locali e remoti.
+- `src/initial_inventory.rs`: rilevamento iniziale e refresh manuale.
+- `src/transfer_job.rs`: esecuzione dei trasferimenti autorizzati.
+- `ui/app.js`: stato condiviso, API, impostazioni generali, avvio e polling.
+- `ui/map.js`: dispositivi, collegamenti, badge e lista delle chat.
+- `ui/panels.js`: pannelli contestuali, personalizzazione e dettagli dei moduli.
+- `ui/console.js`: scelta del dispositivo e console delle chat.
+
+I moduli frontend usano gli script differiti già previsti dall'applicazione, senza
+bundler o nuove dipendenze. Le funzioni condividono lo stato del controller:
+`panels.js`, `map.js` e `console.js` definiscono i componenti prima che `app.js`
+registri gli eventi e avvii il polling. Il caricamento è dichiarato in `index.html`.

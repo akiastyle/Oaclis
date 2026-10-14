@@ -1,10 +1,10 @@
-// test_link_play.cjs v1.1.30
+// test_link_play.cjs v1.1.32
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { chromium } = require('/root/google-images-local/node_modules/playwright');
 (async () => {
-  const app = fs.readFileSync(path.join(__dirname, '../ui/app.js'), 'utf8');
+  const app = fs.readFileSync(path.join(__dirname, '../ui/map.js'), 'utf8');
   const snippet = app.slice(app.indexOf('  const play = marker.querySelector(".link-play")'), app.indexOf('  main.querySelector(".chat-badge").style.color'));
   const browser = await chromium.launch({ headless: true, executablePath: '/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome', args: ['--no-sandbox'] });
   try {
