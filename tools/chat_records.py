@@ -1,4 +1,4 @@
-# chat_records.py v1.10.112
+# chat_records.py v1.10.114
 """One chat record: presentation, visibility, switches and source-owned measurements."""
 import hashlib
 import json
@@ -89,7 +89,7 @@ def unified_ensure(db, config):
         for chat, hidden, scopes in db.execute('SELECT id,hidden,scopes FROM chat_settings').fetchall():
             set_switches(db, chat, json.loads(scopes) if scopes else {})
             if hidden:
-                value = chat_object(db, chat); value['removed'] = 1
+                value = chat_object(db, chat); value.pop('removed', None)
                 save_chat_object(db, chat, value)
                 db.execute('UPDATE appearance SET hidden=1 WHERE key=?', ('chat:' + chat,))
     if 'chat_visibility' in tables:

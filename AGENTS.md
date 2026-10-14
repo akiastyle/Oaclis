@@ -71,3 +71,15 @@
 - Compare against the verified original before editing and update only versions of files actually changed. Never add or change cache parameters as part of header versioning.
 - Exclude empty placeholder files, third-party/vendor code, generated/minified assets, mail templates where present, and non-application documents or binary assets.
 - Adding these rules does not authorize a bulk rewrite of existing file headers. Initial project-wide alignment requires a separate user instruction.
+
+## General Application Version
+- Calculate the displayed application version directly from maintained source headers at compilation, without a fixed baseline or offset.
+- X is the arithmetic mean of all included X values; Y is the mean of only positive Y values; Z is the mean of all included Z values, including zeros.
+- Round each mean to the nearest integer, with halves rounded up. Display vX.Y.Z in small absolute-positioned text at the bottom right of the page.
+- build.rs includes versioned source files in src, ui, tools, scripts, tests, and the root bootstrap/build scripts. File Versioning exclusions still apply; documents and binary assets are excluded.
+- This calculated display does not change Cargo package versions, individual file counters, or asset cache URLs.
+
+## Presentation Deletion
+- Deleting a connection removes only that chat/device association; never alter chat visibility, appearance, inventories, or user files.
+- Removing a chat from the list sets hidden and removes its associations, while retaining its label, custom icon, color, analysis and inventories. Do not use a removed flag for chat presentation.
+- Metadata replication must not clear chat appearance when an old deletion tombstone is received.

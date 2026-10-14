@@ -1,4 +1,4 @@
-# test_presentation_settings.py v1.2.50
+# test_presentation_settings.py v1.4.60
 import json
 from pathlib import Path
 import subprocess
@@ -9,7 +9,7 @@ STORE = Path(__file__).with_name('appearance_store.py')
 
 
 class PresentationSettings(unittest.TestCase):
-    def test_scopes_cascade_and_hide_removes_only_chat_metadata(self):
+    def test_scopes_cascade_and_hide_preserves_chat_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             db = Path(directory) / 'appearance.sqlite'
             original = Path(directory) / 'chat.jsonl'; original.write_text('unchanged')
@@ -38,10 +38,12 @@ class PresentationSettings(unittest.TestCase):
             result = call('chat-hide', 'a')
             self.assertTrue(result['preferences']['a']['hidden'])
             self.assertEqual([link['entry']['id'] for link in result['links']], ['b'])
-            self.assertEqual(list(call('load')), ['chat:b'])
+            self.assertEqual(call('load')['chat:a']['label'], 'A')
+            self.assertEqual(call('analysis-get', 'master:a')['status'], 'ready')
             self.assertEqual(original.read_text(), 'unchanged')
-            with self.assertRaises(subprocess.CalledProcessError):
-                call('links-save', 'aone', link)
+            call('chat-visibility', 'a', {'hidden': False})
+            call('links-save', 'aone', link)
+            call('links-delete', 'aone')
             result = call('device-forget', 'two')
             self.assertEqual(result['links'], [])
             self.assertEqual(original.read_text(), 'unchanged')

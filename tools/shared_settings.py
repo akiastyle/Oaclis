@@ -1,4 +1,4 @@
-# shared_settings.py v1.11.325
+# shared_settings.py v1.11.335
 """Replicate presentation settings over mutually approved SSH; no chat/auth files."""
 import fcntl
 import hashlib
@@ -134,8 +134,7 @@ class Store:
                 snapshot[key] = value
         for key, hidden, raw in db.execute("SELECT key,hidden,sync FROM appearance WHERE key LIKE 'chat:%'"):
             chat = key[5:]; value = json.loads(raw)
-            if value.get('removed'): snapshot.pop(key, None)
-            snapshot['preference:' + chat] = {'hidden':bool(value.get('removed')), 'list_hidden':bool(hidden), 'scopes':{name:bool(value.get(name,{}).get('enabled',1)) for name in MODULES}}
+            snapshot['preference:' + chat] = {'hidden':False, 'list_hidden':bool(hidden), 'scopes':{name:bool(value.get(name,{}).get('enabled',1)) for name in MODULES}}
             sources = {source for name in MODULES for source in value.get(name,{}).get('sources',{})}
             for source in sources:
                 snapshot['chatdata:' + chat + ':' + source] = {name:value[name]['sources'][source] for name in MODULES if source in value.get(name,{}).get('sources',{})}
@@ -211,9 +210,7 @@ class Store:
                         device = devices.get(local, {'id': local, 'ssh_alias': 'oaclis-unconfigured-' + local})
                         device['name'] = value['name']; devices[local] = device
             elif kind == 'chat':
-                if value is None:
-                    db.execute("UPDATE appearance SET value='{}' WHERE key=?", (key,))
-                else:
+                if value is not None:
                     db.execute('INSERT INTO appearance(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (key, json.dumps(dict({'label': '', 'icon': '', 'color': ''}, **value))))
             elif kind == 'preference':
                 current = chat_object(db, identifier_)
@@ -222,8 +219,7 @@ class Store:
                     set_switches(db, identifier_, dict.fromkeys(MODULES, True))
                     hidden = False
                 else:
-                    if value.get('hidden'): current['removed'] = 1
-                    else: current.pop('removed', None)
+                    current.pop('removed', None)
                     save_chat_object(db, identifier_, current)
                     if 'scopes' in value: set_switches(db, identifier_, value['scopes'])
                     hidden = value.get('hidden', False) or value.get('list_hidden', False)

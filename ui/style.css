@@ -1,4 +1,4 @@
-/* style.css v2.0.1148 */
+/* style.css v2.0.1158 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1138,4 +1138,14 @@ select {
   --glass-opacity: var(--glass-device-opacity);
   --glass-blur: var(--glass-device-blur);
   --surface-enter-opacity: 1;
+}
+
+.app-version {
+  position: absolute;
+  right: var(--space-12);
+  bottom: var(--space-8);
+  z-index: var(--z-toolbar);
+  font-size: var(--font-caption);
+  color: var(--muted);
+  pointer-events: none;
 }

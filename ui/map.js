@@ -1,4 +1,4 @@
-// map.js v3.114.2252
+// map.js v3.114.2254
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -147,7 +147,7 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
   edit.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
   edit.onclick = guard(async () => {
     const cached = connection.source === sourceId ? visibleChats : connection.source === "master" ? data.chats : [];
-    const panel = editChat(cached.find(c => c.id === connection.entry.id) || connection.entry, edit, connection.source);
+    const panel = editChat(cached.find(c => c.id === connection.entry.id) || connection.entry, edit, connection.source, connection);
     try {
       const result = await api("catalog", { device_id: connection.source });
       const fresh = result.chats.find(c => c.id === connection.entry.id);

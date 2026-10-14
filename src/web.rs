@@ -1,4 +1,4 @@
-// web.rs v2.25.1547
+// web.rs v2.25.1549
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -208,7 +208,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 "/assets/oaclis-crown.svg" => Some((include_str!("../ui/assets/oaclis-crown.svg").into(), "image/svg+xml")),
                 "/assets/oaclis-whale.svg" => Some((include_str!("../ui/assets/oaclis-whale.svg").into(), "image/svg+xml")),
                 "/" => Some((
-                    include_str!("../ui/index.html").replace("__TOKEN__", &token).replace("__BRAND_ICON__", brand_icon),
+                    include_str!("../ui/index.html").replace("__TOKEN__", &token).replace("__BRAND_ICON__", brand_icon).replace("__APP_VERSION__", env!("OACLIS_APP_VERSION")),
                     "text/html; charset=utf-8",
                 )),
                 "/style.css" => Some((

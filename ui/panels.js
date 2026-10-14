@@ -1,4 +1,4 @@
-// panels.js v3.128.2241
+// panels.js v3.129.2271
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -258,8 +258,27 @@ async function removePresentation(kind, id) {
     delete positions[id]; savePositions();
     if (sourceId === id) closePanel();
   }
-  delete data.appearance?.[(kind === "chat" ? "chat:" : "device:") + id];
+  if (kind === "device") delete data.appearance?.["device:" + id];
   renderMap(); renderLibrary();
+}
+
+async function removeConnection(connection, panel) {
+  if (removingPresentation) return;
+  if (!window.confirm('Eliminare questo collegamento?\n\nLa chat resterà nella lista. Le copie Codex, i file e le app resteranno intatti.')) return;
+  removingPresentation = true;
+  const matches = item => item.entry.id === connection.entry.id && item.source === connection.source && item.target === connection.target;
+  const removed = chatLinks.filter(matches);
+  chatLinks = chatLinks.filter(item => !matches(item));
+  renderLink(true);
+  try {
+    await saveLinks;
+    await api("links/delete", connection);
+    closeChatEditor(panel);
+  } catch (error) {
+    for (const item of removed) if (!chatLinks.some(matches)) chatLinks.push(item);
+    renderLink(true);
+    throw error;
+  } finally { removingPresentation = false; }
 }
 
 function positionContext(popover, anchor) {
@@ -392,8 +411,9 @@ function closeChatEditor(popover = document.activeElement?.closest(".chat-editor
   if (anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
 
-function editChat(entry, anchor, origin = sourceId || "master") {
-  const existing = [...document.querySelectorAll(".chat-editor")].find(panel => panel.dataset.objectId === entry.id && panel.dataset.sourceDevice === origin);
+function editChat(entry, anchor, origin = sourceId || "master", connection = null) {
+  const connectionKey = connection ? JSON.stringify([connection.source, connection.target]) : "";
+  const existing = [...document.querySelectorAll(".chat-editor")].find(panel => panel.dataset.objectId === entry.id && panel.dataset.sourceDevice === origin && panel.dataset.connectionKey === connectionKey);
   if (existing) {
     existing.opener = anchor; bindPanelReference(existing);
     existing.querySelector('[name="label"]').focus();
@@ -402,7 +422,7 @@ function editChat(entry, anchor, origin = sourceId || "master") {
   const value = data.appearance?.["chat:" + entry.id] || {};
   const scopes = data.chat_settings?.[entry.id]?.scopes || chatLinks.find(v => v.entry.id === entry.id)?.scopes || {};
   const panel = document.createElement("div");
-  panel.id = "chat-editor-" + crypto.randomUUID(); panel.classList.add("chat-editor"); panel.opener = anchor; panel.dataset.objectId = entry.id; panel.dataset.sourceDevice = origin;
+  panel.id = "chat-editor-" + crypto.randomUUID(); panel.classList.add("chat-editor"); panel.opener = anchor; panel.dataset.objectId = entry.id; panel.dataset.sourceDevice = origin; panel.dataset.connectionKey = connectionKey;
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Personalizza chat");
   panel.innerHTML = '<button type="button" class="icon-button chat-visibility" aria-label="Nascondi chat"></button><button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
@@ -456,7 +476,7 @@ function editChat(entry, anchor, origin = sourceId || "master") {
     closeChatEditor(panel); renderLibrary(); renderLink(true);
   };
   panel.querySelector('form').onsubmit = guard(async event => { event.preventDefault(); await save({ label: event.target.elements.label.value, ...readAppearance() }); });
-  panel.querySelector('.delete-presentation').onclick = guard(() => removePresentation("chat", entry.id));
+  panel.querySelector('.delete-presentation').onclick = guard(() => connection ? removeConnection(connection, panel) : removePresentation("chat", entry.id));
   panel.querySelectorAll('[data-scope]').forEach(button => button.onclick = guard(async () => {
     const previous = button.getAttribute('aria-pressed'); button.setAttribute('aria-pressed', String(previous !== 'true'));
     panel.querySelectorAll('[data-scope]').forEach(b => b.disabled = true);

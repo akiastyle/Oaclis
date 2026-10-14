@@ -1,4 +1,4 @@
-# appearance_store.py v1.2.159
+# appearance_store.py v1.2.168
 """Oaclis storage adapter; chat metadata lives in the appearance record."""
 import json
 import os
@@ -40,9 +40,6 @@ if operation in READS:
             if operation == 'load':
                 rows = values(db,'appearance')
                 columns = {row[1] for row in db.execute('PRAGMA table_info(appearance)')}
-                if 'sync' in columns:
-                    removed = {key for key,raw in db.execute('SELECT key,sync FROM appearance') if json.loads(raw).get('removed')}
-                    rows = {key:value for key,value in rows.items() if key not in removed}
                 print(json.dumps(rows));sys.exit(0)
             data = read_data(db)
         if operation in ('status-read','preferences-get'):
@@ -93,8 +90,7 @@ with sqlite3.connect(path,timeout=10) as db:
             else:
                 hidden = True if operation=='chat-hide' else json.load(sys.stdin)['hidden']
                 if type(hidden)is not bool: raise ValueError('Visibilità non valida')
-                if operation=='chat-hide': value['removed']=1
-                elif not hidden: value.pop('removed',None)
+                value.pop('removed',None)
                 save_chat_object(db,key,value)
                 db.execute('UPDATE appearance SET hidden=? WHERE key=?',(int(hidden),'chat:'+key))
         links = values(db,'chat_links')
@@ -105,7 +101,7 @@ with sqlite3.connect(path,timeout=10) as db:
             elif operation=='chat-scopes':
                 link['scopes']=scopes;db.execute('UPDATE chat_links SET value=? WHERE key=?',(json.dumps(link),link_key))
         if operation=='device-forget': db.execute('DELETE FROM appearance WHERE key=?',('device:'+key,))
-        if operation in ('chat-hide','device-forget'):
+        if operation == 'device-forget':
             for analysis_key in values(db,'analysis'):
                 source,chat=analysis_key.split(':',1)
                 if chat==key if operation=='chat-hide' else source==key: db.execute('DELETE FROM analysis WHERE key=?',(analysis_key,))
@@ -129,7 +125,6 @@ with sqlite3.connect(path,timeout=10) as db:
                 if any(existing.get(name)!=value.get(name) for name in ('source','target','operation')):
                     raise ValueError('Elimina e ricrea il collegamento per cambiarne la direzione')
                 if 'flow' in existing:value['flow']=existing['flow']
-            if record.get('removed') and not db.execute('SELECT 1 FROM chat_links WHERE key=?',(key,)).fetchone(): raise ValueError('Chat rimossa da Oaclis')
             preference=unified_preferences(db).get(chat)
             if preference:value['scopes']=preference['scopes']
             if 'flow' in value:value['transfer_pending']=not bool(value['flow'].get('initialized'))
