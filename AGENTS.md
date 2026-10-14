@@ -4,7 +4,7 @@
 - Local project root: `/root/Oaclis`.
 - Oaclis is the active project unless the user explicitly says otherwise.
 - Work one agreed step at a time. A request to discuss or inspect does not authorize implementation, installation, deployment, or synchronization.
-- The UI currently runs with `OACLIS_PAUSED=1`. Keep synchronization and automatic checks paused until the user explicitly asks to resume them.
+- The UI currently runs with `OACLIS_PAUSED=1`. Keep actual chat/file/app transfers and automatic checks paused until the user explicitly asks to resume them. Shared presentation, positions, links and saved source inventories continue replicating independently of that pause.
 
 ## Core Rule
 - Verify before changing.
