@@ -1,4 +1,4 @@
-// app.js v2.89.1626
+// app.js v2.89.1630
 "use strict";
 const $ = (s) => document.querySelector(s);
 const token = $('meta[name="oaclis-token"]').content;
@@ -742,7 +742,7 @@ function updateBadgeMotion(marker, connection) {
   const matches = !current.device_id || current.device_id === connection.target;
   const modules = matches ? current.module_progress || {} : {};
   const changed = Object.values(modules).some(module => module.changed === true);
-  const checking = data.app_checks?.[key]?.status === 'pending' || !data.paused && data.analyses?.[key]?.status === 'pending';
+  const checking = data.app_checks?.[key]?.status === 'pending' || !(data.checks_paused ?? data.paused) && data.analyses?.[key]?.status === 'pending';
   const unfinished = Object.values(modules).some(module => module.changed === true && module.progress < 1);
   const remote = connection.source === 'master' ? connection.target : connection.source;
   const paused = changed && unfinished && (data.paused || current.status === 'paused' || current.status === 'failed' || data.connections[remote] === 'offline');
@@ -1472,6 +1472,8 @@ async function poll() {
   data.connections = next.connections;
   data.job = next.job;
   data.paused = next.paused;
+  data.checks_paused = next.checks_paused;
+  data.settings_paused = next.settings_paused;
   data.analyses = next.analyses || {};
   data.app_checks = next.app_checks || {};
   data.transfers = next.transfers || {};

@@ -1,4 +1,4 @@
-// web.rs v1.20.994
+// web.rs v2.20.1017
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -437,7 +437,10 @@ fn serve_requests(server: &Server, handler: impl Fn(Request) + Sync) {
 }
 
 pub fn serve(home: PathBuf) -> io::Result<()> {
-    let paused = std::env::var("OACLIS_PAUSED").as_deref() == Ok("1");
+    let legacy_pause = std::env::var("OACLIS_PAUSED").as_deref() == Ok("1");
+    let paused = std::env::var("OACLIS_PAUSE_TRANSFERS").map_or(legacy_pause, |value| value == "1");
+    let checks_paused = std::env::var("OACLIS_PAUSE_CHECKS").map_or(legacy_pause, |value| value == "1");
+    let settings_paused = std::env::var("OACLIS_PAUSE_SETTINGS").as_deref() == Ok("1");
     let config = home.join(".config/oaclis");
     fs::create_dir_all(&config)?;
     environment::database(&config, "", "migrate", None)?;
@@ -471,9 +474,11 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     let job = Arc::new(Mutex::new(json!({"status":"idle"})));
     let connections = Arc::new(Mutex::new(json!({})));
     let analyses = Arc::new(Mutex::new(std::collections::HashSet::<String>::new()));
-    crate::shared_settings::start(home.clone());
-    if !paused {
+    if !settings_paused { crate::shared_settings::start(home.clone()); }
+    if !checks_paused {
         background_analysis(codex.clone(), config.clone(), analyses.clone());
+    }
+    if !paused {
         crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone());
     }
     println!("Oaclis UI: http://localhost:23232");
@@ -567,11 +572,11 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     crate::terminal::request(device.as_ref(), &v)
                 }
                 (&Method::Get, "/api/state") => Ok(
-                    json!({"paused":paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
+                    json!({"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
                 ),
                 (&Method::Get, "/api/status") => {
                     let snapshot = environment::database(&config,"","status-read",None)?;
-                    Ok(json!({"paused":paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
+                    Ok(json!({"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
                         "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":snapshot["links"],"chat_settings":snapshot["preferences"],"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}))
                 }
                 (&Method::Post, "/api/link-position") => {
@@ -639,7 +644,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 }
                 (&Method::Post, "/api/app-check") => {
                     let value=body(&mut request)?;
-                    if paused && value["force"] != true {
+                    if checks_paused && value["force"] != true {
                         let key = environment::key(value["source_device_id"].as_str().unwrap_or("master"), value["chat_id"].as_str().ok_or_else(||invalid("Chat richiesta"))?)?;
                         return environment::database(&config,&key,"inventory-get",None);
                     }
@@ -686,7 +691,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         )
                     } else {
                         let record = environment::database(&config, &key, "analysis-get", None)?;
-                        if !paused && record["status"] == "pending" && !analyses.lock().unwrap().contains(&key)
+                        if !checks_paused && record["status"] == "pending" && !analyses.lock().unwrap().contains(&key)
                         {
                             environment::database(
                                 &config,
@@ -708,7 +713,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         .as_str()
                         .ok_or_else(|| invalid("Chat richiesta"))?;
                     let key = environment::key(source, chat_id)?;
-                    if paused && v["force"] != true { return environment::database(&config,&key,"analysis-get",None); }
+                    if checks_paused && v["force"] != true { return environment::database(&config,&key,"analysis-get",None); }
                     let device = if source == "master" {
                         None
                     } else {
@@ -775,7 +780,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     Ok(pending)
                 }
                 (&Method::Post, "/api/check") => {
-                    if paused { return Ok(connections.lock().unwrap().clone()); }
+                    if checks_paused { return Ok(connections.lock().unwrap().clone()); }
                     for device in devices::load(config.join("devices.json"))? {
                         let mut lock = connections.lock().unwrap();
                         if lock[&device.id] == "checking" {

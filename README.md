@@ -486,3 +486,25 @@ Specifiche: [PROJECT.md](PROJECT.md). Funzioni UI: [docs/UI.md](docs/UI.md). Lic
 I dispositivi autorizzati reciprocamente scambiano tramite SSH nomi, colori e icone di dispositivi/chat, collegamenti, categorie da sincronizzare e posizioni della mappa. Il dispositivo ha un’identità stabile: KDell mantiene lo stesso nome anche nella propria UI. Il master fornisce le impostazioni iniziali; successivamente le modifiche possono essere effettuate da qualsiasi dispositivo. Le modifiche offline sono persistenti e convergono alla riconnessione. Due modifiche concorrenti allo stesso valore vengono risolte in modo deterministico dalla revisione, con l’identità del dispositivo come spareggio. Le eliminazioni conservano una revisione per evitare ripristini da copie vecchie.
 
 Lo stato condiviso è in `~/.config/oaclis/shared-settings.json`; le posizioni dei device sono in `positions.json` e gli spostamenti delle icone dei collegamenti in `link-positions.json`. Le posizioni ricevute usano la transizione UI condivisa, rispettando la preferenza di movimento ridotto. Le credenziali e gli alias SSH, l’autenticazione Codex e le analisi locali non vengono copiati. Ricevere un collegamento non avvia un secondo trasferimento di chat/file sul client. Il coordinamento continua fra dispositivi autorizzati anche se il master è spento. Le coordinate sono condivise; una finestra più piccola limita la visualizzazione ai propri bordi. Al primo caricamento della UI master, il layout precedentemente salvato nel browser viene importato nel file persistente. I temi della singola UI restano locali.
+
+## Flussi indipendenti
+
+Oaclis separa la replica delle impostazioni, i check automatici e i trasferimenti reali.
+Ogni flusso ha un controllo di pausa distinto, applicato all'avvio:
+
+| Variabile | Con valore `1` |
+| --- | --- |
+| `OACLIS_PAUSE_SETTINGS` | Ferma la replica di nomi, icone, colori, posizioni, collegamenti e inventari salvati. |
+| `OACLIS_PAUSE_CHECKS` | Ferma i check automatici. Il refresh manuale del singolo blocco resta disponibile. |
+| `OACLIS_PAUSE_TRANSFERS` | Ferma i trasferimenti reali di chat, percorsi e app. |
+
+Per allineare solo le impostazioni, lasciando fermi check automatici e trasferimenti:
+
+```sh
+OACLIS_PAUSE_SETTINGS=0 OACLIS_PAUSE_CHECKS=1 OACLIS_PAUSE_TRANSFERS=1 oaclis serve
+```
+
+Le impostazioni viaggiano tramite il collegamento SSH già autorizzato, senza avviare
+trasferimenti dei contenuti. Per compatibilità, `OACLIS_PAUSED=1` resta il valore
+predefinito di pausa per check e trasferimenti quando le rispettive variabili non
+sono specificate; non sospende la replica delle impostazioni.
