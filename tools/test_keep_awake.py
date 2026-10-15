@@ -1,4 +1,4 @@
-# test_keep_awake.py v1.4.75
+# test_keep_awake.py v1.4.85
 import contextlib
 import io
 from pathlib import Path
@@ -16,7 +16,7 @@ class KeepAwake(unittest.TestCase):
                 child.stderr.read.return_value = b'No system sleep inhibitor'
                 child.stdin = None
                 output = io.StringIO()
-                with patch('pathlib.Path.exists', return_value=False), patch('platform.system', return_value='Linux'), patch('platform.release', return_value='native'), patch('shutil.which', return_value='/usr/bin/systemd-inhibit'), patch('subprocess.Popen', return_value=child), patch('time.sleep'), patch('select.select', return_value=([True], [], [])), patch('sys.stdin', io.StringIO('')), contextlib.redirect_stdout(output):
+                with patch('pathlib.Path.exists', return_value=False), patch('platform.system', return_value='Linux'), patch('platform.release', return_value='native'), patch('shutil.which', return_value='/usr/bin/systemd-inhibit'), patch('subprocess.Popen', return_value=child) as launch, patch('time.sleep'), patch('select.select', return_value=([True], [], [])), patch('sys.stdin', io.StringIO('')), contextlib.redirect_stdout(output):
                     if failure:
                         with self.assertRaises(SystemExit):
                             runpy.run_path(str(Path(__file__).with_name('keep_awake.py')))
@@ -27,8 +27,12 @@ class KeepAwake(unittest.TestCase):
                     self.assertIn('No system sleep inhibitor', output.getvalue())
                 else:
                     self.assertIn('"active": true', output.getvalue())
-                    child.terminate.assert_called_once()
-                    child.wait.assert_called_once()
+                    self.assertEqual(child.terminate.call_count,2)
+                    self.assertEqual(child.wait.call_count,2)
+                    arguments=[call.args[0] for call in launch.call_args_list]
+                    self.assertTrue(any('--what=sleep' in args for args in arguments))
+                    self.assertTrue(any('--what=idle' in args for args in arguments))
+                    self.assertFalse(any('--what=sleep:idle' in args for args in arguments))
 
     def test_windows_preparation_and_hold_share_the_installed_helper(self):
         child=Mock();child.poll.return_value=None;child.stdout.readline.return_value=b'ready\r\n'

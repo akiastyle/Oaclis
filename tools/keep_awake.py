@@ -1,4 +1,4 @@
-# keep_awake.py v1.3.156
+# keep_awake.py v1.3.187
 """Keep the host awake until the owning Oaclis process closes stdin."""
 import json
 import base64
@@ -85,6 +85,7 @@ if '--prepare' in sys.argv:
     sys.exit(0)
 
 child = None
+idle_child = None
 try:
     if Path("/.dockerenv").exists() or Path("/run/.containerenv").exists():
         raise RuntimeError("Da un container non è possibile impedire lo standby del computer host")
@@ -102,12 +103,15 @@ try:
     elif system == 'Linux':
         if not shutil.which('systemd-inhibit'):
             raise RuntimeError('Blocco standby non disponibile: manca systemd-inhibit')
-        child = subprocess.Popen(['systemd-inhibit', '--what=sleep:idle', '--mode=block', '--who=Oaclis', '--why=Oaclis sempre attivo', 'sleep', 'infinity'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        # Separate requests avoid the unrelated lid-switch authorization used for combinations by systemd 255.
+        child = subprocess.Popen(['systemd-inhibit', '--what=sleep', '--mode=block', '--who=Oaclis', '--why=Oaclis sempre attivo', 'sleep', 'infinity'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+        idle_child = subprocess.Popen(['systemd-inhibit', '--what=idle', '--mode=block', '--who=Oaclis', '--why=Oaclis sempre attivo', 'sleep', 'infinity'], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     else:
         raise RuntimeError('Blocco standby non supportato in questo ambiente')
     time.sleep(0.25)
-    if child.poll() is not None:
-        detail = child.stderr.read().decode(errors='replace').strip()
+    failed = next((process for process in (child, idle_child) if process is not None and process.poll() is not None), None)
+    if failed is not None:
+        detail = failed.stderr.read().decode(errors='replace').strip()
         if system == 'Linux' and 'Access denied' in detail:
             import pwd
             user = pwd.getpwuid(os.geteuid()).pw_name
@@ -115,19 +119,20 @@ try:
         raise RuntimeError(detail or 'Blocco standby terminato')
     print(json.dumps({'active': True}), flush=True)
     while not select.select([sys.stdin], [], [], 1)[0]:
-        if child.poll() is not None:
+        if any(process is not None and process.poll() is not None for process in (child, idle_child)):
             raise RuntimeError('Il sistema ha interrotto il blocco standby')
     sys.stdin.read()
 except Exception as error:
     print(json.dumps({'active': False, 'error': str(error)}), flush=True)
     sys.exit(1)
 finally:
-    if child is not None and child.poll() is None:
-        if child.stdin:
-            child.stdin.close()
-        child.terminate()
-        try:
-            child.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            child.kill()
-            child.wait()
+    for process in (child, idle_child):
+        if process is not None and process.poll() is None:
+            if process.stdin:
+                process.stdin.close()
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
