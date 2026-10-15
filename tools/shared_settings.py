@@ -1,4 +1,4 @@
-# shared_settings.py v1.12.384
+# shared_settings.py v1.12.389
 """Replicate presentation settings over mutually approved SSH; no chat/auth files."""
 import fcntl
 import hashlib
@@ -28,6 +28,11 @@ def atomic(path, value):
     from tempfile import NamedTemporaryFile
     if path.is_symlink():
         raise ValueError('Configurazione tramite link non consentita')
+    try:
+        if path.is_file() and read(path, None) == value:
+            return
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        pass
     with NamedTemporaryFile('w', dir=path.parent, delete=False) as file:
         json.dump(value, file, ensure_ascii=False)
         file.flush(); os.fsync(file.fileno())

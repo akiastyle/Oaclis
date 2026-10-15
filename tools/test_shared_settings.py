@@ -1,4 +1,4 @@
-# test_shared_settings.py v1.10.150
+# test_shared_settings.py v1.11.169
 """Settings replication with isolated homes; never use real SSH or Codex."""
 import importlib.util
 import json
@@ -34,6 +34,25 @@ class SharedSettingsTests(unittest.TestCase):
             db.execute('INSERT OR REPLACE INTO chat_links VALUES(?,?)', ('chat-one:master:peer-1',json.dumps(link)))
         shared.atomic(root.config / 'positions.json', {'master':{'x':200,'y':100},'peer-1':{'x':400,'y':500}})
         shared.atomic(root.config / 'link-positions.json', {'chat-one:master:peer-1':{'x':-60,'y':20}})
+
+    def test_unchanged_metadata_avoids_rewriting_files_and_chat_payloads(self):
+        from unittest.mock import patch
+        store = self.stores[0]
+        path = store.config / 'unchanged.json'
+        with patch.object(shared.os,'fsync',wraps=shared.os.fsync) as flush:
+            shared.atomic(path, {'value':1})
+            shared.atomic(path, {'value':1})
+            self.assertEqual(flush.call_count,1)
+        path.write_text('{invalid')
+        shared.atomic(path, {'value':2})
+        self.assertEqual(shared.read(path, None), {'value':2})
+        with sqlite3.connect(store.config / 'appearance.sqlite') as db:
+            shared.save_chat_object(db,'fixture',{'chat':{'enabled':1}})
+            changes = db.total_changes
+            shared.save_chat_object(db,'fixture',{'chat':{'enabled':1}})
+            self.assertEqual(db.total_changes,changes)
+            shared.save_chat_object(db,'fixture',{'chat':{'enabled':0}})
+            self.assertEqual(db.total_changes,changes+1)
 
     def converge(self):
         for _ in range(2):

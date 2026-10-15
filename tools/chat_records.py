@@ -1,4 +1,4 @@
-# chat_records.py v1.10.122
+# chat_records.py v1.10.124
 """One chat record: presentation, visibility, switches and source-owned measurements."""
 import hashlib
 import json
@@ -29,7 +29,7 @@ def chat_object(db, chat):
     return json.loads(row[0]) if row and row[0] else {}
 
 def save_chat_object(db, chat, value):
-    db.execute("INSERT INTO appearance(key,value,sync) VALUES (?,'{}',?) ON CONFLICT(key) DO UPDATE SET sync=excluded.sync", ('chat:' + chat, json.dumps(value)))
+    db.execute("INSERT INTO appearance(key,value,sync) VALUES (?,'{}',?) ON CONFLICT(key) DO UPDATE SET sync=excluded.sync WHERE appearance.sync IS NOT excluded.sync", ('chat:' + chat, json.dumps(value)))
 
 def set_switches(db, chat, scopes):
     value = chat_object(db, chat)

@@ -1,4 +1,4 @@
-# test_api_reads.py v1.4.61
+# test_api_reads.py v1.5.79
 """Status reads must work alongside writers without changing the database."""
 import json
 import pathlib
@@ -57,6 +57,24 @@ class ApiReads(unittest.TestCase):
             self.assertEqual(read(path,'links-get'),json.loads(result.stdout))
             with sqlite3.connect(path) as db:
                 self.assertEqual(db.execute("SELECT sync FROM appearance WHERE key='chat:unrelated'").fetchone()[0], 'unrelated inventory must not be decoded')
+
+    def test_delete_commits_while_an_existing_reader_keeps_its_snapshot(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "appearance.sqlite"
+            read(path, 'migrate')
+            link = {'entry':{'id':'fixture'},'source':'master','target':'peer','operation':'sync'}
+            result = subprocess.run(['python3',str(SCRIPT),str(path),'links-save','fixture'],input=json.dumps(link),text=True,capture_output=True,timeout=3)
+            self.assertEqual(result.returncode,0,result.stderr)
+            with sqlite3.connect(path) as reader:
+                self.assertEqual(reader.execute('PRAGMA journal_mode').fetchone()[0],'wal')
+                reader.execute('BEGIN')
+                self.assertEqual(reader.execute('SELECT COUNT(*) FROM chat_links').fetchone()[0],1)
+                result = subprocess.run(['python3',str(SCRIPT),str(path),'links-delete','fixture'],text=True,capture_output=True,timeout=3)
+                self.assertEqual(result.returncode,0,result.stderr)
+                self.assertEqual(json.loads(result.stdout),[])
+                self.assertEqual(reader.execute('SELECT COUNT(*) FROM chat_links').fetchone()[0],1)
+                reader.rollback()
+                self.assertEqual(reader.execute('SELECT COUNT(*) FROM chat_links').fetchone()[0],0)
 
 if __name__ == "__main__":
     unittest.main()

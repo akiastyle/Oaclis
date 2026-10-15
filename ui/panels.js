@@ -1,4 +1,4 @@
-// panels.js v3.130.2293
+// panels.js v3.130.2297
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -256,6 +256,7 @@ async function removeConnection(connection, panel) {
   if (removingPresentation) return;
   if (!window.confirm('Eliminare questo collegamento?\n\nLa chat resterà nella lista. Le copie Codex, i file e le app resteranno intatti.')) return;
   removingPresentation = true;
+  closeChatEditor(panel);
   const matches = item => item.entry.id === connection.entry.id && item.source === connection.source && item.target === connection.target;
   const removed = chatLinks.filter(matches);
   chatLinks = chatLinks.filter(item => !matches(item));
@@ -263,11 +264,10 @@ async function removeConnection(connection, panel) {
   try {
     await saveLinks;
     await api("links/delete", connection);
-    closeChatEditor(panel);
   } catch (error) {
     for (const item of removed) if (!chatLinks.some(matches)) chatLinks.push(item);
     renderLink(true);
-    throw error;
+    throw new Error("Eliminazione non salvata. Collegamento ripristinato: " + error.message);
   } finally { removingPresentation = false; }
 }
 

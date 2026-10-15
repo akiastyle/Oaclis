@@ -1,4 +1,4 @@
-// test_frontend_modules.cjs v1.0.106
+// test_frontend_modules.cjs v1.0.125
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
@@ -7,7 +7,7 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
   const browser=await chromium.launch({headless:true,executablePath:'/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome',args:['--no-sandbox']});
   try {
     const page=await browser.newPage({viewport:{width:1440,height:960}});
-    const errors=[],requests=[];page.on('pageerror',error=>errors.push(error.message));
+    const errors=[],requests=[];let deleteFailure=false,releaseDelete=null;page.on('pageerror',error=>errors.push(error.message));
     const entry={id:'fixture-chat',name:'Fixture',bytes:1024,modified_ns:'1000000000'};
     const connection={entry,source:'master',target:'fixture-peer',operation:'sync',scopes:{chat:true,paths:true,apps:true},flow:{phase:'ready',initialized:true,requested:false}};
     const state={device_runtime:{'fixture-peer':{available:true,active:true,build:{version:'v1.0.0',source_id:'fixture-old'}}},build:{version:'v1.0.1',source_id:'fixture-master'},role:'master',paused:false,checks_paused:true,settings_paused:false,devices:[{id:'fixture-peer',name:'Peer'}],chats:[entry],ssh_settings:{},appearance:{'device:master':{label:'ROG',icon:'desktop'}},chat_settings:{},links:[connection],positions:{master:{x:220,y:160},'fixture-peer':{x:720,y:550}},link_positions:{},connections:{'fixture-peer':'online'},job:{status:'idle'},rules:[]};
@@ -25,6 +25,7 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
       else if(endpoint==='/api/app-check')response=status.app_checks['master:fixture-chat'];
       else if(endpoint==='/api/terminal')response={screen:'Console fixture'};
       else if(endpoint==='/api/links'){const body=route.request().postDataJSON();state.links=[...state.links,{...body,flow:{phase:'checking'}}];status.shared.links=state.links;response=state.links;}
+      else if(endpoint==='/api/links/delete'){await new Promise(resolve=>{releaseDelete=resolve;});if(deleteFailure)return route.fulfill({status:503,json:{error:'database is locked'}});state.links=state.links.filter(value=>value.entry.id!==route.request().postDataJSON().entry.id);status.shared.links=state.links;response=state.links;}
       else if(endpoint==='/api/links/play'){connection.flow.requested=true;response=state.links;}
       else if(endpoint==='/api/device/control'){const body=route.request().postDataJSON();const previous=state.device_runtime[body.device_id]||{build:state.build};response={...previous,active:body.action==='toggle-awake'?!previous.active:previous.active,update:body.action==='update'?{status:'running'}:previous.update,observed_at:Date.now()};state.device_runtime[body.device_id]=response;}
       else if(endpoint==='/api/check')response=state.connections;
@@ -84,6 +85,22 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     await page.mouse.move(1300,900);
     await page.evaluate(()=>poll());
     assert(await page.evaluate(()=>document.querySelector('.map-node[data-id="master"]')!==window.fixtureMapNode),'real device position changes still update the map');
+    page.on('dialog',dialog=>dialog.accept());
+    await page.evaluate(()=>{window.connectionToDelete=chatLinks.find(value=>value.entry.id==='second-fixture');window.deleteEditor=editChat(connectionToDelete.entry,document.querySelector('.link-edit'),'master',connectionToDelete);window.deleteRequest=removeConnection(connectionToDelete,deleteEditor).then(()=>null,error=>error.message);});
+    await page.waitForFunction(()=>!window.deleteEditor.isConnected);
+    assert.equal(await page.locator('.chat-link').count(),1,'arc and editor close before the delete request finishes');
+    while(!releaseDelete)await new Promise(resolve=>setTimeout(resolve,10));
+    deleteFailure=true;releaseDelete();
+    assert.match(await page.evaluate(()=>window.deleteRequest),/Collegamento ripristinato/);
+    assert.equal(await page.locator('.chat-link').count(),2,'failed deletion restores the association');
+    assert(await page.evaluate(()=>!window.deleteEditor.isConnected),'failed deletion must not leave the editor open');
+    deleteFailure=false;releaseDelete=null;
+    await page.evaluate(()=>{window.deleteEditor=editChat(connectionToDelete.entry,document.querySelector('.link-edit'),'master',connectionToDelete);window.deleteRequest=removeConnection(connectionToDelete,deleteEditor).then(()=>null,error=>error.message);});
+    await page.waitForFunction(()=>!window.deleteEditor.isConnected);
+    while(!releaseDelete)await new Promise(resolve=>setTimeout(resolve,10));
+    releaseDelete();
+    assert.equal(await page.evaluate(()=>window.deleteRequest),null);
+    assert.equal(await page.locator('.chat-link').count(),1);
     console.log('Split frontend: assets load, map/library/context editor/console/Play work together; APIs mocked, no real writes.');
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

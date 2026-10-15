@@ -1,4 +1,4 @@
-# appearance_store.py v1.2.180
+# appearance_store.py v1.2.182
 """Oaclis storage adapter; chat metadata lives in the appearance record."""
 import json
 import os
@@ -69,6 +69,8 @@ if operation in READS:
     sys.exit(0)
 
 with sqlite3.connect(path,timeout=10) as db:
+    if operation == 'migrate':
+        db.execute('PRAGMA journal_mode=WAL')
     db.execute('BEGIN IMMEDIATE')
     unified_ensure(db, config)
     if operation == 'migrate':
