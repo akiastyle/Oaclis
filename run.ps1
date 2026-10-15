@@ -1,8 +1,17 @@
-# run.ps1 v1.1.58
+# run.ps1 v1.1.78
 # Windows checks; an explicitly selected WSL prepares and installs Oaclis.
-param([switch]$Check, [string]$Distro)
+param([switch]$Check, [string]$Distro, [switch]$PrepareAwake)
 $ErrorActionPreference = 'Stop'
 if ($env:OS -ne 'Windows_NT') { throw 'Su macOS/Linux usare bash run.sh.' }
+if ($PrepareAwake) {
+    if ($Check) { throw 'Usare -Check oppure -PrepareAwake, non entrambi.' }
+    if ([string]::IsNullOrWhiteSpace($Distro)) { throw 'Specificare la distribuzione Oaclis con -Distro, per esempio Ubuntu.' }
+    $repo = (& wsl -d $Distro -- wslpath -u $PSScriptRoot | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $repo) { throw 'Repository non raggiungibile dalla distribuzione WSL.' }
+    & wsl -d $Distro -- bash "$repo/run.sh" --prepare-awake
+    if ($LASTEXITCODE -ne 0) { throw 'Preparazione Sempre attivo non riuscita; leggere il motivo sopra.' }
+    return
+}
 function Save-Scenario {
     param([string]$Runtime, [string]$Distribution)
     if ($Check) { return }
@@ -29,6 +38,15 @@ function Save-Scenario {
     Write-Host "Settings: $path"
 }
 Write-Host 'Sistema: Windows'
+# Probe only: the application owns the lifetime of the actual standby block.
+if (-not ('OaclisSetupAwake' -as [type])) {
+    Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class OaclisSetupAwake { [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags); }'
+}
+try {
+    if ([OaclisSetupAwake]::SetThreadExecutionState(2147483649) -eq 0) {
+        Write-Warning 'Windows non consente il blocco standby: Sempre attivo non disponibile.'
+    } else { Write-Host '[OK] Blocco standby Windows disponibile (prova rilasciata).' }
+} finally { [OaclisSetupAwake]::SetThreadExecutionState(2147483648) | Out-Null }
 foreach ($name in @('git', 'wsl', 'docker', 'cargo', 'rustc', 'python', 'ssh', 'ssh-keygen', 'rsync')) {
     if (Get-Command $name -ErrorAction SilentlyContinue) { Write-Host "[OK] $name" }
     else { Write-Host "[Manca] $name" }

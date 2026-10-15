@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
-# run.sh v1.4.101
+# run.sh v1.4.135
 # Prepare prerequisites, compile and install. Application startup remains separate.
 set -euo pipefail
-case "${1:-}" in ''|--check) ;; *) echo 'Uso: bash run.sh [--check]' >&2; exit 2;; esac
+case "${1:-}" in ''|--check|--prepare-awake) ;; *) echo 'Uso: bash run.sh [--check|--prepare-awake]' >&2; exit 2;; esac
 check_only=${1:-}
+if [[ "$check_only" == --prepare-awake ]]; then
+    exec python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/tools/keep_awake.py" --prepare
+fi
 system=$(uname -s)
 case "$system" in Linux|Darwin) ;; *) echo 'Usare run.ps1 su Windows nativo.' >&2; exit 1;; esac
 export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
@@ -18,6 +21,32 @@ container=no; wsl=no
 if [[ -f /.dockerenv || -f /run/.containerenv ]] || { [[ -r /proc/1/cgroup ]] && grep -Eq 'docker|containerd|kubepods|podman' /proc/1/cgroup; }; then container=yes; fi
 if [[ "$system" == Linux ]] && { [[ -n ${WSL_DISTRO_NAME:-} ]] || [[ $(uname -r) == *[Mm]icrosoft* ]]; }; then wsl=yes; fi
 printf 'Sistema: %s\nContainer: %s\nKernel WSL: %s\n' "$system" "$container" "$wsl"
+# Resolve the live WSL socket; its name must never be saved in settings.
+if [[ "$wsl" == yes && "$container" == no ]]; then
+    if [[ ! -S ${WSL_INTEROP:-} ]]; then
+        for socket in /run/WSL/1_interop /run/WSL/*_interop; do
+            if [[ -S "$socket" ]]; then export WSL_INTEROP="$socket"; break; fi
+        done
+    fi
+    powershell=/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe
+    if [[ -x "$powershell" ]]; then
+        if "$powershell" -NoProfile -NonInteractive -Command - <<'POWERSHELL'
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class OaclisSetupAwake { [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags); }'
+try { if ([OaclisSetupAwake]::SetThreadExecutionState(2147483649) -eq 0) { exit 1 } }
+finally { [OaclisSetupAwake]::SetThreadExecutionState(2147483648) | Out-Null }
+POWERSHELL
+        then
+            echo '[OK] WSL: blocco standby Windows disponibile (prova rilasciata).'
+        else
+            echo '[Avviso] Blocco standby Windows non disponibile da WSL; verificare Interop e ripetere da PowerShell con run.ps1 -Distro <nome>.' >&2
+        fi
+    else
+        echo '[Avviso] PowerShell Windows non raggiungibile: Sempre attivo non disponibile da WSL.' >&2
+    fi
+elif [[ "$container" == yes ]]; then
+    echo '[Nota] In container il blocco standby deve essere gestito sul sistema host.'
+fi
 save_scenario() {
     [[ "$check_only" != --check ]] || return 0
     if command -v python3 >/dev/null; then
@@ -61,6 +90,9 @@ finish() {
     if [[ "$check_only" == --check ]]; then
         echo 'Prerequisiti Oaclis presenti. Oaclis non è stato compilato o avviato.'
     else
+        if ! python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/tools/keep_awake.py" --prepare; then
+            echo 'Sempre attivo non preparato; Oaclis viene installato comunque. Riprovare con bash run.sh --prepare-awake.'
+        fi
         bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/install.sh" --unconfigured
         echo 'Oaclis compilato e installato. Cerco il master nella LAN sulla 23232.'
         "$HOME/.local/bin/oaclis" setup

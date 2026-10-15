@@ -569,3 +569,24 @@ Sulle card degli slave l’icona V è allineata agli altri comandi: fissa se all
 Disponibilità dell’app, versione installata e stato reale di “Sempre attivo” viaggiano insieme allo scambio SSH delle impostazioni già esistente. La UI legge questa fotografia, senza verifiche SSH al passaggio del mouse e senza dipendere dagli annunci LAN per la versione. Una fotografia più vecchia di 30 secondi non viene usata come stato corrente. “Sempre attivo” è telemetria del device, non un’impostazione da applicare agli altri.
 
 Su Linux, l’utente che esegue Oaclis deve essere autorizzato a inibire lo standby. Appartenere al gruppo sudo non concede automaticamente questo permesso: se manca, il comando segnala l’utente interessato e il blocco resta disattivato. La gestione guidata di questo requisito è annotata in docs/TASKS.md.
+
+
+### Preparare Sempre attivo
+
+La preparazione non attiva il blocco: dopo il setup si usa il pulsante Sempre attivo della card Oaclis. Non occorre reinstallare l'app.
+
+Su Linux, dal proprio utente nella repository:
+
+```sh
+bash run.sh --prepare-awake
+```
+
+La prima volta sudo puo chiedere la password: viene installata soltanto una regola polkit per l'utente corrente e le due azioni logind di inibizione sleep/idle. Oaclis continua a girare senza root. Non vengono modificati i timeout di sospensione, creati servizi o timer.
+
+Su Windows con WSL, dalla repository in PowerShell:
+
+```powershell
+.\run.ps1 -Distro Ubuntu -PrepareAwake
+```
+
+Sostituire Ubuntu con il nome della distribuzione Oaclis. In alternativa, dentro quella WSL usare lo stesso `bash run.sh --prepare-awake`. Il setup crea `%LOCALAPPDATA%\Oaclis\keep-awake.ps1`; la normale richiesta di Oaclis usa questo helper Windows e lo rilascia quando il blocco viene spento o l'app termina. La policy di esecuzione PowerShell viene impostata soltanto sul processo helper, senza cambiare quella del sistema.

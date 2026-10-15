@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh v1.0.24
+# install.sh v1.0.26
 set -euo pipefail
 role=${1:-client}
 case "$role" in client|master|--unconfigured) ;; *) echo 'Uso: bash scripts/install.sh [client|master|--unconfigured]' >&2; exit 2;; esac
@@ -11,6 +11,8 @@ for command in cargo python3 ssh ssh-keygen rsync; do
 done
 cargo build --release --locked --manifest-path "$source_dir/Cargo.toml"
 install -d "$HOME/.local/bin" "$HOME/.config/oaclis"
+install -d -m 700 "$HOME/.local/share/oaclis"
+install -m 600 "$source_dir/tools/keep_awake.py" "$HOME/.local/share/oaclis/keep_awake.py"
 install -m 755 "$source_dir/target/release/oaclis" "$HOME/.local/bin/oaclis.new"
 mv -f "$HOME/.local/bin/oaclis.new" "$HOME/.local/bin/oaclis"
 # Non cambiare il ruolo di un'installazione già configurata.
