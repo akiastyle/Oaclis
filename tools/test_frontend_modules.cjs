@@ -1,4 +1,4 @@
-// test_frontend_modules.cjs v1.0.51
+// test_frontend_modules.cjs v1.0.62
 const assert=require('node:assert/strict');
 const {chromium}=require('/root/google-images-local/node_modules/playwright');
 (async()=>{
@@ -8,8 +8,8 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     const errors=[],requests=[];page.on('pageerror',error=>errors.push(error.message));
     const entry={id:'fixture-chat',name:'Fixture',bytes:1024,modified_ns:'1000000000'};
     const connection={entry,source:'master',target:'fixture-peer',operation:'sync',scopes:{chat:true,paths:true,apps:true},flow:{phase:'ready',initialized:true,requested:false}};
-    const state={role:'master',paused:false,checks_paused:true,settings_paused:false,devices:[{id:'fixture-peer',name:'Peer'}],chats:[entry],ssh_settings:{},appearance:{'device:master':{label:'ROG',icon:'desktop'}},chat_settings:{},links:[connection],positions:{master:{x:220,y:160},'fixture-peer':{x:720,y:550}},link_positions:{},connections:{'fixture-peer':'online'},job:{status:'idle'},rules:[]};
-    const status={...state,analyses:{'master:fixture-chat':{status:'ready',manifest:{paths:['/home/project']}}},app_checks:{'master:fixture-chat':{status:'ready',requirements:[{label:'Python 3'}]}},preparations:{},transfers:{},discovery:{peers:[],ignored:0},shared:{devices:state.devices,appearance:state.appearance,chat_settings:state.chat_settings,links:state.links,positions:state.positions,link_positions:{}}};
+    const state={build:{version:'v1.0.1',source_id:'fixture-master'},role:'master',paused:false,checks_paused:true,settings_paused:false,devices:[{id:'fixture-peer',name:'Peer'}],chats:[entry],ssh_settings:{},appearance:{'device:master':{label:'ROG',icon:'desktop'}},chat_settings:{},links:[connection],positions:{master:{x:220,y:160},'fixture-peer':{x:720,y:550}},link_positions:{},connections:{'fixture-peer':'online'},job:{status:'idle'},rules:[]};
+    const status={...state,analyses:{'master:fixture-chat':{status:'ready',manifest:{paths:['/home/project']}}},app_checks:{'master:fixture-chat':{status:'ready',requirements:[{label:'Python 3'}]}},preparations:{},transfers:{},discovery:{peers:[{device_id:'fixture-peer',connected:true,build:{version:'v1.0.0',source_id:'fixture-old'}}],ignored:0},shared:{devices:state.devices,appearance:state.appearance,chat_settings:state.chat_settings,links:state.links,positions:state.positions,link_positions:{}}};
     await page.route('**/api/**',async route=>{
       const endpoint=new URL(route.request().url()).pathname;requests.push(endpoint);
       let response;
@@ -19,7 +19,7 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
       else if(endpoint==='/api/catalog')response={root:'/fixture',chats:[entry]};
       else if(endpoint==='/api/terminal')response={screen:'Console fixture'};
       else if(endpoint==='/api/links/play'){connection.flow.requested=true;response=state.links;}
-      else if(endpoint==='/api/device/control'){const body=route.request().postDataJSON();response={active:body.action==='toggle-awake'};}
+      else if(endpoint==='/api/device/control'){const body=route.request().postDataJSON();response={active:body.action==='toggle-awake',build:{version:'v1.0.0',source_id:'fixture-old'},update:body.action==='update'?{status:'running'}:null};}
       else if(endpoint==='/api/check')response=state.connections;
       else if(endpoint==='/api/positions')response={ok:true};
       else throw Error('Unexpected API '+endpoint);
@@ -30,6 +30,11 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     assert.equal(await page.locator('.map-node').count(),2);
     assert.equal(await page.locator('.chat-link').count(),1);
     assert.equal(await page.locator('.node-restart').count(),2);
+    await page.waitForFunction(()=>document.querySelector('.node-version')?.dataset.state==='outdated');
+    assert.match(await page.locator('.node-version').getAttribute('title'),/Da aggiornare/);
+    page.once('dialog',dialog=>dialog.accept());
+    await page.locator('.node-version').click();
+    await page.waitForFunction(()=>document.querySelector('.node-version')?.dataset.state==='updating');
     await page.locator('.map-node[data-id="master"] .node-toggle-awake').click();
     await page.waitForFunction(()=>document.querySelector('.map-node[data-id="master"] .node-toggle-awake').getAttribute('aria-pressed')==='true');
     assert.equal(await page.locator('#panel').isVisible(),false);

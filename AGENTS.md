@@ -83,3 +83,8 @@
 - Deleting a connection removes only that chat/device association; never alter chat visibility, appearance, inventories, or user files.
 - Removing a chat from the list sets hidden and removes its associations, while retaining its label, custom icon, color, analysis and inventories. Do not use a removed flag for chat presentation.
 - Metadata replication must not clear chat appearance when an old deletion tombstone is received.
+
+## Device Version Alignment
+- Compare source fingerprints rather than numerical application versions: the displayed means can coincide across different source builds.
+- Remote app updates are explicit user actions. Preserve configuration and user data; refuse dirty or divergent checkouts, use fast-forward Git updates, then compile and restart.
+- Include the committed revision in release builds by compiling after the commit before deployment.

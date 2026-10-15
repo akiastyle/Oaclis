@@ -1,18 +1,23 @@
-// device_runtime.rs v1.9.123
+// device_runtime.rs v1.12.182
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
 use std::{fs, io::{self, BufRead, BufReader}, path::{Path, PathBuf}, process::{Child, Command, Stdio}, thread, time::Duration};
+
+pub(crate) fn build() -> Value {
+    json!({"version":env!("OACLIS_APP_VERSION"),"source_id":env!("OACLIS_SOURCE_ID"),"revision":env!("OACLIS_REVISION")})
+}
 
 pub(crate) struct Runtime {
     child: Option<Child>,
     config: PathBuf,
     error: Option<String>,
     restarting: bool,
+    update: std::sync::Arc<std::sync::Mutex<Value>>,
 }
 impl Runtime {
     pub(crate) fn new(config: &Path) -> Self {
-        let mut state = Self { child: None, config: config.into(), error: None, restarting: false };
+        let mut state = Self { child: None, config: config.into(), error: None, restarting: false, update: Default::default() };
         if fs::read_to_string(config.join("keep-awake.json")).ok().is_some_and(|s| s.trim() == "true") {
             if let Err(error) = state.enable() { state.error = Some(error.to_string()); }
         }
@@ -23,7 +28,7 @@ impl Runtime {
             self.child.take();
             self.error = Some("Il blocco standby non è più attivo".into());
         }
-        json!({"active":self.child.is_some(),"error":self.error,"restarting":self.restarting})
+        json!({"active":self.child.is_some(),"error":self.error,"restarting":self.restarting,"build":build(),"update":*self.update.lock().unwrap()})
     }
     fn enable(&mut self) -> io::Result<()> {
         let mut child = Command::new("python3").args(["-u", "-c", include_str!("../tools/keep_awake.py")])
@@ -52,6 +57,32 @@ impl Runtime {
             child.stdin.take();
             let _ = child.wait();
         }
+    }
+    pub(crate) fn start_update(&mut self, revision: &str, job: std::sync::Arc<std::sync::Mutex<Value>>) -> io::Result<Value> {
+        if revision.len() != 40 || !revision.bytes().all(|byte|byte.is_ascii_hexdigit()) { return Err(invalid("Revisione master non disponibile")); }
+        if self.restarting || self.update.lock().unwrap()["status"] == "running" { return Err(invalid("Aggiornamento o riavvio già in corso")); }
+        let executable = std::env::current_exe()?;
+        let revision = revision.to_owned();
+        let state = self.update.clone();
+        *state.lock().unwrap() = json!({"status":"running"});
+        *job.lock().unwrap() = json!({"status":"running","kind":"app_update"});
+        thread::spawn(move || {
+            let result = Command::new("python3").args(["-c", include_str!("../tools/update_app.py"), env!("CARGO_MANIFEST_DIR"), &revision]).output();
+            let error = match result {
+                Ok(output) if output.status.success() => {
+                    #[cfg(unix)] {
+                        use std::os::unix::process::CommandExt;
+                        Command::new(executable).args(std::env::args_os().skip(1)).exec().to_string()
+                    }
+                    #[cfg(not(unix))] { "Riavvio non supportato".to_owned() }
+                },
+                Ok(output) => String::from_utf8_lossy(&output.stderr).chars().rev().take(2000).collect::<String>().chars().rev().collect(),
+                Err(error) => error.to_string(),
+            };
+            *state.lock().unwrap() = json!({"status":"failed","error":error});
+            *job.lock().unwrap() = json!({"status":"idle"});
+        });
+        Ok(self.status())
     }
     pub(crate) fn action(&mut self, action: &str) -> io::Result<Value> {
         match action {
@@ -85,19 +116,19 @@ impl Runtime {
 impl Drop for Runtime { fn drop(&mut self) { self.stop(); } }
 
 pub(crate) fn remote(config: &Path, id: &str, action: &str) -> io::Result<Value> {
-    if !matches!(action, "status" | "restart" | "toggle-awake") { return Err(invalid("Comando dispositivo non valido")); }
+    if !matches!(action, "status" | "restart" | "toggle-awake" | "update") { return Err(invalid("Comando dispositivo non valido")); }
     let device = devices::load(config.join("devices.json"))?.into_iter().find(|d|d.id==id).ok_or_else(||invalid("Dispositivo non trovato"))?;
     let script = r#"import json,re,sys,urllib.request,urllib.error
 page=urllib.request.urlopen('http://localhost:23232/',timeout=5).read().decode()
 token=re.search(r'name="oaclis-token" content="([^"]+)"',page).group(1)
-request=urllib.request.Request('http://localhost:23232/api/device/control',data=json.dumps({'device_id':'master','action':sys.argv[1]}).encode(),headers={'Content-Type':'application/json','X-Oaclis-Token':token})
+request=urllib.request.Request('http://localhost:23232/api/device/control',data=json.dumps({'device_id':'master','action':sys.argv[1],'revision':sys.argv[2]}).encode(),headers={'Content-Type':'application/json','X-Oaclis-Token':token})
 try:
     print(urllib.request.urlopen(request,timeout=15).read().decode())
 except urllib.error.HTTPError as error:
     print(error.read().decode())
     sys.exit(1)
 "#;
-    serde_json::from_slice(&crate::ssh::run(&device, &format!("python3 -c {} {}", crate::ssh::quote(script), crate::ssh::quote(action)))?).map_err(io::Error::other)
+    serde_json::from_slice(&crate::ssh::run(&device, &format!("python3 -c {} {} {}", crate::ssh::quote(script), crate::ssh::quote(action), crate::ssh::quote(env!("OACLIS_REVISION"))))?).map_err(io::Error::other)
 }
 
 #[cfg(test)]
@@ -105,7 +136,7 @@ mod tests {
     use super::*;
     #[test]
     fn status_and_invalid_commands_have_no_side_effects() {
-        let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false };
+        let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false, update: Default::default() };
         assert_eq!(state.action("status").unwrap()["active"], false);
         assert!(state.action("reboot-host").is_err());
         assert!(!state.restarting);
@@ -114,9 +145,23 @@ mod tests {
     fn dead_inhibitor_is_never_reported_as_active() {
         let mut child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
         child.wait().unwrap();
-        let mut state = Runtime { child: Some(child), config: PathBuf::from("/unused"), error: None, restarting: false };
+        let mut state = Runtime { child: Some(child), config: PathBuf::from("/unused"), error: None, restarting: false, update: Default::default() };
         let status = state.status();
         assert_eq!(status["active"], false);
         assert!(status["error"].is_string());
+    }
+}
+
+#[cfg(test)]
+mod update_tests {
+    use super::*;
+    #[test]
+    fn source_identity_is_available_and_bad_revision_never_starts_a_job() {
+        assert_eq!(build()["source_id"].as_str().unwrap().len(),64);
+        assert!(build()["version"].as_str().unwrap().starts_with('v'));
+        let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false, update: Default::default() };
+        let job = std::sync::Arc::new(std::sync::Mutex::new(json!({"status":"idle"})));
+        assert!(state.start_update("HEAD; exit 1",job.clone()).is_err());
+        assert_eq!(job.lock().unwrap()["status"],"idle");
     }
 }

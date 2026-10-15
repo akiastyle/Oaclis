@@ -1,4 +1,4 @@
-// map.js v3.115.2299
+// map.js v3.115.2364
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -454,6 +454,49 @@ function renderMap(animate = false) {
       });
       node.append(button);
     }
+    if (device.id !== "master" && data.role === "master") {
+      const version = document.createElement("button");
+      version.className = "node-version icon-button";
+      version.type = "button";
+      version.onclick = guard(async event => {
+        event.stopPropagation();
+        if (version.dataset.state === "unknown") {
+          const result = await api("device/control", {device_id:device.id,action:"status"});
+          data.device_runtime ??= {}; data.device_runtime[device.id] = result;
+          renderConnections(); return;
+        }
+        if (!window.confirm("Aggiornare Oaclis su “" + device.name + "” alla versione del master?\n\nL’app verrà ricompilata e riavviata; configurazione e chat restano conservate.")) return;
+        version.dataset.busy = "true"; version.disabled = true;
+        try {
+          const result = await api("device/control", {device_id:device.id,action:"update"});
+          data.device_runtime ??= {}; data.device_runtime[device.id] = result;
+          notice("Aggiornamento Oaclis avviato su " + device.name);
+          let attempts = 0;
+          const watch = window.setInterval(async () => {
+            if (version.dataset.polling) return;
+            version.dataset.polling = "true";
+            try {
+              const current = await api("device/control", {device_id:device.id,action:"status"});
+              data.device_runtime[device.id] = current;
+              if (current.update?.status !== "running" || ++attempts >= 180) {
+                window.clearInterval(watch); delete version.dataset.busy;
+                if (current.update?.status === "failed") notice(current.update.error);
+                else if (current.update?.status === "running") notice("Aggiornamento ancora in corso su " + device.name);
+              }
+              renderConnections();
+            } catch (_) {
+              window.clearInterval(watch); delete version.dataset.busy;
+              if (data.device_runtime?.[device.id]) delete data.device_runtime[device.id].update;
+              notice("Collegamento interrotto con " + device.name + ": stato aggiornamento da verificare alla riconnessione.");
+              renderConnections();
+            }
+            finally { delete version.dataset.polling; }
+          }, 5000);
+        } catch (error) { delete version.dataset.busy; renderConnections(); throw error; }
+        renderConnections();
+      });
+      node.append(version);
+    }
     $("#nodes").append(node);
     place(node, previous[device.id] || positions[device.id] || defaultPosition(index));
     {
@@ -517,7 +560,7 @@ function renderMap(animate = false) {
     let start,
       moved = false;
     node.onpointerdown = (e) => {
-      if (e.button !== 0 || e.target.closest(".connection-port, .node-color"))
+      if (e.button !== 0 || e.target.closest("button"))
         return;
       start = {
         x: e.clientX,
@@ -601,6 +644,22 @@ function renderConnections() {
       unknown: "non verificato",
     }[state];
     node.querySelectorAll(".node-restart, .node-toggle-awake").forEach(button => { button.disabled = state !== "online" || button.dataset.busy === "true"; });
+    const version = node.querySelector(".node-version");
+    if (version) {
+      const peer = discovery.peers.find(peer => peer.device_id === id && peer.connected);
+      const runtime = data.device_runtime?.[id];
+      const build = peer?.build?.source_id ? peer.build : runtime?.build;
+      const pending = version.dataset.busy || runtime?.update?.status === "running";
+      const known = build?.source_id && data.build?.source_id;
+      const aligned = known && build.source_id === data.build.source_id;
+      const status = pending ? "updating" : known ? aligned ? "aligned" : "outdated" : "unknown";
+      version.dataset.state = status;
+      version.disabled = state !== "online" || status === "aligned" || !!pending;
+      const shape = status === "aligned" ? '<path d="m5 12 4 4L19 6"/>' : '<path d="M12 20V4m-6 6 6-6 6 6"/>';
+      version.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + shape + '</svg><span>' + esc(pending ? "Aggiornamento…" : build?.version || "Versione ?") + '</span>';
+      version.title = ({aligned:"Allineato al master",outdated:"Da aggiornare · clic per aggiornare",unknown:"Versione non verificata · clic per verificare",updating:"Aggiornamento in corso"})[status];
+      version.setAttribute("aria-label", deviceName(id) + " · " + version.textContent + " · " + version.title);
+    }
     node.title = deviceName(id) + " · " + label;
     node.setAttribute(
       "aria-label",

@@ -1,4 +1,4 @@
-// app.js v3.159.2887
+// app.js v3.159.2888
 "use strict";
 const $ = (s) => document.querySelector(s);
 const token = $('meta[name="oaclis-token"]').content;
@@ -315,6 +315,7 @@ async function poll() {
       renderMap(true); renderLibrary();
     }
   }
+  data.build = next.build;
   data.connections = next.connections;
   data.job = next.job;
   data.paused = next.paused;
