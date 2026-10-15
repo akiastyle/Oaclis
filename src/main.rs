@@ -1,4 +1,4 @@
-// main.rs v1.2.158
+// main.rs v1.2.162
 use oaclis::{
     chat::Chat,
     compare,
@@ -16,6 +16,10 @@ use std::path::Path;
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args_os().skip(1).collect();
     match args.as_slice() {
+        [command] if command == "state-request" => {
+            let home=env::var_os("HOME").ok_or("HOME non definita")?;
+            oaclis::state_transport::forward(Path::new(&home))?;
+        }
         [command] if command == "setup" => {
             let home = env::var_os("HOME").ok_or("HOME non definita")?;
             oaclis::setup::configure(Path::new(&home))?;

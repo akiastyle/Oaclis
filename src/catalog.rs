@@ -1,25 +1,157 @@
-// catalog.rs v2.23.1181
-//! Read local and SSH catalogs without depending on the HTTP adapter.
-use crate::devices::Device;
-use serde_json::Value;
-use std::{io,path::Path};
+// catalog.rs v2.25.1356
+//! Read Codex archives natively; Oaclis metadata comes from its in-memory JSON state.
+use crate::{devices::Device, state_store};
+use serde_json::{Value, json};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+    io::{self, BufRead, BufReader},
+    path::Path,
+    time::UNIX_EPOCH,
+};
 
-const CATALOG: &str = include_str!("../tools/chat_catalog.py");
 pub(crate) fn local(root: &Path) -> io::Result<Vec<Value>> {
-    let output = std::process::Command::new("python3")
-        .args(["-c", CATALOG])
-        .arg(root)
-        .output()?;
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr);
-        return Err(io::Error::other(format!("Impossibile leggere il catalogo Codex: {}", detail.lines().last().unwrap_or("errore catalogo"))));
+    let home = std::env::var_os("HOME").ok_or_else(|| crate::invalid("HOME non definita"))?;
+    local_at(root, &Path::new(&home).join(".config/oaclis"))
+}
+pub(crate) fn local_at(root: &Path, config: &Path) -> io::Result<Vec<Value>> {
+    let root = if root.is_absolute() {
+        root.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(root)
+    };
+    let mut names = BTreeMap::new();
+    let mut hidden = BTreeSet::new();
+    let database = if root.join("state_5.sqlite").exists() {
+        root.join("state_5.sqlite")
+    } else {
+        root.join("sqlite/state_5.sqlite")
+    };
+    if database.is_file() {
+        let db = rusqlite::Connection::open_with_flags(
+            database,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .map_err(io::Error::other)?;
+        let mut query = db
+            .prepare("SELECT id,name,title,source FROM threads")
+            .map_err(io::Error::other)?;
+        let rows = query
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                ))
+            })
+            .map_err(io::Error::other)?;
+        for row in rows {
+            let (id, name, title, source) = row.map_err(io::Error::other)?;
+            if let Some(source) = source {
+                if source.starts_with('{')
+                    && serde_json::from_str::<Value>(&source)?
+                        .get("subagent")
+                        .is_some()
+                {
+                    hidden.insert(id.clone());
+                }
+            }
+            let title = name
+                .filter(|s| !s.is_empty())
+                .or(title)
+                .unwrap_or_default()
+                .trim()
+                .to_owned();
+            if !title.is_empty() {
+                names.insert(id, title);
+            }
+        }
     }
-    let value: Value = serde_json::from_slice(&output.stdout).map_err(io::Error::other)?;
-    serde_json::from_value(value["chats"].clone()).map_err(io::Error::other)
+    if let Ok((file, _)) = crate::open_regular(&root.join("session_index.jsonl")) {
+        for line in BufReader::new(file).lines() {
+            let line = line?;
+            if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                if let (Some(id), Some(name)) = (
+                    value["id"].as_str(),
+                    value["thread_name"]
+                        .as_str()
+                        .filter(|s| !s.trim().is_empty()),
+                ) {
+                    names.entry(id.to_owned()).or_insert(name.into());
+                }
+            }
+        }
+    }
+    let mut chats = Vec::new();
+    walk(&root, &root.join("sessions"), &names, &hidden, &mut chats)?;
+    let state = state_store::snapshot(config)?;
+    let id = state_store::identity(config)?;
+    for chat in &mut chats {
+        let chat_id = chat["id"].as_str().unwrap().to_owned();
+        chat["analysis"] = state
+            .analysis
+            .get(&format!("master:{chat_id}"))
+            .cloned()
+            .unwrap_or(json!({"status":"missing"}));
+        let mut data = json!({});
+        if let Some(record) = state.appearance.get(&format!("chat:{chat_id}")) {
+            for name in state_store::MODULES {
+                if record.sync.get(name).is_some() {
+                    data[name] = record.sync[name]["sources"][&id].clone();
+                }
+            }
+        }
+        state_store::strip_entries(&mut data);
+        chat["sync_data"] = data;
+    }
+    chats.sort_by(|a, b| b["path"].as_str().cmp(&a["path"].as_str()));
+    Ok(chats)
+}
+fn walk(
+    root: &Path,
+    directory: &Path,
+    names: &BTreeMap<String, String>,
+    hidden: &BTreeSet<String>,
+    chats: &mut Vec<Value>,
+) -> io::Result<()> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    for entry in entries {
+        let entry = entry?;
+        let kind = entry.file_type()?;
+        let path = entry.path();
+        if kind.is_dir() {
+            walk(root, &path, names, hidden, chats)?;
+            continue;
+        }
+        if !kind.is_file() {
+            continue;
+        }
+        let filename = entry.file_name();
+        let Some(filename) = filename.to_str() else {
+            continue;
+        };
+        if !filename.starts_with("rollout-") || !filename.ends_with(".jsonl") || filename.len() < 42
+        {
+            continue;
+        }
+        let Some(id) = filename.get(filename.len() - 42..filename.len() - 6) else {
+            continue;
+        };
+        if hidden.contains(id) {
+            continue;
+        }
+        let metadata = entry.metadata()?;
+        chats.push(json!({"id":id,"name":names.get(id).map(String::as_str).unwrap_or("Senza titolo"),"path":path,"relative_path":path.strip_prefix(root).map_err(io::Error::other)?,"bytes":metadata.len(),"modified_ns":metadata.modified()?.duration_since(UNIX_EPOCH).map_err(io::Error::other)?.as_nanos().to_string()}));
+    }
+    Ok(())
 }
 pub(crate) fn remote(device: &Device) -> io::Result<Value> {
-    let command = format!("python3 -c {}", crate::ssh::quote(CATALOG));
-    serde_json::from_slice(&crate::ssh::run(device, &command)?).map_err(io::Error::other)
+    crate::state_transport::remote(device, &json!({"kind":"catalog"}))
 }
 
 #[cfg(test)]
@@ -42,7 +174,7 @@ mod tests {
             "secret content",
         )
         .unwrap();
-        let entries = local(&root).unwrap();
+        let entries = local_at(&root, &root.join("config")).unwrap();
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0]["name"], "Titolo");
         assert!(!entries[0].to_string().contains("secret content"));
@@ -54,7 +186,7 @@ mod tests {
         )
         .unwrap();
         fs::write(root.join("session_index.jsonl"), "").unwrap();
-        let unindexed = local(&root).unwrap();
+        let unindexed = local_at(&root, &root.join("config")).unwrap();
         assert_eq!(unindexed.len(), 1);
         assert_eq!(unindexed[0]["name"], "Senza titolo");
         let script = r#"import sqlite3,sys
@@ -77,11 +209,14 @@ with sqlite3.connect(sys.argv[1]) as db:
             "internal",
         )
         .unwrap();
-        let titled = local(&root).unwrap();
+        let titled = local_at(&root, &root.join("config")).unwrap();
         assert_eq!(titled.len(), 1);
         assert_eq!(titled[0]["name"], "Titolo Codex");
         assert!(std::process::Command::new("python3").args(["-c","import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.execute(\"UPDATE threads SET name='Titolo aggiornato' WHERE source='cli'\"); db.commit()"]).arg(root.join("state_5.sqlite")).status().unwrap().success());
-        assert_eq!(local(&root).unwrap()[0]["name"], "Titolo aggiornato");
+        assert_eq!(
+            local_at(&root, &root.join("config")).unwrap()[0]["name"],
+            "Titolo aggiornato"
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

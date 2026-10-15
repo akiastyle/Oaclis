@@ -567,7 +567,7 @@ collegamento e contiene l'esecutore, una generazione, il primo completamento,
 le prove dell'ultimo confronto e l'eventuale richiesta di Play. La generazione
 impedisce che un lavoro vecchio ricrei un collegamento cancellato e ricreato.
 Il confronto risiede in `src/link_flow.rs`; `src/automation.rs` lo pianifica;
-`tools/chat_match.py` legge gli archivi; il motore SSH/rsync esegue i trasferimenti.
+`src/chat.rs` confronta gli archivi in Rust; il motore SSH/rsync esegue i trasferimenti.
 
 ## Moduli del codice
 
@@ -617,3 +617,14 @@ Su Windows con WSL, dalla repository in PowerShell:
 ```
 
 Questa preparazione è già inclusa nel normale `run.ps1`; l’opzione serve soltanto a riparare il supporto separatamente. Sostituire Ubuntu con il nome della distribuzione Oaclis. È PowerShell a copiare e verificare il supporto; `run.sh` dentro WSL gestisce solo la parte Linux e non prepara Windows né apre il suo browser. Il setup crea `%LOCALAPPDATA%\Oaclis\keep-awake.ps1`; la normale richiesta di Oaclis usa questo helper Windows e lo rilascia quando il blocco viene spento o l'app termina. La policy di esecuzione PowerShell viene impostata soltanto sul processo helper, senza cambiare quella del sistema.
+
+
+### Stato operativo in Rust e JSON
+
+Oaclis carica in memoria quattro file in `~/.config/oaclis/`, corrispondenti alle precedenti tabelle: `appearance.json`, `analysis.json`, `chat_links.json` e `transfers.json`. `appearance.json` conserva per ogni chiave `value`, `hidden` e `sync`. Gli altri file mantengono le chiavi e gli oggetti gia' usati nelle rispettive tabelle. Le letture non avviano processi e i salvataggi identici non riscrivono i file.
+
+L'importazione iniziale legge il precedente `appearance.sqlite` senza modificarlo; se i quattro JSON sono gia' presenti, SQLite non viene piu' usato come archivio Oaclis. I database appartenenti a Codex sono consultati soltanto in lettura per ricavare i titoli. Non si convertono chat, cartelle o dati dell'applicazione Codex.
+
+Catalogo, confronto delle chat e scambio delle impostazioni fra device sono nativi Rust. SSH conserva alias, identita' e autorizzazioni esistenti; il comando interno `state-request` inoltra i messaggi all'app gia' avviata tramite un socket locale accessibile allo stesso utente. Non viene avviato un worker Python. Gli script Python di analisi, installazione e gestione del sistema restano indipendenti da questo flusso.
+
+Ogni file viene sostituito atomicamente. Un salvataggio che coinvolge piu' tabelle usa un registro temporaneo `.state-commit.json`, recuperato all'avvio e rimosso a completamento, per evitare modifiche parziali dopo un'interruzione. `shared-settings.json`, i file dei device e le posizioni conservano il loro ruolo e formato esistenti.

@@ -1,4 +1,8 @@
-// lib.rs v1.3.61
+// lib.rs v1.3.68
+pub mod state_store;
+mod state_migration;
+mod shared_records;
+pub mod state_transport;
 mod app_inventory;
 mod automation;
 mod link_flow;
@@ -60,3 +64,6 @@ pub mod setup;
 pub mod shared_settings;
 
 mod device_runtime;
+
+#[cfg(test)]
+mod state_tests;

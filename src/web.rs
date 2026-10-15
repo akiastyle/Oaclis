@@ -1,4 +1,4 @@
-// web.rs v2.25.1577
+// web.rs v2.25.1580
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -165,13 +165,14 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     let job = Arc::new(Mutex::new(json!({"status":"idle"})));
     let connections = Arc::new(Mutex::new(json!({})));
     let analyses = Arc::new(Mutex::new(std::collections::HashSet::<String>::new()));
+    let runtime=Arc::new(Mutex::new(crate::device_runtime::Runtime::new(&config)));
+    crate::state_transport::start(config.clone(),codex.clone(),runtime.clone())?;
     if !settings_paused { crate::shared_settings::start(home.clone()); }
     if !checks_paused {
         crate::initial_inventory::start(codex.clone(), config.clone(), analyses.clone());
     }
     crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone(), peers.clone(), !paused);
     println!("Oaclis UI: http://localhost:23232");
-    let runtime = Mutex::new(crate::device_runtime::Runtime::new(&config));
     let mutations = Mutex::new(());
     serve_requests(&server, |mut request| {
         if request.method() == &Method::Get && request.url() == "/peer/hello" {

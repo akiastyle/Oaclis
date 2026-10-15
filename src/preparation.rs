@@ -1,4 +1,4 @@
-// preparation.rs v1.5.118
+// preparation.rs v1.5.120
 //! Persistent source sizes, collected once without SSH, hashing or transfers.
 use crate::{environment::{self, Manifest}, invalid, rules};
 use serde_json::{Value, json};
@@ -63,7 +63,7 @@ pub fn from_saved(home: &Path, chat_id: &str) -> io::Result<Value> {
     if analysis["status"] != "ready" { return Err(invalid("Percorsi non ancora definiti nel DB")); }
     let manifest: Manifest = serde_json::from_value(analysis["manifest"].clone()).map_err(io::Error::other)?;
     let root = std::env::var_os("CODEX_HOME").map(std::path::PathBuf::from).unwrap_or_else(||home.join(".codex"));
-    let catalog = environment::python(None, include_str!("../tools/chat_catalog.py"), &[root.to_str().ok_or_else(||invalid("Cartella Codex non UTF-8"))?])?;
+    let catalog = json!({"chats":crate::catalog::local_at(&root,&config)?});
     let chat_path = catalog["chats"].as_array().and_then(|chats|chats.iter().find(|chat|chat["id"]==chat_id)).and_then(|chat|chat["path"].as_str()).ok_or_else(||invalid("Chat locale non trovata"))?;
     capture(&config, chat_id, Path::new(chat_path), &manifest)
 }

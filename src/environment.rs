@@ -1,4 +1,4 @@
-// environment.rs v1.13.481
+// environment.rs v1.13.517
 //! Chat environment analysis and destination preparation, independent of the UI.
 use crate::{
     devices::{self, Device},
@@ -16,12 +16,11 @@ use std::{
     fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
 };
 
 const ANALYZER: &str = include_str!("../tools/environment_analysis.py");
 const SETUP: &str = include_str!("../tools/environment_setup.py");
-pub(crate) const STORE: &str = concat!(include_str!("../tools/chat_records.py"), "\n", include_str!("../tools/appearance_store.py"));
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -223,38 +222,7 @@ pub fn database(
     operation: &str,
     value: Option<&Value>,
 ) -> io::Result<Value> {
-    let path = config.join("appearance.sqlite");
-    rules::ensure_local(config)?;
-    match crate::open_regular(&path) {
-        Ok(_) => {}
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-        Err(e) => return Err(e),
-    }
-    let mut command = Command::new("python3");
-    command
-        .args(["-c", STORE])
-        .arg(&path)
-        .arg(operation)
-        .arg(key)
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    let mut child = command.spawn()?;
-    if let Some(value) = value {
-        child
-            .stdin
-            .take()
-            .unwrap()
-            .write_all(&serde_json::to_vec(value)?)?;
-    } else {
-        drop(child.stdin.take());
-    }
-    let output = child.wait_with_output()?;
-    if !output.status.success() {
-        let detail = String::from_utf8_lossy(&output.stderr);
-        return Err(io::Error::other(format!("Database ambiente non disponibile: {}", detail.lines().last().unwrap_or("errore SQLite"))));
-    }
-    Ok(serde_json::from_slice(&output.stdout)?)
+    crate::state_store::database(config,key,operation,value)
 }
 pub(crate) fn python(device: Option<&Device>, script: &str, args: &[&str]) -> io::Result<Value> {
     let bytes = if let Some(device) = device {

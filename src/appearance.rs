@@ -1,12 +1,11 @@
-// appearance.rs v1.6.180
+// appearance.rs v1.6.239
 //! Oaclis presentation overrides, separate from Codex metadata and transfer rules.
-use crate::{devices, invalid, open_regular};
+use crate::{devices, invalid};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::BTreeMap,
-    io::{self, Write},
+    io,
     path::Path,
-    process::{Command, Stdio},
 };
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -63,61 +62,13 @@ fn validate(entries: &Appearances) -> io::Result<()> {
     Ok(())
 }
 pub fn load(path: impl AsRef<Path>) -> io::Result<Appearances> {
-    let db = path.as_ref().with_extension("sqlite");
-    match open_regular(&db) {
-        Ok(_) => {
-            let output = Command::new("python3")
-                .args(["-c", crate::environment::STORE])
-                .arg(&db)
-                .arg("load")
-                .output()?;
-            if !output.status.success() {
-                return Err(invalid("Lettura database personalizzazioni non riuscita"));
-            }
-            let entries = serde_json::from_slice(&output.stdout)?;
-            validate(&entries)?;
-            return Ok(entries);
-        }
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-        Err(e) => return Err(e),
-    }
-    let file = match open_regular(path.as_ref()) {
-        Ok((file, _)) => file,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(BTreeMap::new()),
-        Err(e) => return Err(e),
-    };
-    let entries = serde_json::from_reader(file)?;
+    let entries=serde_json::from_value(crate::environment::database(path.as_ref().parent().ok_or_else(||invalid("Cartella stato mancante"))?,"","load",None)?)?;
     validate(&entries)?;
     Ok(entries)
 }
 pub fn save(path: impl AsRef<Path>, entries: &Appearances) -> io::Result<()> {
     validate(entries)?;
-    let db = path.as_ref().with_extension("sqlite");
-    crate::rules::ensure_local(
-        db.parent()
-            .ok_or_else(|| invalid("Cartella database mancante"))?,
-    )?;
-    match open_regular(&db) {
-        Ok(_) => {}
-        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-        Err(e) => return Err(e),
-    }
-    let mut child = Command::new("python3")
-        .args(["-c", crate::environment::STORE])
-        .arg(&db)
-        .arg("save")
-        .stdin(Stdio::piped())
-        .spawn()?;
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(&serde_json::to_vec(entries)?)?;
-    if !child.wait()?.success() {
-        return Err(invalid(
-            "Salvataggio database personalizzazioni non riuscito",
-        ));
-    }
+    crate::environment::database(path.as_ref().parent().ok_or_else(||invalid("Cartella stato mancante"))?,"","save",Some(&serde_json::to_value(entries)?))?;
     Ok(())
 }
 #[cfg(test)]
@@ -144,7 +95,7 @@ mod tests {
         entries.get_mut("chat:abc").unwrap().icon = "folder".into();
         save(&path, &entries).unwrap();
         assert_eq!(load(&path).unwrap()["chat:abc"].icon, "folder");
-        assert!(root.join("appearance.sqlite").exists());
+        assert!(root.join("appearance.json").exists());
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]

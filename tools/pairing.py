@@ -1,4 +1,4 @@
-# pairing.py v1.19.318
+# pairing.py v1.19.330
 """LAN identities, signed discovery and mutually approved OpenSSH access."""
 import base64
 import fcntl
@@ -11,7 +11,6 @@ import platform
 import re
 import socket
 import shutil
-import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -87,13 +86,12 @@ def identity(config):
 
 
 def label(config):
-    path = config / 'appearance.sqlite'
+    path = config / 'appearance.json'
     if path.exists():
-        with sqlite3.connect(f'file:{path}?mode=ro', uri=True) as db:
-            if db.execute("SELECT 1 FROM sqlite_master WHERE name='appearance'").fetchone():
-                row = db.execute("SELECT value FROM appearance WHERE key='device:master'").fetchone()
-                if row:
-                    return json.loads(row[0]).get('label') or socket.gethostname()
+        if path.is_symlink():
+            raise ValueError('Personalizzazioni tramite link non consentite')
+        record = json.loads(path.read_text()).get('device:master', {})
+        return record.get('value', record).get('label') or socket.gethostname()
     return socket.gethostname()
 
 

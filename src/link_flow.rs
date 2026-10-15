@@ -1,10 +1,9 @@
-// link_flow.rs v1.19.295
+// link_flow.rs v1.19.298
 //! Link lifecycle: compare immutable proofs, persist intent, never transfer from a poll.
 use crate::{devices::Device, environment, invalid, catalog};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{io, path::Path, time::{SystemTime, UNIX_EPOCH}};
-const PROOF: &str = include_str!("../tools/chat_match.py");
 
 fn identity(config: &Path) -> io::Result<String> {
     let public=std::fs::read_to_string(config.join("pairing_ed25519.pub"))?;
@@ -115,7 +114,7 @@ pub(crate) fn inspect(config: &Path, codex: &Path, device: &Device, link: &Value
     let proof = |chat: &Option<Value>, incoming: bool| -> io::Result<Option<Value>> {
         let Some(chat) = chat else { return Ok(None); };
         let path = chat["path"].as_str().ok_or_else(||invalid("Archivio chat mancante"))?;
-        let value = environment::python(if incoming {Some(device)} else {None}, PROOF, &[path,id,&prefix.to_string()])?;
+        let value = if incoming {crate::state_transport::remote(device,&json!({"kind":"chat-proof","path":path,"chat_id":id,"prefix_bytes":prefix}))?}else{crate::chat::proof(Path::new(path),id,prefix)?};
         if value["bytes"] != chat["bytes"] || value["modified_ns"] != chat["modified_ns"] { return Err(invalid("Chat cambiata durante il confronto; attendo il prossimo controllo")); }
         Ok(Some(value))
     };

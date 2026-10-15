@@ -22,7 +22,7 @@
 - Prefer existing reliable Linux tools for transport: SSH and rsync. Oaclis owns scheduling; do not add cron jobs or systemd scheduling as a side effect.
 
 ## Database
-- Local settings DB: `/root/.config/oaclis/appearance.sqlite`; other devices use their own user configuration directory.
+- Operational state is owned by Rust in memory. Persist one JSON per former table in the configuration directory: `appearance.json`, `analysis.json`, `chat_links.json`, `transfers.json`. Keep these existing keys and fields; do not invent a new storage model. SQLite is read only for the initial legacy import and the external Codex title catalog.
 - `appearance` holds presentation in `value`, visibility in `hidden`, and module switches and source data in `sync`.
 - Keep source data separate by stable device identity, and chats identified by their stable Codex ID.
 - Update only the fields belonging to an operation: checks must not overwrite user labels, icons, colors, visibility, switches, or another source's data.
@@ -31,7 +31,7 @@
 - Completed checks remain saved. Do not expire or automatically repeat them on refresh or panel opening.
 - Each chat/device link has a persisted `flow` and a unique generation. Only its designated executor compares or executes it. Completed one-way links stop; bidirectional links compare every 60 seconds by default. Every transfer requires Play. The newer chat determines the direction of all enabled modules; compare content proofs and, for divergent histories, recorded UTC chat activity, never filesystem copy times. An unresolved tie blocks writes.
 - Refresh updates inventories only. Keep chat content monitoring separate from AI path/app detection; a new message must not restart completed inventory analysis.
-- Read-only status/catalog requests must not create tables or modify data.
+- Read-only status/catalog requests must not rewrite JSON data. All mutations use `state_store`; do not reintroduce Python storage helpers, per-request subprocesses, independent writers or new databases. Native peer requests use `state_transport` over the existing approved SSH channel.
 
 ## Peer Access and Deployment
 - Use the configured SSH aliases and approved pairing. Keep identities and access details in their existing configuration locations.

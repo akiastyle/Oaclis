@@ -1,4 +1,4 @@
-# test_environment.py v1.15.157
+# test_environment.py v1.19.183
 """Targeted checks: model boundary and destination commands, using isolated fixtures."""
 import importlib.util
 import json
@@ -87,19 +87,6 @@ class EnvironmentTests(unittest.TestCase):
             self.assertEqual([fact["path"] for fact in facts], [str(root)])
             self.assertFalse(analyzer.windows_path(pathlib.Path("/mnt/data/project")))
 
-    def test_associations_persist_without_overwriting_other_chats(self):
-        with tempfile.TemporaryDirectory() as directory:
-            db = pathlib.Path(directory) / "appearance.sqlite"
-            script = pathlib.Path(__file__).parent / "appearance_store.py"
-            def call(operation, key="", value=None):
-                return json.loads(subprocess.check_output(["python3", str(script), str(db), operation, key], input=json.dumps(value) if value is not None else "", text=True))
-            self.assertEqual(call("links-get"), [])
-            call("links-save", "one", {"operation":"send"})
-            call("links-save", "two", {"operation":"sync"})
-            self.assertEqual(call("links-save", "one", {"operation":"receive"}), [{"operation":"receive"}, {"operation":"sync"}])
-            self.assertEqual(call("links-get"), [{"operation":"receive"}, {"operation":"sync"}])
-            self.assertEqual(call("links-delete", "one"), [{"operation":"sync"}])
-            self.assertEqual(call("links-get"), [{"operation":"sync"}])
 
     def test_packages_are_fixed_and_existing_tools_are_reused(self):
         setup = module("environment_setup")
@@ -139,19 +126,6 @@ class EnvironmentTests(unittest.TestCase):
         result.stderr = "ERROR: model unavailable"
         self.assertIn("model unavailable", analyzer.analysis_failure(result))
 
-    def test_analysis_database_preserves_selection(self):
-        with tempfile.TemporaryDirectory() as directory:
-            db = pathlib.Path(directory)/"appearance.sqlite"
-            script=pathlib.Path(__file__).parent/"appearance_store.py"
-            def call(mode,value=None):
-                output=subprocess.run(["python3",str(script),str(db),mode,"master:fixture"],input=json.dumps(value) if value is not None else None,text=True,capture_output=True,check=True)
-                return json.loads(output.stdout)
-            self.assertEqual(call("analysis-get")["scopes"],{"chat":True,"paths":True,"apps":True})
-            call("analysis-scopes",{"chat":True,"paths":False,"apps":False})
-            record=call("analysis-save",{"status":"ready","manifest":{"paths":[]}})
-            self.assertFalse(record["scopes"]["apps"])
-            output=subprocess.check_output(["python3",str(script),str(db),"load"],text=True)
-            self.assertEqual(json.loads(output),{})
 
 
 if __name__ == "__main__":

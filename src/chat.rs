@@ -1,4 +1,4 @@
-// chat.rs v1.7.163
+// chat.rs v1.8.177
 use crate::{check_unchanged, invalid, open_regular};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -123,6 +123,20 @@ impl Chat {
         }
         Ok(chat)
     }
+}
+
+pub(crate) fn proof(path: &Path, id: &str, prefix_bytes: u64) -> io::Result<Value> {
+    use std::io::Seek;
+    use std::time::UNIX_EPOCH;
+    let(file,metadata)=open_regular(path)?;
+    let mut reader=BufReader::new(file);
+    let chat=Chat::parse(&mut reader)?;
+    if chat.id!=id{return Err(invalid("Identita' chat diversa da quella richiesta"));}
+    reader.rewind()?;
+    let mut digest=Sha256::new();let mut prefix=Sha256::new();let mut bytes=0u64;let mut buffer=[0u8;65536];
+    loop{let count=reader.read(&mut buffer)?;if count==0{break;}digest.update(&buffer[..count]);let amount=prefix_bytes.saturating_sub(bytes).min(count as u64) as usize;prefix.update(&buffer[..amount]);bytes+=count as u64;}
+    check_unchanged(reader.get_ref(),&metadata)?;
+    Ok(serde_json::json!({"activity":chat.activity,"sha256":digest.finalize().iter().map(|b|format!("{b:02x}")).collect::<String>(),"prefix":prefix.finalize().iter().map(|b|format!("{b:02x}")).collect::<String>(),"bytes":bytes,"modified_ns":metadata.modified()?.duration_since(UNIX_EPOCH).map_err(io::Error::other)?.as_nanos().to_string(),"records":chat.record_count()}))
 }
 
 #[cfg(test)]
