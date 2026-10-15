@@ -1,4 +1,4 @@
-// automation.rs v1.12.280
+// automation.rs v1.12.284
 //! Compare links periodically; transfers always require explicit Play.
 use crate::{devices, environment, link_flow, peers, transfer_job};
 use serde_json::{Value, json};
@@ -47,13 +47,13 @@ pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, con
                             let requested = flow["requested"] == true;
                             if !requested && flow["phase"] != "offline" && checked.get(&key).is_some_and(|time|time.elapsed()<interval) {continue;}
                             checked.insert(key.clone(),Instant::now());
-                            let mut flow = match link_flow::inspect(&config,&codex,device,link,requested) {
+                            let mut flow = if requested && flow["phase"] == "ready" { flow } else { match link_flow::inspect(&config,&codex,device,link,false) {
                                 Ok(flow)=>flow,
                                 Err(error)=>{
                                     flow["phase"]=json!("waiting");flow["error"]=json!(error.to_string());
                                     let _=link_flow::save(&config,link,flow);continue;
                                 }
-                            };
+                            }};
                             if !link_flow::should_transfer(link,&flow,transfers) {continue;}
                             let request=match link_flow::request(link,&flow) {Ok(v)=>v,Err(_)=>continue};
                             flow["phase"]=json!("transferring");flow["requested"]=json!(false);

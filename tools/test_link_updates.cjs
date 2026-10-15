@@ -1,4 +1,4 @@
-// test_link_updates.cjs v1.8.60
+// test_link_updates.cjs v1.8.71
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
@@ -57,3 +57,14 @@ context.data.paused = true;
 context.updateBadgeMotion(marker, context.chatLinks[0]);
 assert.equal(visual.phase, 'paused');
 console.log('Adapter: paused checks stay still; only real module progress activates gauges.');
+
+context.data.paused = false;
+marker.playPending = true;
+context.data.job.status = 'failed';
+context.updateBadgeMotion(marker, context.chatLinks[0]);
+assert.equal(visual.phase, 'transferring', 'new Play immediately replaces old failed job presentation');
+assert.equal(visual.modules.chat.progress, 0, 'new Play does not reuse old progress');
+marker.playPending = false;
+context.chatLinks[0].flow = {requested:true};
+context.updateBadgeMotion(marker, context.chatLinks[0]);
+assert.equal(visual.phase, 'transferring', 'accepted Play stays visible until the worker starts');

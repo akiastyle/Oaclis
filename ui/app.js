@@ -1,4 +1,4 @@
-// app.js v3.160.2913
+// app.js v3.160.2920
 "use strict";
 const $ = (s) => document.querySelector(s);
 const token = $('meta[name="oaclis-token"]').content;
@@ -356,8 +356,11 @@ async function poll() {
   }
 }
 let polling = false;
+let lastPoll = 0;
 setInterval(async () => {
-  if (polling) return;
+  const transferring = data.job?.status === "running" || document.querySelector('.link-badge[data-motion-phase="transferring"]');
+  if (polling || Date.now() - lastPoll < (transferring ? 500 : 2000)) return;
+  lastPoll = Date.now();
   polling = true;
   try {
     await poll();
@@ -366,7 +369,7 @@ setInterval(async () => {
   } finally {
     polling = false;
   }
-}, 2000);
+}, 500);
 
 let refreshing = false;
 setInterval(async () => {

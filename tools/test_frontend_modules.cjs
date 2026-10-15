@@ -1,4 +1,4 @@
-// test_frontend_modules.cjs v1.0.141
+// test_frontend_modules.cjs v1.0.152
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
@@ -7,12 +7,13 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
   const browser=await chromium.launch({headless:true,executablePath:'/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome',args:['--no-sandbox']});
   try {
     const page=await browser.newPage({viewport:{width:1440,height:960}});
-    const errors=[],requests=[];let deleteFailure=false,releaseDelete=null,holdStatus=false,releaseStatus=null;page.on('pageerror',error=>errors.push(error.message));
+    const errors=[],requests=[];let deleteFailure=false,releaseDelete=null,holdStatus=false,releaseStatus=null,releasePlay=null;page.on('pageerror',error=>errors.push(error.message));
     const entry={id:'fixture-chat',name:'Fixture',bytes:1024,modified_ns:'1000000000'};
     const connection={entry,source:'master',target:'fixture-peer',operation:'sync',scopes:{chat:true,paths:true,apps:true},flow:{phase:'ready',initialized:true,requested:false}};
     const state={device_runtime:{'fixture-peer':{available:true,active:true,build:{version:'v1.0.0',source_id:'fixture-old'}}},build:{version:'v1.0.1',source_id:'fixture-master'},role:'master',paused:false,checks_paused:true,settings_paused:false,devices:[{id:'fixture-peer',name:'Peer'}],chats:[entry],ssh_settings:{},appearance:{'device:master':{label:'ROG',icon:'desktop'}},chat_settings:{},links:[connection],positions:{master:{x:220,y:160},'fixture-peer':{x:720,y:550}},link_positions:{},connections:{'fixture-peer':'online'},job:{status:'idle'},rules:[]};
     const status={...state,analyses:{'master:fixture-chat':{status:'ready',manifest:{paths:['/home/project']}}},app_checks:{'master:fixture-chat':{status:'ready',requirements:[{label:'Python 3'}]}},preparations:{},transfers:{},discovery:{peers:[],ignored:0},shared:{devices:state.devices,appearance:state.appearance,chat_settings:state.chat_settings,links:state.links,positions:state.positions,link_positions:{}}};
-    await page.route(/\/(?:app|panels|map|console)\.js(?:\?.*)?$/, route=>route.fulfill({contentType:'text/javascript',body:fs.readFileSync(path.join(__dirname,'../ui',new URL(route.request().url()).pathname),'utf8')}));
+    await page.route(/\/(?:app|panels|map|console|badge-motion)\.js(?:\?.*)?$/, route=>route.fulfill({contentType:'text/javascript',body:fs.readFileSync(path.join(__dirname,'../ui',new URL(route.request().url()).pathname),'utf8')}));
+    await page.route('**/badge-motion.css',route=>route.fulfill({contentType:'text/css',body:fs.readFileSync(path.join(__dirname,'../ui/badge-motion.css'),'utf8')}));
     await page.route('**/api/**',async route=>{
       const endpoint=new URL(route.request().url()).pathname;requests.push(endpoint);
       let response;
@@ -26,7 +27,7 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
       else if(endpoint==='/api/terminal')response={screen:'Console fixture'};
       else if(endpoint==='/api/links'){const body=route.request().postDataJSON();state.links=[...state.links,{...body,flow:{phase:'checking'}}];status.shared.links=state.links;response=state.links;}
       else if(endpoint==='/api/links/delete'){await new Promise(resolve=>{releaseDelete=resolve;});if(deleteFailure)return route.fulfill({status:503,json:{error:'database is locked'}});state.links=state.links.filter(value=>value.entry.id!==route.request().postDataJSON().entry.id);status.shared.links=state.links;response=state.links;}
-      else if(endpoint==='/api/links/play'){connection.flow.requested=true;response=state.links;}
+      else if(endpoint==='/api/links/play'){await new Promise(resolve=>{releasePlay=resolve;});connection.flow.requested=true;response=state.links;}
       else if(endpoint==='/api/device/control'){const body=route.request().postDataJSON();const previous=state.device_runtime[body.device_id]||{build:state.build};response={...previous,active:body.action==='toggle-awake'?!previous.active:previous.active,update:body.action==='update'?{status:'running'}:previous.update,observed_at:Date.now()};state.device_runtime[body.device_id]=response;}
       else if(endpoint==='/api/check')response=state.connections;
       else if(endpoint==='/api/positions')response={ok:true};
@@ -70,6 +71,10 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     await page.waitForFunction(()=>document.querySelector('.terminal-screen')?.textContent==='Console fixture');
     await page.locator('.chat-terminal .popover-close').click();
     await page.locator('.link-play').click();
+    assert.equal(await page.locator('.link-badge').getAttribute('data-motion-phase'),'transferring','feedback starts before Play response');
+    assert.equal(await page.locator('.badge-ring.is-active').count(),2,'only enabled modules appear immediately');
+    while(!releasePlay)await new Promise(resolve=>setTimeout(resolve,10));
+    releasePlay();
     await page.waitForFunction(()=>document.querySelector('.link-play')?.disabled===true);
     assert(requests.includes('/api/links/play'));assert.equal(requests.filter(path=>path==='/api/device/control').length,3,'only explicit clicks use device control; automatic status uses the unified flow');assert.deepEqual(errors,[]);
     await page.evaluate(()=>{window.fixtureMapNode=document.querySelector('.map-node[data-id="master"]');});

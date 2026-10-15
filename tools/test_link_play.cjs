@@ -1,4 +1,4 @@
-// test_link_play.cjs v1.1.32
+// test_link_play.cjs v1.1.34
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -14,7 +14,7 @@ const { chromium } = require('/root/google-images-local/node_modules/playwright'
     await page.setContent(`<style>:root{--scope-active:#3f8e58;--duration-ui:.5s;--radius-icon:50%;--panel:#222;--glass-opacity:60%;--glass-blur:3px;--space-8:8px}.motion-badge{position:absolute;left:100px;top:100px;width:44px;height:44px}${css}</style><div class="motion-badge" data-motion-phase="idle"><button class="link-main">C</button><button class="link-edit">M</button><button class="link-open">T</button></div>`);
     await page.evaluate(snippet => {
       window.marker=document.querySelector('.motion-badge');window.connection={entry:{id:'chat'},operation:'sync',flow:{initialized:true,phase:'ready'}};
-      window.data={paused:false};window.chatLinks=[];window.calls=0;
+      window.data={paused:false};window.chatLinks=[];window.calls=0;window.saveLinkChange=action=>action();window.updateBadgeMotion=()=>{marker.dataset.motionPhase="transferring";};
       const render = new Function('marker','connection','data','name','guard','api','renderLink','main','edit','open','existing',snippet);
       window.draw=()=>render(marker,connection,data,'Chat',fn=>fn,async (route,value)=>{if(route!=='links/play')throw Error(route);calls++;return [{...value,flow:{...value.flow,requested:true}}];},()=>{marker.querySelector('.link-play').disabled=chatLinks[0]?.flow.requested===true;},marker.querySelector('.link-main'),marker.querySelector('.link-edit'),marker.querySelector('.link-open'),true);
       draw();

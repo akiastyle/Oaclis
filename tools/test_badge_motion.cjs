@@ -1,4 +1,4 @@
-// test_badge_motion.cjs v1.0.47
+// test_badge_motion.cjs v1.0.56
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -32,8 +32,15 @@ const { chromium } = require('/root/google-images-local/node_modules/playwright'
     await page.evaluate(() => { motion.update(state); motion.update(state); });
     assert.equal(await page.locator('.badge-ring[data-module="chat"]').evaluate(el => el.getAnimations()[0].startTime), before);
     assert.equal(await page.evaluate(() => saved === document.querySelector('.badge-gauges')), true);
-    const colors = await page.evaluate(() => [document.querySelector('.badge-fill').style.stroke, document.querySelector('.badge-module').style.color]);
+    const colors = await page.evaluate(() => [getComputedStyle(document.querySelector('.badge-fill')).stroke, document.querySelector('.badge-module').style.color]);
     assert.equal(colors[0], colors[1]);
+    await page.evaluate(() => { state.modules.chat.progress = 1; motion.update(state); });
+    await page.waitForTimeout(600);
+    assert.equal(await page.locator('.badge-ring[data-module="chat"] .badge-fill').evaluate(el => getComputedStyle(el).stroke), 'rgb(34, 197, 94)');
+    assert.equal(await page.locator('.badge-ring[data-module="chat"] .badge-fill').evaluate(el => getComputedStyle(el).strokeDashoffset), '0px');
+    assert.deepEqual(await page.locator('.badge-ring circle').evaluateAll(elements => elements.map(el => getComputedStyle(el).strokeWidth)), Array(6).fill('2px'));
+    assert.equal(await page.locator('.badge-ring.is-active circle').first().evaluate(el => getComputedStyle(el).vectorEffect), 'non-scaling-stroke');
+
     await page.evaluate(() => motion.update({ ...state, phase: 'paused' }));
     assert.equal(await page.locator('.badge-ring[data-module="chat"]').evaluate(el => getComputedStyle(el).animationPlayState), 'paused');
     await page.evaluate(() => motion.update({ phase: 'idle', modules: {} }));

@@ -1,4 +1,4 @@
-// map.js v3.115.2476
+// map.js v3.115.2485
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -14,13 +14,14 @@ function updateBadgeMotion(marker, connection) {
   const active = data.job?.link_key === pair;
   const current = active || data.job?.chat_id === connection.entry.id && data.job?.source_device_id === connection.source ? data.job : data.transfers?.[key] || {};
   const matches = (active || !current.device_id || current.device_id === connection.target) && (!current.generation || !connection.flow?.generation || current.generation === connection.flow.generation);
-  const modules = matches ? current.module_progress || {} : {};
+  const starting = marker.playPending || connection.flow?.requested === true;
+  const modules = starting ? Object.fromEntries(["chat", "paths", "apps"].map(name => [name, { changed: connection.scopes?.[name] !== false && connection.flow?.modules?.[name]?.changed !== false, progress: 0 }])) : matches ? current.module_progress || {} : {};
   const changed = Object.values(modules).some(module => module.changed === true);
   const checking = connection.flow?.phase === 'checking' || data.app_checks?.[key]?.status === 'pending' || !(data.checks_paused ?? data.paused) && data.analyses?.[key]?.status === 'pending';
   const unfinished = Object.values(modules).some(module => module.changed === true && module.progress < 1);
   const remote = connection.source === 'master' ? connection.target : connection.source;
   const paused = changed && unfinished && (data.paused || current.status === 'paused' || current.status === 'failed' && connection.flow?.phase === 'failed' || data.connections[remote] === 'offline');
-  const phase = paused ? 'paused' : connection.flow?.phase === 'transferring' || matches && current.status === 'running' ? 'transferring' : checking ? 'checking' : 'idle';
+  const phase = starting ? 'transferring' : paused ? 'paused' : connection.flow?.phase === 'transferring' || matches && current.status === 'running' ? 'transferring' : checking ? 'checking' : 'idle';
   marker.badgeMotion.update({ phase, modules });
 }
 
@@ -165,8 +166,10 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
   play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg>';
   play.onclick = guard(async () => {
     play.disabled = true;
+    marker.playPending = true;
+    updateBadgeMotion(marker, connection);
     try { chatLinks = await saveLinkChange(() => api("links/play", connection)); renderLink(true); }
-    finally { if (play.isConnected) renderLink(true); }
+    finally { marker.playPending = false; if (play.isConnected) { renderLink(true); updateBadgeMotion(marker, chatLinks.find(value => value.entry.id === connection.entry.id && value.source === connection.source && value.target === connection.target) || connection); } }
   });
   marker.title = name + (connection.flow?.error ? " · " + connection.flow.error : phase === "conflict" ? " · Le copie divergono: scegliere quale mantenere" : phase === "offline" ? " · In attesa del dispositivo" : "");
   if (!existing) marker.append(main, edit, play, open);
