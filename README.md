@@ -490,7 +490,7 @@ Lo stato condiviso è in `~/.config/oaclis/shared-settings.json`; le posizioni d
 ## Flussi indipendenti
 
 Oaclis separa la replica delle impostazioni, i check automatici e i trasferimenti reali.
-Ogni flusso ha un controllo di pausa distinto, applicato all'avvio:
+L'avvio normale usa `oaclis serve`, senza pause. Le seguenti variabili sono strumenti diagnostici da usare solo su richiesta esplicita; il match periodico resta separato dalla pausa del rilevamento locale:
 
 | Variabile | Con valore `1` |
 | --- | --- |
@@ -511,26 +511,19 @@ sono specificate; non sospende la replica delle impostazioni.
 
 ## Ciclo dei collegamenti
 
-Il pairing e la replica delle impostazioni sono separati dai contenuti. Il pairing
-non copia indiscriminatamente tutte le chat: esegue il primo allineamento dei
-collegamenti definiti dall'utente, appena i device e gli inventari necessari sono
-pronti e il flusso dei trasferimenti è abilitato. Anche un collegamento creato dopo
-il pairing segue questo primo allineamento.
+I tre passaggi sono separati:
+
+1. Ogni dispositivo rileva localmente Percorsi e App e salva l'inventario nel DB. Le analisi AI completate restano salvate; il refresh manuale riguarda soltanto il modulo scelto. Aprire un pannello non avvia check.
+2. Ogni 60 secondi il match confronta le chat e i risultati locali dei moduli attivi, senza eseguire trasferimenti. I contenuti delle cartelle hanno una prova SHA-256; le impronte dei file immutati vengono riutilizzate localmente e non inviate alla UI o agli altri dispositivi.
+3. Play compare soltanto in presenza di differenze e inventari pronti. Il trasferimento parte esclusivamente con Play, anche la prima volta, in ordine Chat → Percorsi → App.
+
+La chat più recente decide il verso per tutti i moduli attivi. Un'estensione della cronologia prevale sulla copia precedente; in caso di storie divergenti si usa l'ultima attività UTC registrata nella chat, non la data di copia del file. Se non è possibile distinguere le copie, il collegamento segnala conflitto. Con chat identiche rimane il verso dell'ultimo confronto, oppure la sorgente scelta con il drag.
 
 - Monodirezionale: un solo trasferimento riuscito, poi stato `transferred`.
-- Bidirezionale: primo allineamento automatico, poi confronto periodico e Play
-  manuale. Riavvii e riconnessioni non ripetono un primo allineamento completato.
-- Offline: attesa, senza tentare il trasferimento. Il Play già richiesto resta in
-  attesa del device; il primo allineamento incompleto rimane da completare.
-- Divergenza: nessuna sovrascrittura. Il badge segnala che occorre scegliere una
-  copia; non seleziona il vincitore confrontando gli orologi.
-
-Il confronto usa dimensione e modifica solo per evitare di rileggere chat
-immutate. Quando cambiano, ogni dispositivo calcola localmente digest e prova di
-prefisso dell'archivio: tramite SSH viaggiano solo queste informazioni, non tutta
-la chat. Se una copia è un'estensione dell'altra, il Play aggiorna quella rimasta
-indietro. Differenze non riconducibili a un'append vengono trattate prudentemente
-come conflitti.
+- Bidirezionale: confronto periodico e trasferimenti manuali con Play.
+- Offline: attesa, senza tentativi di trasferimento; il Play già richiesto resta in attesa della riconnessione.
+- I toggle Chat, Percorsi e App sono indipendenti e valgono per tutti i collegamenti della chat.
+- Il loading ad arco indica un check in corso. Durante il trasferimento gli anelli mostrano l'avanzamento dei soli moduli con variazioni; alla fine tornano Modifica e Console.
 
 `chat_match_interval_seconds` in `~/.config/oaclis/settings.json` regola il
 controllo periodico: valore predefinito 60 secondi, intervallo 10–3600 secondi.

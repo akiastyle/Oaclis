@@ -1,4 +1,4 @@
-// map.js v3.115.2457
+// map.js v3.115.2463
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -13,13 +13,13 @@ function updateBadgeMotion(marker, connection) {
   const pair = [connection.entry.id, ...[connection.source, connection.target].sort()].join(':');
   const active = data.job?.link_key === pair;
   const current = active || data.job?.chat_id === connection.entry.id && data.job?.source_device_id === connection.source ? data.job : data.transfers?.[key] || {};
-  const matches = active || !current.device_id || current.device_id === connection.target;
+  const matches = (active || !current.device_id || current.device_id === connection.target) && (!current.generation || !connection.flow?.generation || current.generation === connection.flow.generation);
   const modules = matches ? current.module_progress || {} : {};
   const changed = Object.values(modules).some(module => module.changed === true);
   const checking = connection.flow?.phase === 'checking' || data.app_checks?.[key]?.status === 'pending' || !(data.checks_paused ?? data.paused) && data.analyses?.[key]?.status === 'pending';
   const unfinished = Object.values(modules).some(module => module.changed === true && module.progress < 1);
   const remote = connection.source === 'master' ? connection.target : connection.source;
-  const paused = changed && unfinished && (data.paused || current.status === 'paused' || current.status === 'failed' || data.connections[remote] === 'offline');
+  const paused = changed && unfinished && (data.paused || current.status === 'paused' || current.status === 'failed' && connection.flow?.phase === 'failed' || data.connections[remote] === 'offline');
   const phase = paused ? 'paused' : connection.flow?.phase === 'transferring' || matches && current.status === 'running' ? 'transferring' : checking ? 'checking' : 'idle';
   marker.badgeMotion.update({ phase, modules });
 }
@@ -157,7 +157,7 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
   const play = marker.querySelector(".link-play") || document.createElement("button");
   play.type = "button"; play.className = "link-play icon-button";
   const phase = connection.flow?.phase;
-  play.hidden = !["ready", "failed"].includes(phase) || connection.operation !== "sync" && connection.flow?.initialized;
+  play.hidden = phase !== "ready" || connection.operation !== "sync" && connection.flow?.initialized;
   play.disabled = data.paused || phase === "transferring" || connection.flow?.requested === true;
   play.dataset.ready = String(phase === "ready");
   play.title = phase === "failed" ? "Riprova trasferimento" : "Sincronizza verso la copia rimasta indietro";

@@ -1,4 +1,4 @@
-// environment.rs v1.13.476
+// environment.rs v1.13.481
 //! Chat environment analysis and destination preparation, independent of the UI.
 use crate::{
     devices::{self, Device},
@@ -313,6 +313,7 @@ fn digest(value: &impl Serialize) -> io::Result<String> {
 pub fn execute(
     device: &Device,
     manifest: &Manifest,
+    inventory: &Value,
     scopes: Scopes,
     incoming: bool,
     operation: &str,
@@ -406,9 +407,7 @@ pub fn execute(
     }
     if scopes.apps {
         notify(json!({"event":{"phase":"transferring"}}));
-        let source_device = if incoming { Some(device) } else { None };
-        let input = json!({"paths":manifest.paths,"configs":manifest.configs,"plugins":manifest.plugins});
-        let inventory = python(source_device, include_str!("../tools/app_inventory.py"), &["source", &input.to_string()])?;
+        if inventory["status"]!="ready" {return Err(invalid("Inventario App sorgente non pronto"));}
         let mut configs = Vec::new();
         for config in &manifest.configs {
             let mut staged = staging::StagedFile::new(state)?;

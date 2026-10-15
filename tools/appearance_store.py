@@ -1,4 +1,4 @@
-# appearance_store.py v1.2.168
+# appearance_store.py v1.2.172
 """Oaclis storage adapter; chat metadata lives in the appearance record."""
 import json
 import os
@@ -44,6 +44,10 @@ if operation in READS:
             data = read_data(db)
         if operation in ('status-read','preferences-get'):
             result = data if operation == 'status-read' else {name:data[name] for name in ('preferences','links')}
+            if operation == 'status-read':
+                for preparation in result['preparations'].values():
+                    for item in preparation.get('paths', []):
+                        item.pop('entries', None)
         elif operation == 'analysis-get':
             result = data['analyses'].get(key, {'status':'missing'})
             scopes = data['preferences'].get(key.split(':',1)[-1],{}).get('scopes')

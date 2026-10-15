@@ -1,4 +1,4 @@
-// web.rs v2.25.1574
+// web.rs v2.25.1577
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -169,7 +169,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     if !checks_paused {
         crate::initial_inventory::start(codex.clone(), config.clone(), analyses.clone());
     }
-    crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone(), peers.clone(), !checks_paused, !paused);
+    crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone(), peers.clone(), !paused);
     println!("Oaclis UI: http://localhost:23232");
     let runtime = Mutex::new(crate::device_runtime::Runtime::new(&config));
     let mutations = Mutex::new(());
@@ -314,6 +314,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     if link["operation"] != "sync" && link["flow"]["initialized"]==true { return Err(invalid("Trasferimento monodirezionale già completato")); }
                     if link["flow"]["phase"]=="conflict" {return Err(invalid("Le chat divergono: scegliere quale copia mantenere"));}
                     if link["flow"]["phase"]=="transferring" {return Err(invalid("Trasferimento già in corso"));}
+                    if link["flow"]["phase"]!="ready" {return Err(invalid("Nessuna sincronizzazione pronta: attendi il confronto"));}
                     let mut flow=link["flow"].clone();flow["requested"]=json!(true);
                     crate::link_flow::save(&config,link,flow)?;
                     environment::database(&config,"","links-get",None)

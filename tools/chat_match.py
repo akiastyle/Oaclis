@@ -1,8 +1,9 @@
-# chat_match.py v1.1.42
+# chat_match.py v1.1.53
 """Read-only chat proof. Only small digests cross SSH; archives stay on their device."""
 import hashlib
 import json
 import os
+import re
 import stat
 import sys
 
@@ -13,6 +14,7 @@ def summary(path, chat_id, prefix_bytes):
         before = os.fstat(stream.fileno())
         if not stat.S_ISREG(before.st_mode):
             raise ValueError('Archivio non regolare')
+        activity = None
         digest, prefix, seen, records = hashlib.sha256(), hashlib.sha256(), 0, 0
         while True:
             line = stream.readline(64 * 1024 * 1024 + 1)
@@ -28,6 +30,13 @@ def summary(path, chat_id, prefix_bytes):
                     raise ValueError('Identità chat diversa da quella richiesta')
             elif record['type'] == 'session_meta':
                 raise ValueError('Identità chat duplicata')
+            timestamp = record.get('timestamp', '')
+            if isinstance(timestamp, str) and re.fullmatch(r'[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]{1,9})?Z', timestamp):
+                base, fraction = timestamp[:19], timestamp[19:-1]
+                fraction = fraction[1:] if fraction.startswith('.') else fraction
+                if len(fraction) <= 9 and (not fraction or fraction.isdigit()):
+                    canonical = base + '.' + fraction.ljust(9, '0') + 'Z'
+                    activity = max(activity or canonical, canonical)
             digest.update(line)
             prefix.update(line[:max(0, min(len(line), prefix_bytes - seen))])
             seen += len(line)
@@ -35,7 +44,7 @@ def summary(path, chat_id, prefix_bytes):
         after = os.fstat(stream.fileno())
         if not records or (before.st_size, before.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
             raise ValueError('Chat cambiata durante il confronto')
-        return {'sha256': digest.hexdigest(), 'prefix': prefix.hexdigest(), 'bytes': seen,
+        return {'activity': activity, 'sha256': digest.hexdigest(), 'prefix': prefix.hexdigest(), 'bytes': seen,
                 'modified_ns': str(after.st_mtime_ns), 'records': records}
 
 

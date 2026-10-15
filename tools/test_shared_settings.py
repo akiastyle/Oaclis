@@ -1,4 +1,4 @@
-# test_shared_settings.py v1.9.138
+# test_shared_settings.py v1.10.150
 """Settings replication with isolated homes; never use real SSH or Codex."""
 import importlib.util
 import json
@@ -115,6 +115,18 @@ class SharedSettingsTests(unittest.TestCase):
                 self.assertEqual(sources[root.id]['requirements'][0]['label'],'Python 3.12')
                 self.assertEqual(sources[client.id]['requirements'][0]['label'],'Python 3.14')
                 self.assertEqual(json.loads(db.execute("SELECT value FROM appearance WHERE key='chat:chat-one'").fetchone()[0])['label'],'Oaclis')
+
+    def test_file_digest_cache_stays_local_and_survives_settings_exchange(self):
+        owner=self.stores[0]
+        cached={'path':'/home/project','bytes':3,'files':1,'sha256':'root-proof','entries':{'file.txt':{'sha256':'file-proof'}}}
+        with sqlite3.connect(owner.config/'appearance.sqlite') as db:
+            shared.save_preparation(db,'master:chat-one',{'status':'ready','chat_bytes':1,'chat_modified_ns':'1','measured_at':1,'paths':[cached],'paths_bytes':3,'path_files':1},owner.config)
+        packet=owner.exchange()
+        record=packet['records']['chatdata:chat-one:'+owner.id]['value']['paths']['items'][0]
+        self.assertNotIn('entries',record)
+        with sqlite3.connect(owner.config/'appearance.sqlite') as db:
+            saved=shared.chat_object(db,'chat-one')['paths']['sources'][owner.id]['items'][0]
+            self.assertEqual(saved['entries'],cached['entries'])
 
     def test_link_lifecycle_replicates_without_rearming_a_completed_transfer(self):
         self.converge()

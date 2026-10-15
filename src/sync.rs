@@ -1,4 +1,4 @@
-// sync.rs v1.7.280
+// sync.rs v1.7.302
 use crate::{
     chat::Chat,
     check_unchanged,
@@ -62,7 +62,14 @@ struct Checkpoint {
     common: Receipt,
 }
 
-fn file_direction(local: &Receipt, remote: Option<&Receipt>, common: Option<&Receipt>) -> Outcome {
+fn file_direction(local: &Receipt, remote: Option<&Receipt>, common: Option<&Receipt>, direction: Direction) -> Outcome {
+    if remote != Some(local) {
+        match direction {
+            Direction::Send=>return Outcome::Sent,
+            Direction::Receive if remote.is_some()=>return Outcome::Received,
+            _=>{},
+        }
+    }
     match remote {
         Some(remote) if local == remote => Outcome::Identical,
         None if common.is_none() => Outcome::Sent,
@@ -159,7 +166,7 @@ pub fn synchronize_with_direction(
         }
         None => Outcome::Conflict,
         Some(receipt) if kind == Kind::File => {
-            file_direction(receipt, peer_receipt, previous.as_ref().map(|p| &p.common))
+            file_direction(receipt, peer_receipt, previous.as_ref().map(|p| &p.common), direction)
         }
         Some(_) => {
             let local_chat = Chat::read(&snapshot.path)?;
@@ -262,6 +269,9 @@ mod tests {
 
     #[test]
     fn decides_from_common_content_without_timestamps() {
+        let chosen=receipt("winner");let older=receipt("older");
+        assert_eq!(file_direction(&chosen,Some(&older),None,Direction::Send),Outcome::Sent);
+        assert_eq!(file_direction(&older,Some(&chosen),None,Direction::Receive),Outcome::Received);
         let base = receipt("base");
         let a = receipt("aaaa");
         let b = receipt("bbbb");
@@ -275,7 +285,7 @@ mod tests {
             (&base, None, Some(&base), Outcome::Conflict),
             (&a, Some(&a), Some(&base), Outcome::Identical),
         ] {
-            assert_eq!(file_direction(local, remote, common), expected);
+            assert_eq!(file_direction(local, remote, common, Direction::Both), expected);
         }
     }
 }

@@ -4,7 +4,7 @@
 - Local project root: `/root/Oaclis`.
 - Oaclis is the active project unless the user explicitly says otherwise.
 - Work one agreed step at a time. A request to discuss or inspect does not authorize implementation, installation, deployment, or synchronization.
-- The UI currently runs with `OACLIS_PAUSE_SETTINGS=0 OACLIS_PAUSE_CHECKS=1 OACLIS_PAUSE_TRANSFERS=1`. Keep actual chat/file/app transfers and automatic checks paused until the user explicitly asks to resume them. Shared presentation, positions, links and saved source inventories continue replicating independently of that pause.
+- Normal operation has settings exchange, local checks and link matching enabled. Do not introduce development pauses unless the user asks. Transfers always require Play, including the first transfer.
 
 ## Core Rule
 - Verify before changing.
@@ -29,7 +29,7 @@
 - Preserve schema, data, routines where applicable, triggers, keys, indexes, constraints, and identity values during migrations. Do not treat copying tables alone as a complete migration.
 - A partial migration requires an agreed scope for omitted objects. Test migrations on isolated copies and discard those copies after the check.
 - Completed checks remain saved. Do not expire or automatically repeat them on refresh or panel opening.
-- Each chat/device link has a persisted `flow` and a unique generation. Only its designated executor compares or executes it. Initial alignment runs once; completed one-way links stop; bidirectional links compare every 60 seconds by default and transfer only after Play. Compare content proofs, never infer the winner from clocks. Conflicts block writes.
+- Each chat/device link has a persisted `flow` and a unique generation. Only its designated executor compares or executes it. Completed one-way links stop; bidirectional links compare every 60 seconds by default. Every transfer requires Play. The newer chat determines the direction of all enabled modules; compare content proofs and, for divergent histories, recorded UTC chat activity, never filesystem copy times. An unresolved tie blocks writes.
 - Refresh updates inventories only. Keep chat content monitoring separate from AI path/app detection; a new message must not restart completed inventory analysis.
 - Read-only status/catalog requests must not create tables or modify data.
 

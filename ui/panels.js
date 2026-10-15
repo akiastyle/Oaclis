@@ -1,4 +1,4 @@
-// panels.js v3.129.2271
+// panels.js v3.130.2293
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -106,7 +106,7 @@ function activityState(entry, origin, scope) {
   const job = data.job?.chat_id === entry.id ? data.job : data.transfers?.[key] || {};
   const transferring = job.chat_id === entry.id && job.source_device_id === origin &&
     (scope === "all" || job.scopes?.[scope] === true);
-  const checking = scope !== "chat" && analysis.status === "pending" || (scope === "apps" || scope === "all") && data.app_checks?.[key]?.status === "pending";
+  const checking = (scope === "paths" || scope === "all") && analysis.status === "pending" || (scope === "apps" || scope === "all") && data.app_checks?.[key]?.status === "pending";
   const busy = !data.paused && transferring && job === data.job && job.status === "running" || checking;
   return { state: busy ? "busy" : "idle", label: checking ? "Check in corso" : "Sincronizzazione in corso" };
 }
@@ -146,21 +146,12 @@ function appCheckLines(check) {
   return lines.length ? lines : ["Nessuna app aggiuntiva individuata"];
 }
 
-function requestAppCheck(panel, entry) {
-  const source = panel.dataset.sourceDevice || "master", key = source + ":" + entry.id;
-  if (panel.appCheckInFlight || data.app_checks?.[key]) return;
-  panel.appCheckInFlight = true;
-  api("app-check", { source_device_id: source, chat_id: entry.id }).then(result => {
-    data.app_checks ??= {}; data.app_checks[key] = result;
-    if (panel.isConnected) renderScopeDetails(panel, panel.scopeEntry);
-  }).catch(error => {
-    data.app_checks ??= {}; data.app_checks[key] = { status: "failed", error: error.message };
-    if (panel.isConnected) renderScopeDetails(panel, panel.scopeEntry);
-  }).finally(() => { panel.appCheckInFlight = false; });
-}
-
 function renderScopeDetails(panel, entry) {
   panel.scopeEntry = entry;
+  const scopes = data.chat_settings?.[entry.id]?.scopes;
+  if (scopes) panel.querySelectorAll('[data-scope]').forEach(button => {
+    if (!button.disabled) button.setAttribute('aria-pressed', String(scopes[button.dataset.scope] !== false));
+  });
   const origin = panel.dataset.sourceDevice || "master";
   const result = data.analyses?.[origin + ":" + entry.id] || entry.analysis || {}, manifest = result.manifest || {};
   const activity = entry.modified_ns ? new Date(Number(entry.modified_ns) / 1e6).toLocaleString("it-IT") : "Non disponibile";
@@ -180,8 +171,7 @@ function renderScopeDetails(panel, entry) {
   });
   write("paths", paths, "Nessun percorso individuato");
   if (panel.manualRefresh?.apps && data.app_checks?.[origin + ":" + entry.id]?.status !== "pending") panel.manualRefresh.apps = false;
-  write("apps", panel.manualRefresh?.apps ? ["Rilevamento requisiti in corso…"] : appCheckLines(data.app_checks?.[origin + ":" + entry.id]), "Nessuna app aggiuntiva individuata");
-  if (result.status === "ready") requestAppCheck(panel, entry);
+  changed = updateScopeText(panel.querySelector('[data-detail="apps"]'), panel.manualRefresh?.apps ? ["Rilevamento requisiti in corso…"] : appCheckLines(data.app_checks?.[origin + ":" + entry.id])) || changed;
   for (const scope of ["chat", "paths", "apps"]) {
     const row = panel.querySelector('[data-detail="' + scope + '"]').parentElement;
     row.querySelector(".operation-indicator")?.remove();

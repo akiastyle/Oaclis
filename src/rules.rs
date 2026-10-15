@@ -1,4 +1,4 @@
-// rules.rs v1.18.509
+// rules.rs v1.19.537
 use crate::{
     devices::{self, Device},
     invalid, open_regular,
@@ -197,6 +197,34 @@ pub(crate) fn selected_size(root: &Path) -> io::Result<(u64, u64)> {
         bytes = bytes.checked_add(metadata.len()).ok_or_else(||invalid("Dimensione troppo grande"))?;
     }
     Ok((bytes, files.len() as u64))
+}
+
+/// Content proof for the same file selection used by transfers. Reuse unchanged file digests.
+pub(crate) fn selected_snapshot(root: &Path, previous: &serde_json::Value) -> io::Result<serde_json::Value> {
+    let rule = Rule { id:"snapshot".into(), name:"Snapshot".into(), device_id:"master".into(),
+        local_root:root.into(), remote_root:root.into(), operation:Operation::Copy,
+        direction:Direction::Send, include:vec![], exclude:vec![] };
+    rule.validate()?;
+    for ancestor in root.ancestors() {
+        if !ancestor.symlink_metadata()?.is_dir() { return Err(invalid("Cartella sorgente non regolare o link")); }
+    }
+    let mut files=BTreeSet::new();local_files(&rule,root,&mut files)?;
+    let mut entries=serde_json::Map::new();let mut digest=Sha256::new();let mut bytes=0u64;
+    for relative in files {
+        let path=root.join(&relative);let (mut file,meta)=open_regular(&path)?;
+        let modified=meta.modified()?.duration_since(std::time::UNIX_EPOCH).map_err(io::Error::other)?.as_nanos().to_string();
+        let key=relative.to_str().ok_or_else(||invalid("Percorso non UTF-8"))?;
+        let old=&previous["entries"][key];
+        let hash=if old["bytes"]==meta.len() && old["modified_ns"]==modified && old["sha256"].is_string() {
+            old["sha256"].as_str().unwrap().to_owned()
+        } else {transfer::copy_hash(&mut file,&mut io::sink())?.sha256};
+        crate::check_unchanged(&file,&meta)?;
+        bytes=bytes.checked_add(meta.len()).ok_or_else(||invalid("Dimensione troppo grande"))?;
+        digest.update(serde_json::to_vec(&(key,&hash))?);
+        entries.insert(key.into(),serde_json::json!({"bytes":meta.len(),"modified_ns":modified,"sha256":hash}));
+    }
+    Ok(serde_json::json!({"path":root,"bytes":bytes,"files":entries.len(),"entries":entries,
+        "sha256":digest.finalize().iter().map(|b|format!("{b:02x}")).collect::<String>()}))
 }
 
 fn reserved_path(path: &Path) -> bool {

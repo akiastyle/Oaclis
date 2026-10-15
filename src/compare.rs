@@ -1,4 +1,4 @@
-// compare.rs v1.5.100
+// compare.rs v1.5.113
 use crate::{chat::Chat, check_unchanged, open_regular};
 use sha2::{Digest, Sha256};
 use std::io::{self, Read};
@@ -28,7 +28,11 @@ pub fn chats(source: &Chat, destination: Option<&Chat>) -> ChatComparison {
     } else if destination.records.starts_with(&source.records) {
         ChatComparison::DestinationAhead
     } else {
-        ChatComparison::Conflict
+        match (&source.activity,&destination.activity) {
+            (Some(a),Some(b)) if a>b=>ChatComparison::SourceAhead,
+            (Some(a),Some(b)) if b>a=>ChatComparison::DestinationAhead,
+            _=>ChatComparison::Conflict,
+        }
     }
 }
 
@@ -80,6 +84,7 @@ mod tests {
             history_mode: "legacy".into(),
             project_paths: BTreeSet::new(),
             parent_id: None,
+            activity: None,
             records: records.iter().map(|value| [*value; 32]).collect(),
         }
     }
@@ -87,6 +92,12 @@ mod tests {
     #[test]
     fn distinguishes_every_chat_comparison() {
         let original = chat("a", &[1, 2]);
+        let mut older=chat("a",&[1,9]);let mut newer=chat("a",&[1,8]);
+        older.activity=Some("2026-10-14T10:00:00.000000000Z".into());
+        newer.activity=Some("2026-10-15T10:00:00.000000000Z".into());
+        assert_eq!(chats(&newer,Some(&older)),ChatComparison::SourceAhead);
+        assert_eq!(chats(&older,Some(&newer)),ChatComparison::DestinationAhead);
+
         assert_eq!(chats(&original, None), ChatComparison::DestinationMissing);
         for (other, expected) in [
             (chat("a", &[1, 2]), ChatComparison::Identical),

@@ -1,4 +1,4 @@
-# test_presentation_settings.py v1.4.60
+# test_presentation_settings.py v1.4.64
 import json
 from pathlib import Path
 import subprocess
@@ -21,6 +21,10 @@ class PresentationSettings(unittest.TestCase):
                 call('links-save', chat + device, dict(entry=dict(id=chat), source='master', target=device, operation='sync', scopes=dict(chat=True, paths=True, apps=True)))
             call('analysis-save', 'master:a', dict(status='ready'))
             call('analysis-save', 'one:a', dict(status='ready'))
+            independent = dict(chat=True, paths=False, apps=True)
+            result = call('chat-scopes', 'a', independent)
+            self.assertEqual(result['preferences']['a']['scopes'], independent)
+            self.assertTrue(all(link['scopes'] == independent for link in result['links'] if link['entry']['id'] == 'a'))
             scopes = dict(chat=True, paths=False, apps=False)
             result = call('chat-scopes', 'a', scopes)
             self.assertEqual(sum(link.get('scopes') == scopes for link in result['links']), 2)

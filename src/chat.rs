@@ -1,4 +1,4 @@
-// chat.rs v1.6.147
+// chat.rs v1.7.163
 use crate::{check_unchanged, invalid, open_regular};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
@@ -13,6 +13,18 @@ pub struct Chat {
     pub project_paths: BTreeSet<PathBuf>,
     pub parent_id: Option<String>,
     pub(crate) records: Vec<[u8; 32]>,
+    pub(crate) activity: Option<String>,
+}
+
+/// Canonical UTC event time, never the archive's filesystem modification time.
+pub(crate) fn event_time(record: &Value) -> Option<String> {
+    let value=record["timestamp"].as_str()?;
+    let prefix=value.get(..19)?;
+    if prefix.bytes().enumerate().any(|(i,b)| match i {4|7=>b!=b'-',10=>b!=b'T',13|16=>b!=b':',_=>!b.is_ascii_digit()}) {return None;}
+    let rest=value.get(19..)?.strip_suffix('Z')?;
+    let fraction=if rest.is_empty() {""} else {rest.strip_prefix('.')?};
+    if fraction.len()>9 || !fraction.bytes().all(|b|b.is_ascii_digit()) {return None;}
+    Some(format!("{prefix}.{fraction:0<9}Z"))
 }
 
 impl Chat {
@@ -35,6 +47,7 @@ impl Chat {
             project_paths: BTreeSet::new(),
             parent_id: None,
             records: Vec::new(),
+            activity: None,
         };
         let mut line = Vec::new();
         loop {
@@ -98,6 +111,9 @@ impl Chat {
                 );
                 crate::paths::validate_absolute(&cwd)?;
                 chat.project_paths.insert(cwd);
+            }
+            if let Some(time)=event_time(&record) {
+                if chat.activity.as_ref().is_none_or(|previous|time>*previous) {chat.activity=Some(time);}
             }
             chat.records
                 .push(Sha256::digest(serde_json::to_vec(&record)?).into());

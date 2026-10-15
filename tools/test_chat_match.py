@@ -1,4 +1,4 @@
-# test_chat_match.py v1.4.36
+# test_chat_match.py v1.5.41
 """Proof checks use isolated archives; no SSH, model calls or user data."""
 import json
 from pathlib import Path
@@ -19,6 +19,11 @@ class ChatMatchTests(unittest.TestCase):
         old=summary(str(a),'chat',a.stat().st_size);new=summary(str(b),'chat',a.stat().st_size)
         self.assertEqual(old['sha256'],new['prefix']);self.assertNotEqual(old['sha256'],new['sha256'])
         self.assertEqual(new['records'],3)
+
+    def test_activity_uses_records_not_the_archive_copy_time(self):
+        path=self.root/'chat'
+        path.write_bytes(self.meta+json.dumps({'timestamp':'2026-10-15T10:00:00.25Z','type':'event_msg','payload':{'text':'new'}}).encode()+b'\n')
+        self.assertEqual(summary(str(path),'chat',0)['activity'],'2026-10-15T10:00:00.250000000Z')
 
     def test_equal_sizes_do_not_hide_a_divergence(self):
         a=self.root/'a';b=self.root/'b'

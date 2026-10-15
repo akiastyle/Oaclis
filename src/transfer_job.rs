@@ -1,8 +1,21 @@
-// transfer_job.rs v2.21.1357
+// transfer_job.rs v2.23.1436
 //! Executes an authorized transfer; independent of routes and scheduling.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid,rules};
 use serde_json::{Value,json};
 use std::{fs,io,path::{Path,PathBuf},sync::{Arc,Mutex},thread};
+
+fn module_event(job: &Arc<Mutex<Value>>, module: &str, progress: Value) {
+    let mut state = job.lock().unwrap();
+    let event = &progress["event"];
+    let fraction = if event["phase"] == "completed" { 1.0 }
+        else { event["percent"].as_f64().unwrap_or(0.0) / 100.0 };
+    let fraction = if let (Some(index), Some(total)) = (progress["index"].as_f64(), progress["total"].as_f64()) {
+        if total > 0.0 { ((index - 1.0).max(0.0) + fraction) / total } else { fraction }
+    } else { fraction };
+    let previous = state["module_progress"][module]["progress"].as_f64().unwrap_or(0.0);
+    state["module_progress"][module]["progress"] = json!(previous.max(fraction.clamp(0.0,1.0)));
+    state["progress"] = progress;
+}
 
 pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value>>) -> io::Result<Value> {
     let ds = devices::load(config.join("devices.json"))?;
@@ -103,6 +116,9 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
     } else {
         None
     };
+    let app_inventory=if scopes.apps {
+        if let Some(chat)=&chat {environment::database(config,&environment::key(v["source_device_id"].as_str().unwrap_or("master"),chat["id"].as_str().unwrap())?,"inventory-get",None)?} else {Value::Null}
+    } else {Value::Null};
     let remote = if let Some(chat) = &chat
         && scopes.chat
     {
@@ -149,6 +165,16 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
         "title":chat.as_ref().map(|c|c["name"].clone()).unwrap_or_else(||json!(rule.as_ref().unwrap().name)),
         "source":if incoming {device.name.as_str()}else{"Questo dispositivo"},
         "destination":if incoming {"Questo dispositivo"}else{device.name.as_str()}});
+    lock["module_progress"] = json!({
+        "chat":{"changed":scopes.chat,"progress":0.0},
+        "paths":{"changed":scopes.paths && manifest.as_ref().is_some_and(|m|!m.paths.is_empty()),"progress":0.0},
+        "apps":{"changed":scopes.apps,"progress":0.0}
+    });
+    if v["modules"].is_object() {
+        for name in ["chat","paths","apps"] {
+            lock["module_progress"][name]["changed"]=json!(v["modules"][name]["enabled"]==true && v["modules"][name]["changed"]==true);
+        }
+    }
     let transfer_key = chat.as_ref().map(|c| environment::key(v["source_device_id"].as_str().unwrap_or("master"), c["id"].as_str().unwrap())).transpose()?;
     if let Some(key) = &transfer_key { environment::database(&config, key, "transfer-save", Some(&lock))?; }
     drop(lock);
@@ -170,19 +196,21 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
             } else {
                 let chat = chat.unwrap();
                 fs::create_dir_all(&state)?;
-                let transfer_environment = || -> io::Result<Value> { if scopes.paths || scopes.apps { environment::execute(
-                    &device,
-                    &manifest.unwrap(),
-                    scopes,
-                    incoming,
-                    v["operation"].as_str().unwrap_or("copy"),
-                    &state.join(format!(
-                        "environment-{}-{}",
-                        device.id,
-                        chat["id"].as_str().unwrap()
-                    )),
-                    |progress| job.lock().unwrap()["progress"] = progress,
-                ) } else { Ok(json!([])) } };
+                let transfer_environment = || -> io::Result<Value> {
+                    let mut results = Vec::new();
+                    for (module, enabled) in [("paths",scopes.paths),("apps",scopes.apps)] {
+                        if !enabled {continue;}
+                        let selected = environment::Scopes {chat:false,paths:module=="paths",apps:module=="apps"};
+                        results.push(environment::execute(
+                            &device,manifest.as_ref().unwrap(),&app_inventory,selected,incoming,
+                            v["operation"].as_str().unwrap_or("copy"),
+                            &state.join(format!("environment-{}-{}",device.id,chat["id"].as_str().unwrap())),
+                            |progress| module_event(&job,module,progress),
+                        )?);
+                        module_event(&job,module,json!({"event":{"phase":"completed"}}));
+                    }
+                    Ok(json!(results))
+                };
                 if !scopes.chat {
                     return Ok(json!({"environment":transfer_environment()?}));
                 }
@@ -217,9 +245,10 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                         crate::sync::Kind::Chat,
                         direction,
                         |event| {
-                            job.lock().unwrap()["progress"] = json!({"event":event})
+                            module_event(&job,"chat",json!({"event":event}))
                         },
                     )?;
+                    if outcome != crate::sync::Outcome::Conflict { module_event(&job,"chat",json!({"event":{"phase":"completed"}})); }
                     return Ok(
                         json!({"chat":outcome,"environment":if outcome == crate::sync::Outcome::Conflict {json!([])} else {transfer_environment()?}}),
                     );
@@ -238,9 +267,10 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                     source,
                     remote.unwrap(),
                     |event| {
-                        job.lock().unwrap()["progress"] = json!({"event":event})
+                        module_event(&job,"chat",json!({"event":event}))
                     },
                 )?;
+                module_event(&job,"chat",json!({"event":{"phase":"completed"}}));
                 Ok(json!({"chat":receipt,"environment":transfer_environment()?}))
             }
         })();
@@ -260,4 +290,23 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
         if let Some(key) = &flow_key { let _ = crate::link_flow::finish(&transfer_config,key,&flow_generation,lock["status"]=="completed",lock["message"].as_str().unwrap_or("Trasferimento non completato")); }
     });
     Ok(json!({"ok":true}))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn progress_is_monotonic_and_modules_are_independent() {
+        let job=Arc::new(Mutex::new(json!({"module_progress":{
+            "chat":{"changed":true,"progress":0.0},
+            "paths":{"changed":true,"progress":0.0},
+            "apps":{"changed":false,"progress":0.0}}})));
+        module_event(&job,"paths",json!({"index":1,"total":2,"event":{"percent":50}}));
+        assert_eq!(job.lock().unwrap()["module_progress"]["paths"]["progress"],0.25);
+        module_event(&job,"paths",json!({"event":{"phase":"preparing"}}));
+        assert_eq!(job.lock().unwrap()["module_progress"]["paths"]["progress"],0.25);
+        assert_eq!(job.lock().unwrap()["module_progress"]["apps"]["progress"],0.0);
+        module_event(&job,"chat",json!({"event":{"phase":"completed"}}));
+        assert_eq!(job.lock().unwrap()["module_progress"]["chat"]["progress"],1.0);
+    }
 }

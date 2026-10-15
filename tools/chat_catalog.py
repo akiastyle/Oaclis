@@ -1,6 +1,7 @@
-# chat_catalog.py v1.0.53
+# chat_catalog.py v1.0.62
 """Read Codex chat names and rollout locations; never modify the archive."""
 import json
+import hashlib
 import os
 import pathlib
 import sqlite3
@@ -42,9 +43,17 @@ if settings.is_file():
     with sqlite3.connect(settings.as_uri() + "?mode=ro", uri=True, timeout=10) as db:
         if db.execute("SELECT 1 FROM sqlite_master WHERE name='analysis'").fetchone():
             records = {key: json.loads(value) for key, value in db.execute("SELECT key,value FROM analysis WHERE value IS NOT NULL")}
+            local_key = settings.parent / 'pairing_ed25519.pub'
+            identity = hashlib.sha256(' '.join(local_key.read_text().split()[:2]).encode()).hexdigest()[:32] if local_key.is_file() else 'local'
+            measurements = {}
+            if 'sync' in {row[1] for row in db.execute('PRAGMA table_info(appearance)')}:
+                measurements = {key[5:]: {name: module.get('sources', {}).get(identity) for name, module in json.loads(raw).items() if name in ('chat', 'paths', 'apps')} for key, raw in db.execute("SELECT key,sync FROM appearance WHERE key LIKE 'chat:%'")}
             for chat in chats:
                 record = records.get("master:" + chat["id"], {"status": "missing"})
                 revision = "environment-v3:master:{}:{}:{}".format(json.dumps(chat["path"], ensure_ascii=False), chat["bytes"], json.dumps(chat["modified_ns"]))
                 chat["analysis"] = record
+                chat["sync_data"] = measurements.get(chat["id"], {})
+                for item in (chat['sync_data'].get('paths') or {}).get('items', []):
+                    item.pop('entries', None)
 chats.sort(key=lambda c: c["path"], reverse=True)
 print(json.dumps({"root": str(root), "chats": chats}))

@@ -1,5 +1,5 @@
-// automation.rs v1.10.271
-//! Initial alignment runs once. Later bidirectional changes await explicit Play.
+// automation.rs v1.12.280
+//! Compare links periodically; transfers always require explicit Play.
 use crate::{devices, environment, link_flow, peers, transfer_job};
 use serde_json::{Value, json};
 use std::{collections::HashMap, path::PathBuf, sync::{Arc, Mutex}, thread, time::{Duration, Instant}};
@@ -13,7 +13,7 @@ pub(crate) fn conflict(value: &Value) -> bool {
         || value.as_array().is_some_and(|v| v.iter().any(conflict))
 }
 
-pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, connections: Arc<Mutex<Value>>, discovery: peers::Peers, checks: bool, transfers: bool) {
+pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, connections: Arc<Mutex<Value>>, discovery: peers::Peers, transfers: bool) {
     thread::spawn(move || {
         let mut checked: HashMap<String, Instant> = HashMap::new();
         loop {
@@ -45,9 +45,6 @@ pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, con
                                 continue;
                             }
                             let requested = flow["requested"] == true;
-                            let first = flow["initialized"] != true;
-                            if first && flow["phase"] == "failed" && !requested {continue;}
-                            if !checks && !requested && !(first && transfers) {continue;}
                             if !requested && flow["phase"] != "offline" && checked.get(&key).is_some_and(|time|time.elapsed()<interval) {continue;}
                             checked.insert(key.clone(),Instant::now());
                             let mut flow = match link_flow::inspect(&config,&codex,device,link,requested) {
@@ -86,7 +83,7 @@ pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, con
 mod tests {
     use super::*;
     #[test]
-    fn only_initial_alignment_is_automatic_and_one_way_finishes() {
+    fn only_the_executor_matches_and_one_way_finishes() {
         let mut link=json!({"operation":"send","flow":{"executor":"a","initialized":false}});
         assert!(eligible(&link,"a"));assert!(!eligible(&link,"b"));
         link["flow"]["initialized"]=json!(true);assert!(!eligible(&link,"a"));

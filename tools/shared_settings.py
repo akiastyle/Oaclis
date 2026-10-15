@@ -1,4 +1,4 @@
-# shared_settings.py v1.12.372
+# shared_settings.py v1.12.384
 """Replicate presentation settings over mutually approved SSH; no chat/auth files."""
 import fcntl
 import hashlib
@@ -155,6 +155,8 @@ class Store:
             sources = {source for name in MODULES for source in value.get(name,{}).get('sources',{})}
             for source in sources:
                 snapshot['chatdata:' + chat + ':' + source] = {name:value[name]['sources'][source] for name in MODULES if source in value.get(name,{}).get('sources',{})}
+                for item in snapshot['chatdata:' + chat + ':' + source].get('paths', {}).get('items', []):
+                    item.pop('entries', None)
         for _, raw in db.execute('SELECT key,value FROM chat_links'):
             value = json.loads(raw)
             if value['source'] not in mapping or value['target'] not in mapping:
@@ -247,7 +249,15 @@ class Store:
                 for name in MODULES:
                     sources = current.setdefault(name, {}).setdefault('sources', {})
                     if value is None or name not in value: sources.pop(source, None)
-                    else: sources[source] = value[name]
+                    else:
+                        incoming = json.loads(json.dumps(value[name]))
+                        if name == 'paths' and source == self.id:
+                            cached = {item['path']: item for item in sources.get(source, {}).get('items', [])}
+                            for item in incoming.get('items', []):
+                                old = cached.get(item['path'], {})
+                                if old.get('sha256') == item.get('sha256') and 'entries' in old:
+                                    item['entries'] = old['entries']
+                        sources[source] = incoming
                 save_chat_object(db, chat, current)
         for key, record in records.items():
             kind, identifier_ = key.split(':', 1)

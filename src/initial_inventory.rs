@@ -1,4 +1,4 @@
-// initial_inventory.rs v2.22.1213
+// initial_inventory.rs v2.22.1224
 //! One initial inventory per local chat; saved results remain cached.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid};
 use serde_json::{Value,json};
@@ -18,7 +18,12 @@ pub(crate) fn start(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::coll
                     .map(|time| format!("{time:?}"))
                     .unwrap_or_default();
                 if matches!(cached["status"].as_str(), Some("ready" | "failed")) {
-                    if cached["status"] == "ready" { let _ = crate::app_inventory::request(&config,&json!({"chat_id":id})); }
+                    if cached["status"] == "ready" {
+                        if let Ok(manifest)=serde_json::from_value::<environment::Manifest>(cached["manifest"].clone()) {
+                            if let Err(error)=crate::preparation::refresh(&config,id,Path::new(chat["path"].as_str().unwrap_or("")),&manifest) {eprintln!("Oaclis: check locale: {error}");}
+                        }
+                        let _ = crate::app_inventory::request(&config,&json!({"chat_id":id}));
+                    }
                     continue;
                 }
                 {
@@ -28,7 +33,7 @@ pub(crate) fn start(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::coll
                 let _ = environment::database(&config, &key, "analysis-save", Some(&json!({"status":"pending", "revision":revision})));
                 let result = match environment::analyze(None, chat["path"].as_str().unwrap_or(""), id) {
                     Ok(manifest) => {
-                        if let Err(error) = crate::preparation::capture(&config,id,Path::new(chat["path"].as_str().unwrap_or("")),&manifest) { eprintln!("Oaclis: dimensioni sorgenti: {error}"); }
+                        if let Err(error) = crate::preparation::refresh(&config,id,Path::new(chat["path"].as_str().unwrap_or("")),&manifest) { eprintln!("Oaclis: dimensioni sorgenti: {error}"); }
                         json!({"status":"ready", "revision":revision, "manifest":manifest, "chat_bytes":chat["bytes"], "chat_modified_ns":chat["modified_ns"]})
                     },
                     Err(error) => json!({"status":"failed", "revision":revision, "error":error.to_string(), "auth_revision":auth_revision}),
@@ -98,7 +103,7 @@ pub(crate) fn request(config: &Path, codex: &Path, analyses: &Arc<Mutex<std::col
         let result = match environment::analyze(device.as_ref(), &path, &chat_id) {
             Ok(manifest) => {
                 if device.is_none() {
-                    if let Err(error) = crate::preparation::capture(&config,&chat_id,Path::new(&path),&manifest) { eprintln!("Oaclis: dimensioni sorgenti: {error}"); }
+                    if let Err(error) = crate::preparation::refresh(&config,&chat_id,Path::new(&path),&manifest) { eprintln!("Oaclis: dimensioni sorgenti: {error}"); }
                 }
                 json!({"status":"ready","revision":revision,"manifest":manifest})
             }

@@ -1,4 +1,4 @@
-// preparation.rs v1.4.87
+// preparation.rs v1.5.118
 //! Persistent source sizes, collected once without SSH, hashing or transfers.
 use crate::{environment::{self, Manifest}, invalid, rules};
 use serde_json::{Value, json};
@@ -29,6 +29,28 @@ pub(crate) fn capture(config: &Path, chat_id: &str, chat_path: &Path, manifest: 
         "chat_bytes":chat.len(),"chat_modified_ns":chat.modified()?.duration_since(UNIX_EPOCH).map_err(io::Error::other)?.as_nanos().to_string(),
         "paths":paths,"paths_bytes":total,"path_files":files});
     environment::database(config, &key, "preparation-save", Some(&value))?;
+    Ok(value)
+}
+
+/// Local measurements are independent of AI detection and of transfer execution.
+pub(crate) fn refresh(config: &Path, chat_id: &str, chat_path: &Path, manifest: &Manifest) -> io::Result<Value> {
+    manifest.validate()?;
+    let key=environment::key("master",chat_id)?;
+    let saved=environment::database(config,&key,"preparation-get",None)?;
+    let (_,chat)=crate::open_regular(chat_path)?;
+    let mut paths=Vec::new();let mut total=Some(0u64);let mut files=0u64;
+    for root in manifest.paths.iter().collect::<std::collections::BTreeSet<_>>() {
+        if manifest.paths.iter().any(|other|other!=root && root.starts_with(other)) {continue;}
+        let previous=saved["paths"].as_array().and_then(|items|items.iter().find(|v|v["path"]==json!(root))).unwrap_or(&Value::Null);
+        match rules::selected_snapshot(root,previous) {
+            Ok(value)=>{total=total.and_then(|n|n.checked_add(value["bytes"].as_u64().unwrap()));files+=value["files"].as_u64().unwrap();paths.push(value);},
+            Err(error)=>{total=None;paths.push(json!({"path":root,"error":error.to_string()}));}
+        }
+    }
+    let value=json!({"status":if total.is_some(){"ready"}else{"partial"},"measured_at":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),
+        "chat_bytes":chat.len(),"chat_modified_ns":chat.modified()?.duration_since(UNIX_EPOCH).map_err(io::Error::other)?.as_nanos().to_string(),
+        "paths":paths,"paths_bytes":total,"path_files":files});
+    environment::database(config,&key,"preparation-save",Some(&value))?;
     Ok(value)
 }
 
@@ -66,13 +88,20 @@ mod tests {
         let config = root.join("config");
         let id="019f99ae-6802-7b30-902b-f73dbd2459b4";
         let first = capture(&config,id,&chat,&manifest).unwrap();
+        let snapshot=refresh(&config,id,&chat,&manifest).unwrap();
+        assert!(snapshot["paths"][0]["sha256"].is_string());
+        std::fs::write(project.join("file.txt"),b"changed content").unwrap();
+        let updated=refresh(&config,id,&chat,&manifest).unwrap();
+        assert_ne!(snapshot["paths"][0]["sha256"],updated["paths"][0]["sha256"]);
+        assert_eq!(updated["paths_bytes"],17);
+
         assert_eq!(first["chat_bytes"],7);
         assert_eq!(first["paths_bytes"],5);
         assert_eq!(first["path_files"],2);
         assert_eq!(first["paths"].as_array().unwrap().len(),1);
         std::fs::remove_dir_all(&project).unwrap();
         std::fs::remove_file(&chat).unwrap();
-        assert_eq!(capture(&config,id,&chat,&manifest).unwrap(),first);
+        assert_eq!(capture(&config,id,&chat,&manifest).unwrap(),updated);
         std::fs::remove_dir_all(root).unwrap();
     }
     #[test]

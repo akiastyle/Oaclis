@@ -1,5 +1,7 @@
-// test_frontend_modules.cjs v1.0.75
+// test_frontend_modules.cjs v1.0.90
 const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
 const {chromium}=require('/root/google-images-local/node_modules/playwright');
 (async()=>{
   const browser=await chromium.launch({headless:true,executablePath:'/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome',args:['--no-sandbox']});
@@ -10,6 +12,7 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     const connection={entry,source:'master',target:'fixture-peer',operation:'sync',scopes:{chat:true,paths:true,apps:true},flow:{phase:'ready',initialized:true,requested:false}};
     const state={device_runtime:{'fixture-peer':{available:true,active:true,build:{version:'v1.0.0',source_id:'fixture-old'}}},build:{version:'v1.0.1',source_id:'fixture-master'},role:'master',paused:false,checks_paused:true,settings_paused:false,devices:[{id:'fixture-peer',name:'Peer'}],chats:[entry],ssh_settings:{},appearance:{'device:master':{label:'ROG',icon:'desktop'}},chat_settings:{},links:[connection],positions:{master:{x:220,y:160},'fixture-peer':{x:720,y:550}},link_positions:{},connections:{'fixture-peer':'online'},job:{status:'idle'},rules:[]};
     const status={...state,analyses:{'master:fixture-chat':{status:'ready',manifest:{paths:['/home/project']}}},app_checks:{'master:fixture-chat':{status:'ready',requirements:[{label:'Python 3'}]}},preparations:{},transfers:{},discovery:{peers:[],ignored:0},shared:{devices:state.devices,appearance:state.appearance,chat_settings:state.chat_settings,links:state.links,positions:state.positions,link_positions:{}}};
+    await page.route(/\/(?:app|panels|map|console)\.js(?:\?.*)?$/, route=>route.fulfill({contentType:'text/javascript',body:fs.readFileSync(path.join(__dirname,'../ui',new URL(route.request().url()).pathname),'utf8')}));
     await page.route('**/api/**',async route=>{
       const endpoint=new URL(route.request().url()).pathname;requests.push(endpoint);
       let response;
@@ -17,6 +20,9 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
       else if(endpoint==='/api/status')response=status;
       else if(endpoint==='/api/peers')response=status.discovery;
       else if(endpoint==='/api/catalog')response={root:'/fixture',chats:[entry]};
+      else if(endpoint==='/api/scopes'){const body=route.request().postDataJSON();state.chat_settings[entry.id]={scopes:body.scopes};connection.scopes=body.scopes;response={preferences:state.chat_settings,links:state.links};}
+      else if(endpoint==='/api/analyze')response=status.analyses['master:fixture-chat'];
+      else if(endpoint==='/api/app-check')response=status.app_checks['master:fixture-chat'];
       else if(endpoint==='/api/terminal')response={screen:'Console fixture'};
       else if(endpoint==='/api/links/play'){connection.flow.requested=true;response=state.links;}
       else if(endpoint==='/api/device/control'){const body=route.request().postDataJSON();response={active:body.action==='toggle-awake',build:{version:'v1.0.0',source_id:'fixture-old'},update:body.action==='update'?{status:'running'}:null};}
@@ -46,6 +52,15 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     await page.locator('.library-row > .icon-button').click();
     await page.locator('.chat-editor summary').filter({hasText:'Sincronizza'}).click();
     assert.equal(await page.locator('.chat-editor [data-refresh]').count(),3);
+    await page.locator('.chat-editor [data-scope="paths"]').click();
+    assert.equal(await page.locator('.chat-editor [data-scope="paths"]').getAttribute('aria-pressed'),'false');
+    assert.equal(await page.locator('.chat-editor [data-scope="apps"]').getAttribute('aria-pressed'),'true');
+    assert.equal(await page.locator('.chat-editor [data-scope="chat"]').getAttribute('aria-pressed'),'true');
+    const appRequests=requests.filter(p=>p==='/api/app-check').length;
+    await page.locator('.chat-editor [data-refresh="paths"]').click();
+    await page.waitForFunction(()=>!document.querySelector('.chat-editor [data-refresh="paths"]').disabled);
+    assert.equal(requests.filter(p=>p==='/api/app-check').length,appRequests,'path refresh must not launch app detection');
+
     await page.locator('.chat-editor .popover-close').click();
     await page.locator('#close').click();
     await page.locator('.link-open').click();

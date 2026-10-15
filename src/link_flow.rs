@@ -1,4 +1,4 @@
-// link_flow.rs v1.14.197
+// link_flow.rs v1.19.295
 //! Link lifecycle: compare immutable proofs, persist intent, never transfer from a poll.
 use crate::{devices::Device, environment, invalid, catalog};
 use serde_json::{Value, json};
@@ -44,8 +44,54 @@ pub(crate) fn compare_proofs(source: Option<&Value>, target: Option<&Value>) -> 
             else if b["bytes"].as_u64() > a["bytes"].as_u64() { ("ready", Some("target")) }
             else { ("conflict", None) }
         },
+        (Some(a),Some(b)) => match (a["activity"].as_str(),b["activity"].as_str()) {
+            (Some(a),Some(b)) if a>b => ("ready",Some("source")),
+            (Some(a),Some(b)) if b>a => ("ready",Some("target")),
+            _ => ("conflict",None),
+        },
         _ => ("conflict", None),
     }
+}
+
+fn module_signature(chat: Option<&Value>, module: &str) -> Option<Value> {
+    let chat=chat?;let record=&chat["sync_data"][module];
+    if record["status"]!="ready" {return None;}
+    let home=chat["analysis"]["manifest"]["home"].as_str().unwrap_or("");
+    let path_key=|path:&str| if !home.is_empty() {path.strip_prefix(&format!("{home}/")).map(|v|format!("~/{v}")).unwrap_or_else(||path.to_owned())} else {path.to_owned()};
+    let mut items=Vec::new();
+    if module=="paths" {
+        for item in record["items"].as_array().into_iter().flatten() {
+            let hash=item["sha256"].as_str()?;
+            items.push(json!([path_key(item["path"].as_str()?),hash]));
+        }
+    } else {
+        for item in record["requirements"].as_array().into_iter().flatten() {items.push(json!([item["kind"],item["name"],item["version"]]));}
+        for item in record["configs"].as_array().into_iter().flatten() {items.push(json!([item["service"],path_key(item["path"].as_str().unwrap_or("")),item["modules"]]));}
+    }
+    items.sort_by_key(Value::to_string);
+    Some(json!(items))
+}
+
+fn match_modules(link: &Value, flow: &mut Value, source: Option<&Value>, target: Option<&Value>, chat_phase: &str, newer: Option<&str>) {
+    let winner=newer.or_else(||flow["newer"].as_str()).unwrap_or("source").to_owned();
+    let selected=if winner=="target" {target} else {source};
+    let mut modules=json!({});let mut waiting=false;let mut changed=false;
+    for name in ["chat","paths","apps"] {
+        let enabled=link["scopes"][name]!=false;
+        let (a,b)=if name=="chat" {(Some(flow["proofs"]["source"]["sha256"].clone()),Some(flow["proofs"]["target"]["sha256"].clone()))}
+            else {(module_signature(source,name),module_signature(target,name))};
+        let winner_ready=if winner=="target" {b.is_some()} else {a.is_some()};
+        let available=if name=="chat" {selected.is_some()} else {winner_ready};
+        let empty=if winner=="target" {b.as_ref()} else {a.as_ref()}.is_some_and(|v|v==&json!([]));
+        let different=enabled && !empty && a!=b;
+        if enabled && !available {waiting=true;}
+        changed|=different;
+        modules[name]=json!({"enabled":enabled,"changed":different,"ready":available,"source":a,"target":b});
+    }
+    flow["modules"]=modules;
+    flow["newer"]=json!(winner);
+    flow["phase"]=json!(if chat_phase=="conflict" {"conflict"} else if waiting {"waiting_inventory"} else if changed {"ready"} else {"aligned"});
+    flow["error"]=if waiting {json!("In attesa del check locale dei moduli attivi sulla sorgente")} else {Value::Null};
 }
 
 pub(crate) fn inspect(config: &Path, codex: &Path, device: &Device, link: &Value, force: bool) -> io::Result<Value> {
@@ -60,7 +106,9 @@ pub(crate) fn inspect(config: &Path, codex: &Path, device: &Device, link: &Value
     let signatures = json!({"source":stamp(&source),"target":stamp(&target)});
     let mut flow = link["flow"].clone();
     if !force && flow["signatures"] == signatures && flow["comparison"].is_string() {
-        flow["phase"]=flow["comparison"].clone(); return Ok(flow);
+        let phase=flow["comparison"].as_str().unwrap().to_owned();
+        match_modules(link,&mut flow,source.as_ref(),target.as_ref(),&phase,None);
+        save(config,link,flow.clone())?;return Ok(flow);
     }
     let mut checking=flow.clone();checking["phase"]=json!("checking");save(config,link,checking)?;
     let prefix = source.as_ref().and_then(|s|s["bytes"].as_u64()).unwrap_or(0).min(target.as_ref().and_then(|t|t["bytes"].as_u64()).unwrap_or(0));
@@ -78,8 +126,9 @@ pub(crate) fn inspect(config: &Path, codex: &Path, device: &Device, link: &Value
     }
     let (mut phase,newer) = compare_proofs(a.as_ref(),b.as_ref());
     if link["operation"] != "sync" && newer == Some("target") { phase = "conflict"; }
-    flow["comparison"] = json!(phase); flow["phase"] = json!(phase); flow["newer"] = json!(newer); flow["signatures"] = signatures;
+    flow["comparison"] = json!(phase); flow["phase"] = json!(phase); flow["signatures"] = signatures;
     flow["proofs"] = json!({"source":a,"target":b}); flow["error"] = Value::Null;
+    match_modules(link,&mut flow,source.as_ref(),target.as_ref(),phase,newer);
     flow["checked_at"] = json!(SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs());
     save(config,link,flow.clone())?;
     Ok(flow)
@@ -91,12 +140,13 @@ pub(crate) fn request(link: &Value, flow: &Value) -> io::Result<Value> {
     if reverse && link["operation"] != "sync" { return Err(invalid("Direzione opposta al trasferimento previsto")); }
     Ok(json!({"chat_id":link["entry"]["id"],"source_device_id":if reverse {&link["target"]} else {&link["source"]},
       "device_id":if reverse {&link["source"]} else {&link["target"]},"operation":"send","scopes":link["scopes"],
-      "link_key":key(link)?,"generation":flow["generation"]}))
+      "modules":flow["modules"],"link_key":key(link)?,"generation":flow["generation"]}))
 }
 
 pub(crate) fn should_transfer(link: &Value, flow: &Value, enabled: bool) -> bool {
-    enabled && (flow["initialized"] != true || link["operation"] == "sync" && flow["requested"] == true)
-        && matches!(flow["phase"].as_str(),Some("ready" | "aligned"))
+    enabled && flow["requested"] == true
+        && (flow["initialized"] != true || link["operation"] == "sync")
+        && flow["phase"] == "ready"
 }
 
 pub(crate) fn finish(config: &Path, key: &str, generation: &Value, success: bool, error: &str) -> io::Result<()> {
@@ -141,13 +191,47 @@ mod tests {
         assert_eq!(compare_proofs(Some(&a),Some(&a)),("aligned",None));
         assert_eq!(compare_proofs(Some(&a),None),("ready",Some("source")));
         assert_eq!(compare_proofs(None,None),("conflict",None));
+        let old=json!({"sha256":"old","prefix":"diverged-old","activity":"2026-10-14T10:00:00.000000000Z"});
+        let new=json!({"sha256":"new","prefix":"diverged-new","activity":"2026-10-15T10:00:00.000000000Z"});
+        assert_eq!(compare_proofs(Some(&new),Some(&old)),("ready",Some("source")));
+        assert_eq!(compare_proofs(Some(&old),Some(&new)),("ready",Some("target")));
+
         assert_eq!(compare_proofs(Some(&a),Some(&json!({"sha256":"b","prefix":"other","bytes":30}))), ("conflict",None));
     }
     #[test]
-    fn first_alignment_runs_once_then_waits_for_play() {
+    fn chat_winner_controls_all_modules_and_switches_remain_independent() {
+        let link=json!({"operation":"sync","scopes":{"chat":true,"paths":true,"apps":false}});
+        let source=json!({"analysis":{"manifest":{"home":"/root"}},"sync_data":{
+            "paths":{"status":"ready","items":[{"path":"/root/project","sha256":"old"}]}}});
+        let target=json!({"analysis":{"manifest":{"home":"/home/kim"}},"sync_data":{
+            "paths":{"status":"ready","items":[{"path":"/home/kim/project","sha256":"new"}]}}});
+        let mut flow=json!({"proofs":{"source":{"sha256":"older-chat"},"target":{"sha256":"newer-chat"}}});
+        match_modules(&link,&mut flow,Some(&source),Some(&target),"ready",Some("target"));
+        assert_eq!(flow["phase"],"ready");assert_eq!(flow["newer"],"target");
+        assert_eq!(flow["modules"]["paths"]["changed"],true);
+        assert_eq!(flow["modules"]["apps"]["enabled"],false);
+        assert_eq!(flow["modules"]["apps"]["changed"],false);
+        let equal=json!({"proofs":{"source":{"sha256":"same"},"target":{"sha256":"same"}},"newer":"target"});
+        let mut aligned=equal.clone();
+        match_modules(&link,&mut aligned,Some(&target),Some(&target),"aligned",None);
+        assert_eq!(aligned["phase"],"aligned");
+        let mut only_paths=equal;
+        match_modules(&link,&mut only_paths,Some(&source),Some(&target),"aligned",None);
+        assert_eq!(only_paths["phase"],"ready");assert_eq!(only_paths["newer"],"target");
+        assert_eq!(only_paths["modules"]["chat"]["changed"],false);
+        let mut missing=json!({"proofs":{}});
+        match_modules(&link,&mut missing,Some(&json!({})),None,"ready",Some("source"));
+        assert_eq!(missing["phase"],"waiting_inventory");
+        assert!(!should_transfer(&link,&missing,true));
+    }
+    #[test]
+    fn every_transfer_requires_play_and_a_difference() {
         let link=json!({"operation":"sync"});
         let mut flow=json!({"initialized":false,"phase":"ready","requested":false});
-        assert!(should_transfer(&link,&flow,true));assert!(!should_transfer(&link,&flow,false));
+        assert!(!should_transfer(&link,&flow,true));
+        flow["requested"]=json!(true);assert!(should_transfer(&link,&flow,true));assert!(!should_transfer(&link,&flow,false));
+        flow["phase"]=json!("aligned");assert!(!should_transfer(&link,&flow,true));
+        flow["phase"]=json!("ready");flow["requested"]=json!(false);
         flow["initialized"]=json!(true);assert!(!should_transfer(&link,&flow,true));
         flow["requested"]=json!(true);assert!(should_transfer(&link,&flow,true));
         assert!(!should_transfer(&json!({"operation":"send"}),&flow,true));
