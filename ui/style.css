@@ -1,4 +1,4 @@
-/* style.css v2.0.1194 */
+/* style.css v2.0.1223 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1152,18 +1152,25 @@ select {
 
 .node-restart { right: calc(var(--space-5) + var(--size-24)); }
 .node-toggle-awake { right: calc(var(--space-5) + var(--size-24) * 2); }
-.node-toggle-awake[aria-pressed="true"] { color: var(--scope-active); }
 
 .node-version { right: calc(var(--space-5) + var(--size-24) * 3); }
-.node-version[data-state="aligned"] { --version-state-color: var(--version-ok); }
-.node-version[data-state="outdated"], .node-version[data-state="updating"] { --version-state-color: var(--version-update); --drop-glow-color: var(--version-update); animation: drop-port-pulse var(--drop-pulse-duration) ease-in-out infinite alternate; }
+.node-version[data-state="outdated"], .node-version[data-state="updating"] { --drop-glow-color: var(--version-update); animation: drop-port-pulse var(--drop-pulse-duration) ease-in-out infinite alternate; }
 
-:root { --version-ok: #26834a; --version-update: #ee6c4d; --stroke-version: 2.5; }
-:root[data-theme="dark"] { --version-ok: #06d6a0; --version-update: #fb8500; }
-.node-version:is([data-state="aligned"], [data-state="outdated"], [data-state="updating"]) {
-  color: var(--version-state-color);
-  background: color-mix(in srgb, var(--version-state-color) 22%, transparent);
-  border: var(--border-width) solid var(--version-state-color);
-}
+:root { --version-update: #ee6c4d; --stroke-version: 2.5; }
+:root[data-theme="dark"] { --version-update: #fb8500; }
 .map-node.online .node-version { opacity: 1; }
 .node-version svg { stroke-width: var(--stroke-version); }
+
+:root {
+  --device-command-ink: #fff;
+  --device-command-bg: rgb(17 17 17 / 90%);
+  --device-command-border: rgb(255 255 255 / 30%);
+}
+.map-node .node-color,
+.map-node .node-color:hover,
+.map-node .node-color[aria-pressed="true"] {
+  color: var(--device-command-ink);
+  background: var(--device-command-bg);
+  border: var(--border-width) solid var(--device-command-border);
+}
+.map-node .node-color[aria-pressed="true"] { border-color: var(--device-command-ink); }
