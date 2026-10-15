@@ -1,4 +1,4 @@
-// automation.rs v1.10.269
+// automation.rs v1.10.271
 //! Initial alignment runs once. Later bidirectional changes await explicit Play.
 use crate::{devices, environment, link_flow, peers, transfer_job};
 use serde_json::{Value, json};
@@ -30,7 +30,7 @@ pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, con
                     let approved = pairing["approved"].as_object().is_some_and(|all|all.values().any(|v|v["device_id"] == device.id));
                     let present = online.iter().any(|p|p["device_id"] == device.id && p["connected"] == true)
                         || approved && recent && status["errors"].is_object() && status["errors"][&device.id].is_null();
-                    let blocked = recent && !status["errors"][&device.id].is_null();
+                    let blocked = recent && (!status["errors"][&device.id].is_null() || status["runtime"][&device.id]["available"] == false);
                     connections.lock().unwrap()[&device.id] = json!(if present && !blocked {"online"} else {"offline"});
                 }
                 if job.lock().unwrap()["status"] != "running" {

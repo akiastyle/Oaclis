@@ -1,4 +1,4 @@
-# shared_settings.py v1.11.335
+# shared_settings.py v1.12.372
 """Replicate presentation settings over mutually approved SSH; no chat/auth files."""
 import fcntl
 import hashlib
@@ -10,6 +10,8 @@ import shlex
 import sqlite3
 import subprocess
 import sys
+import time
+import urllib.request
 
 if 'unified_ensure' not in globals():
     from chat_records import *
@@ -90,6 +92,21 @@ def merge(records, incoming):
     for key, record in incoming.items():
         if key not in records or tuple(record['clock']) > tuple(records[key]['clock']):
             records[key] = record
+
+def runtime_status():
+    try:
+        page = urllib.request.urlopen('http://localhost:23232/', timeout=2).read(1048576).decode()
+        token = re.search(r'name="oaclis-token" content="([^"]+)"', page)
+        if not token:
+            raise ValueError('Sessione Oaclis non disponibile')
+        request = urllib.request.Request('http://localhost:23232/api/device/control', data=json.dumps({'device_id':'master', 'action':'status'}).encode(), headers={'Content-Type':'application/json', 'X-Oaclis-Token':token.group(1)})
+        with urllib.request.urlopen(request, timeout=2) as response:
+            value = json.load(response)
+        if not isinstance(value, dict) or type(value.get('active')) is not bool:
+            raise ValueError('Stato Oaclis non valido')
+        return {**value, 'available':True, 'observed_at':int(time.time()*1000)}
+    except (OSError, ValueError) as error:
+        return {'available':False, 'error':str(error), 'observed_at':int(time.time()*1000)}
 
 class Store:
     def __init__(self, home):
@@ -262,7 +279,7 @@ class Store:
     def sync(self, source):
         packet = self.exchange()
         devices = {d['id']: d for d in read(self.config / 'devices.json', [])}
-        errors = {}
+        errors, runtime = {}, {}
         for peer, approval in read(self.config / 'pairing.json', {}).get('approved', {}).items():
             device = devices.get(approval.get('device_id'))
             if not device:
@@ -277,11 +294,17 @@ class Store:
                 response = json.loads(result.stdout)
                 if response.get('sender') != peer:
                     raise ValueError('Identità del dispositivo SSH diversa da quella autorizzata')
+                status = response.get('runtime', {'available':False, 'error':'Stato Oaclis non comunicato'})
+                if not isinstance(status, dict) or type(status.get('available')) is not bool:
+                    raise ValueError('Stato Oaclis non valido')
+                runtime[device['id']] = status
                 packet = self.exchange(response)
             except (ValueError, OSError, subprocess.TimeoutExpired) as error:
-                errors[approval.get('device_id', peer)] = str(error)
-        atomic(self.config / 'shared-status.json', {'errors': errors})
-        return {'errors': errors}
+                device_id = approval.get('device_id', peer)
+                errors[device_id] = str(error)
+                runtime[device_id] = {'available':False, 'error':str(error), 'observed_at':int(time.time()*1000)}
+        atomic(self.config / 'shared-status.json', {'errors': errors, 'runtime': runtime})
+        return {'errors': errors, 'runtime': runtime}
 
 if __name__ == '__main__':
     try:
@@ -315,6 +338,8 @@ if __name__ == '__main__':
         source = os.environ.get('OACLIS_SHARED_SOURCE')
         if operation == 'sync' and not source:
             source = pathlib.Path(sys.argv[2]).read_text()
-        print(json.dumps(store.sync(source) if operation == 'sync' else store.exchange(packet)))
+        result = store.sync(source) if operation == 'sync' else store.exchange(packet)
+        if operation == 'exchange': result['runtime'] = runtime_status()
+        print(json.dumps(result))
     except (ValueError, OSError, sqlite3.Error) as error:
         print(json.dumps({'error': str(error)})); sys.exit(1)

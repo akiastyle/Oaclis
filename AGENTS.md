@@ -88,3 +88,7 @@
 - Compare source fingerprints rather than numerical application versions: the displayed means can coincide across different source builds.
 - Remote app updates are explicit user actions. Preserve configuration and user data; refuse dirty or divergent checkouts, use fast-forward Git updates, then compile and restart.
 - Include the committed revision in release builds by compiling after the commit before deployment.
+
+## Unified Device Status
+- Carry app availability, installed build, keep-awake state and app update progress in the existing approved SSH settings exchange. Treat this as runtime telemetry, not replicated preferences.
+- Use this same snapshot in the UI, with a 30-second freshness limit. Do not create independent automatic SSH checks on hover or update-monitoring timers, or rely on LAN announcements for build comparison.

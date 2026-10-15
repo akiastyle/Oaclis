@@ -1,4 +1,4 @@
-// app.js v3.159.2888
+// app.js v3.159.2897
 "use strict";
 const $ = (s) => document.querySelector(s);
 const token = $('meta[name="oaclis-token"]').content;
@@ -314,6 +314,13 @@ async function poll() {
       Object.assign(data, shared); chatLinks = shared.links; positions = shared.positions; linkPositions = shared.link_positions || {};
       renderMap(true); renderLibrary();
     }
+  }
+  data.device_runtime ??= {};
+  if (next.device_runtime) for (const id of Object.keys(data.device_runtime)) if (!(id in next.device_runtime)) delete data.device_runtime[id];
+  for (const [id, runtime] of Object.entries(next.device_runtime || {})) {
+    const previous = data.device_runtime[id];
+    if (previous?.update?.status === "running" && runtime.update?.status === "failed") notice(runtime.update.error);
+    if (runtime.available === false || previous?.available === false || !previous?.observed_at || !runtime.observed_at || runtime.observed_at >= previous.observed_at) data.device_runtime[id] = runtime;
   }
   data.build = next.build;
   data.connections = next.connections;

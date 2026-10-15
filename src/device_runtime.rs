@@ -1,4 +1,4 @@
-// device_runtime.rs v1.12.182
+// device_runtime.rs v1.13.193
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
@@ -6,6 +6,15 @@ use std::{fs, io::{self, BufRead, BufReader}, path::{Path, PathBuf}, process::{C
 
 pub(crate) fn build() -> Value {
     json!({"version":env!("OACLIS_APP_VERSION"),"source_id":env!("OACLIS_SOURCE_ID"),"revision":env!("OACLIS_REVISION")})
+}
+
+pub(crate) fn snapshot(config: &Path, local: &std::sync::Mutex<Runtime>) -> io::Result<Value> {
+    let fresh = fs::metadata(config.join("shared-status.json")).and_then(|m|m.modified()).ok()
+        .and_then(|time|time.elapsed().ok()).is_some_and(|age|age < Duration::from_secs(30));
+    let mut states = if fresh { crate::shared_settings::read_positions(config,"shared-status.json")?["runtime"].clone() } else { Value::Null };
+    if !states.is_object() { states = json!({}); }
+    states["master"] = local.lock().unwrap().status();
+    Ok(states)
 }
 
 pub(crate) struct Runtime {
@@ -28,7 +37,7 @@ impl Runtime {
             self.child.take();
             self.error = Some("Il blocco standby non è più attivo".into());
         }
-        json!({"active":self.child.is_some(),"error":self.error,"restarting":self.restarting,"build":build(),"update":*self.update.lock().unwrap()})
+        json!({"available":true,"observed_at":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,"active":self.child.is_some(),"error":self.error,"restarting":self.restarting,"build":build(),"update":*self.update.lock().unwrap()})
     }
     fn enable(&mut self) -> io::Result<()> {
         let mut child = Command::new("python3").args(["-u", "-c", include_str!("../tools/keep_awake.py")])

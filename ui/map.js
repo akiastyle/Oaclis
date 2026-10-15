@@ -1,4 +1,4 @@
-// map.js v3.115.2399
+// map.js v3.115.2444
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -436,15 +436,12 @@ function renderMap(animate = false) {
       button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + shape + '</svg>';
       if (action === "toggle-awake") button.setAttribute("aria-pressed", "mixed");
       const update = result => {
+        result.observed_at ??= Date.now();
         data.device_runtime ??= {}; data.device_runtime[device.id] = result;
         button.setAttribute("aria-pressed", String(result.active));
         button.title = label + (result.active ? " · attivo" : " · disattivato") + (result.error ? " · " + result.error : "");
       };
       if (action === "toggle-awake" && data.device_runtime?.[device.id]) update(data.device_runtime[device.id]);
-      if (action === "toggle-awake") button.onpointerenter = button.onfocus = async () => {
-        if (button.disabled) return;
-        try { const result = await api("device/control", { device_id: device.id, action: "status" }); if (!button.disabled) update(result); } catch (_) { /* A disconnected device remains unchanged. */ }
-      };
       button.onclick = guard(async event => {
         event.stopPropagation();
         if (action === "restart" && !window.confirm("Riavviare Oaclis su “" + device.name + "”?")) return;
@@ -477,31 +474,10 @@ function renderMap(animate = false) {
         version.dataset.busy = "true"; version.disabled = true;
         try {
           const result = await api("device/control", {device_id:device.id,action:"update"});
+          result.observed_at ??= Date.now();
           data.device_runtime ??= {}; data.device_runtime[device.id] = result;
           notice("Aggiornamento Oaclis avviato su " + device.name);
-          let attempts = 0;
-          const watch = window.setInterval(async () => {
-            if (version.dataset.polling) return;
-            version.dataset.polling = "true";
-            try {
-              const current = await api("device/control", {device_id:device.id,action:"status"});
-              data.device_runtime[device.id] = current;
-              if (current.update?.status !== "running" || ++attempts >= 180) {
-                window.clearInterval(watch); delete version.dataset.busy;
-                if (current.update?.status === "failed") notice(current.update.error);
-                else if (current.update?.status === "running") notice("Aggiornamento ancora in corso su " + device.name);
-              }
-              renderConnections();
-            } catch (_) {
-              window.clearInterval(watch); delete version.dataset.busy;
-              if (data.device_runtime?.[device.id]) delete data.device_runtime[device.id].update;
-              notice("Collegamento interrotto con " + device.name + ": stato aggiornamento da verificare alla riconnessione.");
-              renderConnections();
-            }
-            finally { delete version.dataset.polling; }
-          }, 5000);
-        } catch (error) { delete version.dataset.busy; renderConnections(); throw error; }
-        renderConnections();
+        } finally { delete version.dataset.busy; renderConnections(); }
       });
       actions.append(version);
     }
@@ -652,11 +628,18 @@ function renderConnections() {
       unknown: "non verificato",
     }[state];
     node.querySelectorAll(".node-restart, .node-toggle-awake").forEach(button => { button.disabled = state !== "online" || button.dataset.busy === "true"; });
+    const awake = node.querySelector(".node-toggle-awake");
+    const runtime = data.device_runtime?.[id];
+    if (awake && !awake.dataset.busy) {
+      const known = state === "online" && runtime?.available !== false && typeof runtime?.active === "boolean";
+      awake.setAttribute("aria-pressed", known ? String(runtime.active) : "mixed");
+      awake.title = "Sempre attivo · " + (known ? runtime.active ? "attivo" : "disattivato" : "stato non disponibile") + (runtime?.error ? " · " + runtime.error : "");
+      awake.setAttribute("aria-label", deviceName(id) + " · " + awake.title);
+    }
     const version = node.querySelector(".node-version");
     if (version) {
-      const peer = discovery.peers.find(peer => peer.device_id === id && peer.connected);
       const runtime = data.device_runtime?.[id];
-      const build = peer?.build?.source_id ? peer.build : runtime?.build;
+      const build = runtime?.build;
       const pending = version.dataset.busy || runtime?.update?.status === "running";
       const known = build?.source_id && data.build?.source_id;
       const aligned = known && build.source_id === data.build.source_id;

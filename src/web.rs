@@ -1,4 +1,4 @@
-// web.rs v2.25.1570
+// web.rs v2.25.1574
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -265,7 +265,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     crate::terminal::request(device.as_ref(), &v)
                 }
                 (&Method::Get, "/api/state") => Ok(
-                    json!({"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
+                    json!({"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
                 ),
                 (&Method::Post, "/api/device/control") => {
                     let value = body(&mut request)?;
@@ -283,7 +283,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 }
                 (&Method::Get, "/api/status") => {
                     let snapshot = environment::database(&config,"","status-read",None)?;
-                    Ok(json!({"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
+                    Ok(json!({"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
                         "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":snapshot["links"],"chat_settings":snapshot["preferences"],"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}))
                 }
                 (&Method::Post, "/api/link-position") => {

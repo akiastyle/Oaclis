@@ -1,4 +1,4 @@
-// test_frontend_modules.cjs v1.0.64
+// test_frontend_modules.cjs v1.0.71
 const assert=require('node:assert/strict');
 const {chromium}=require('/root/google-images-local/node_modules/playwright');
 (async()=>{
@@ -8,8 +8,8 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     const errors=[],requests=[];page.on('pageerror',error=>errors.push(error.message));
     const entry={id:'fixture-chat',name:'Fixture',bytes:1024,modified_ns:'1000000000'};
     const connection={entry,source:'master',target:'fixture-peer',operation:'sync',scopes:{chat:true,paths:true,apps:true},flow:{phase:'ready',initialized:true,requested:false}};
-    const state={build:{version:'v1.0.1',source_id:'fixture-master'},role:'master',paused:false,checks_paused:true,settings_paused:false,devices:[{id:'fixture-peer',name:'Peer'}],chats:[entry],ssh_settings:{},appearance:{'device:master':{label:'ROG',icon:'desktop'}},chat_settings:{},links:[connection],positions:{master:{x:220,y:160},'fixture-peer':{x:720,y:550}},link_positions:{},connections:{'fixture-peer':'online'},job:{status:'idle'},rules:[]};
-    const status={...state,analyses:{'master:fixture-chat':{status:'ready',manifest:{paths:['/home/project']}}},app_checks:{'master:fixture-chat':{status:'ready',requirements:[{label:'Python 3'}]}},preparations:{},transfers:{},discovery:{peers:[{device_id:'fixture-peer',connected:true,build:{version:'v1.0.0',source_id:'fixture-old'}}],ignored:0},shared:{devices:state.devices,appearance:state.appearance,chat_settings:state.chat_settings,links:state.links,positions:state.positions,link_positions:{}}};
+    const state={device_runtime:{'fixture-peer':{available:true,active:true,build:{version:'v1.0.0',source_id:'fixture-old'}}},build:{version:'v1.0.1',source_id:'fixture-master'},role:'master',paused:false,checks_paused:true,settings_paused:false,devices:[{id:'fixture-peer',name:'Peer'}],chats:[entry],ssh_settings:{},appearance:{'device:master':{label:'ROG',icon:'desktop'}},chat_settings:{},links:[connection],positions:{master:{x:220,y:160},'fixture-peer':{x:720,y:550}},link_positions:{},connections:{'fixture-peer':'online'},job:{status:'idle'},rules:[]};
+    const status={...state,analyses:{'master:fixture-chat':{status:'ready',manifest:{paths:['/home/project']}}},app_checks:{'master:fixture-chat':{status:'ready',requirements:[{label:'Python 3'}]}},preparations:{},transfers:{},discovery:{peers:[],ignored:0},shared:{devices:state.devices,appearance:state.appearance,chat_settings:state.chat_settings,links:state.links,positions:state.positions,link_positions:{}}};
     await page.route('**/api/**',async route=>{
       const endpoint=new URL(route.request().url()).pathname;requests.push(endpoint);
       let response;
@@ -32,6 +32,7 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     assert.equal(await page.locator('.node-restart').count(),2);
     await page.waitForFunction(()=>document.querySelector('.node-version')?.dataset.state==='outdated');
     assert.match(await page.locator('.node-version').getAttribute('title'),/Da aggiornare/);
+    assert.equal(await page.locator('.map-node[data-id="fixture-peer"] .node-toggle-awake').getAttribute('aria-pressed'),'true');
     assert.equal(await page.locator('.node-version').textContent(),'');
     assert.equal(await page.locator('.node-version svg').count(),1);
     page.once('dialog',dialog=>dialog.accept());
@@ -53,7 +54,7 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     await page.locator('.chat-terminal .popover-close').click();
     await page.locator('.link-play').click();
     await page.waitForFunction(()=>document.querySelector('.link-play')?.disabled===true);
-    assert(requests.includes('/api/links/play'));assert.deepEqual(errors,[]);
+    assert(requests.includes('/api/links/play'));assert.equal(requests.filter(path=>path==='/api/device/control').length,3,'only explicit clicks use device control; automatic status uses the unified flow');assert.deepEqual(errors,[]);
     console.log('Split frontend: assets load, map/library/context editor/console/Play work together; APIs mocked, no real writes.');
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

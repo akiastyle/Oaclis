@@ -1,4 +1,4 @@
-// peers.rs v1.13.228
+// peers.rs v1.13.231
 //! Signed LAN discovery; pairing requires an explicit approval on both devices.
 use crate::invalid;
 use serde_json::{Value, json};
@@ -69,7 +69,6 @@ pub fn start(home: PathBuf) -> Peers {
                     let mut state = shared.lock().unwrap();
                     if state.local.is_null() || Instant::now() >= next_probe {
                         let mut local = helper(&home, "prepare", &Value::Null)?;
-                        local["build"] = crate::device_runtime::build();
                         if !state.local.is_null() { local["instance"] = state.local["instance"].clone(); }
                         if state.local["wsl_ip"] != local["wsl_ip"] {
                             if let Some(mut bridge) = state.bridge.take() { let _ = bridge.kill(); }
@@ -139,7 +138,7 @@ pub fn snapshot(peers: &Peers) -> Value {
             keys.sort();
             let digest: String = Sha256::digest(keys.join("\n").as_bytes()).iter().map(|byte| format!("{byte:02x}")).collect();
             let id = card["id"].as_str().unwrap();
-            json!({"id":id,"build":card["build"],"name":card["name"],"role":card["role"],"address":card["ssh"]["address"],
+            json!({"id":id,"name":card["name"],"role":card["role"],"address":card["ssh"]["address"],
                 "code":format!("{} {} {}", &digest[..4], &digest[4..8], &digest[8..12]),
                 "ssh_ready":card["ssh"]["host_key"].is_string(),
                 "accepted":state.approvals["approved"][id]["public_key"] == card["public_key"],
