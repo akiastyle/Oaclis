@@ -1,8 +1,21 @@
-// device_runtime.rs v1.13.211
+// device_runtime.rs v1.15.242
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
 use std::{fs, io::{self, BufRead, BufReader}, path::{Path, PathBuf}, process::{Child, Command, Stdio}, thread, time::Duration};
+
+fn executable_path(path: PathBuf) -> io::Result<PathBuf> {
+    if path.is_file() { return Ok(path); }
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::ffi::OsStrExt;
+        if let Some(bytes) = path.as_os_str().as_bytes().strip_suffix(b" (deleted)") {
+            let installed = PathBuf::from(std::ffi::OsStr::from_bytes(bytes));
+            if installed.is_file() { return Ok(installed); }
+        }
+    }
+    Err(io::Error::new(io::ErrorKind::NotFound, "Eseguibile Oaclis installato non trovato per il riavvio"))
+}
 
 pub(crate) fn build() -> Value {
     json!({"version":env!("OACLIS_APP_VERSION"),"source_id":env!("OACLIS_SOURCE_ID"),"revision":env!("OACLIS_REVISION")})
@@ -70,7 +83,7 @@ impl Runtime {
     pub(crate) fn start_update(&mut self, revision: &str, job: std::sync::Arc<std::sync::Mutex<Value>>) -> io::Result<Value> {
         if revision.len() != 40 || !revision.bytes().all(|byte|byte.is_ascii_hexdigit()) { return Err(invalid("Revisione master non disponibile")); }
         if self.restarting || self.update.lock().unwrap()["status"] == "running" { return Err(invalid("Aggiornamento o riavvio già in corso")); }
-        let executable = std::env::current_exe()?;
+        let executable = executable_path(std::env::current_exe()?)?;
         let revision = revision.to_owned();
         let state = self.update.clone();
         *state.lock().unwrap() = json!({"status":"running"});
@@ -106,7 +119,7 @@ impl Runtime {
                 #[cfg(not(unix))]
                 return Err(invalid("Riavvio dell'app non supportato in questo ambiente"));
                 if self.restarting { return Err(invalid("Riavvio già in corso")); }
-                let executable = std::env::current_exe()?;
+                let executable = executable_path(std::env::current_exe()?)?;
                 self.stop(); self.restarting = true;
                 thread::spawn(move || {
                     thread::sleep(Duration::from_millis(500));
@@ -149,6 +162,20 @@ except urllib.error.HTTPError as error:
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn restart_resolves_replaced_binary_without_changing_existing_paths() {
+        let folder = std::env::temp_dir().join(format!("oaclis-executable-{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&folder).unwrap();
+        let installed = folder.join("oaclis");
+        let deleted = folder.join("oaclis (deleted)");
+        assert!(executable_path(deleted.clone()).is_err());
+        fs::write(&installed, b"installed").unwrap();
+        assert_eq!(executable_path(deleted.clone()).unwrap(), installed);
+        fs::write(&deleted, b"real filename").unwrap();
+        assert_eq!(executable_path(deleted.clone()).unwrap(), deleted);
+        fs::remove_dir_all(folder).unwrap();
+    }
     #[test]
     fn status_and_invalid_commands_have_no_side_effects() {
         let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false, update: Default::default() };
