@@ -274,6 +274,16 @@ Questo riguarda il server SSH, non un timer di sincronizzazione Oaclis. Senza sy
 
 ### 5. Esporre SSH della WSL nella LAN — PowerShell amministratore
 
+`run.ps1 -Distro Ubuntu` prepara anche inoltri e firewall usando gli IP attuali. Eseguirlo da PowerShell **come amministratore**. Dopo un riavvio o un cambio IP, dalla cartella della repository si può ripristinare soltanto la rete:
+
+```powershell
+.\run.ps1 -Distro Ubuntu -PrepareNetwork
+```
+
+Questa modalità non compila, installa o avvia Oaclis e non trasferisce dati. Configura SSH `2222 → 22`, Oaclis `23232 → 23232` e firewall TCP/UDP limitato alla sottorete locale; conserva gli inoltri già corretti. Salva gli IP rilevati in `wsl_network` nel file settings Windows. Distingue gli inoltri configurati dai servizi non ancora in ascolto. `-Check` controlla senza modificare la rete. Il ripristino avviene eseguendo lo script: non viene aggiunta un'attività automatica al riavvio.
+
+I comandi seguenti sono la procedura manuale di diagnostica.
+
 Questa procedura riguarda WSL2 in modalità NAT, usata nelle prove. In Linux nativo non serve portproxy. Per modalità mirrored e relativi firewall consultare la [documentazione Microsoft](https://learn.microsoft.com/en-us/windows/wsl/networking).
 
 Rilevare separatamente l’IP Windows sulla rete fisica e quello della distribuzione:

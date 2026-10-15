@@ -1,4 +1,4 @@
-# wsl-network.ps1 v1.0.33
+# wsl-network.ps1 v1.0.34
 # Run in an elevated PowerShell. Modify only the Oaclis ports and rules.
 param([Parameter(Mandatory=$true)][string]$LanIp, [Parameter(Mandatory=$true)][string]$WslIp)
 $ErrorActionPreference = 'Stop'
@@ -14,6 +14,7 @@ foreach ($mapping in @(@{External=2222; Internal=22}, @{External=23232; Internal
     if ($match) {
         $fields = ($match.Trim() -split '\s+')
         if ([int]$fields[3] -ne $mapping.Internal) { throw "Porta $($mapping.External) gia usata da un altro inoltro." }
+        if ($fields[2] -eq $WslIp -and (Get-NetTCPConnection -LocalAddress $LanIp -LocalPort $mapping.External -State Listen -ErrorAction SilentlyContinue)) { continue }
         netsh interface portproxy delete v4tov4 listenaddress=$LanIp listenport=$($mapping.External)
         if ($LASTEXITCODE) { throw 'Rimozione inoltro non riuscita.' }
     }
