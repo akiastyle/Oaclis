@@ -1,4 +1,4 @@
-// map.js v3.115.2389
+// map.js v3.115.2399
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -411,6 +411,10 @@ function renderMap(animate = false) {
       node.style.setProperty("--device-color", color);
       node.classList.add("colored-device");
     }
+    const actions = document.createElement("nav");
+    actions.className = "device-actions";
+    actions.setAttribute("aria-label", "Comandi " + device.name);
+    node.append(actions);
     const customize = document.createElement("button");
     customize.className = "node-color icon-button";
     customize.setAttribute("aria-label", "Modifica " + device.name);
@@ -421,7 +425,7 @@ function renderMap(animate = false) {
       e.stopPropagation();
       editDevice(device, customize);
     };
-    node.append(customize);
+    actions.append(customize);
     for (const [action, label, shape] of [
       ["restart", "Riavvia Oaclis", '<path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5"/>'],
       ["toggle-awake", "Sempre attivo", '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>'],
@@ -452,7 +456,7 @@ function renderMap(animate = false) {
           else notice("Riavvio Oaclis richiesto su " + device.name);
         } finally { delete button.dataset.busy; button.disabled = device.id !== "master" && data.connections[device.id] !== "online"; }
       });
-      node.append(button);
+      actions.append(button);
     }
     if (device.id !== "master" && data.role === "master") {
       const version = document.createElement("button");
@@ -499,7 +503,7 @@ function renderMap(animate = false) {
         } catch (error) { delete version.dataset.busy; renderConnections(); throw error; }
         renderConnections();
       });
-      node.append(version);
+      actions.append(version);
     }
     $("#nodes").append(node);
     place(node, previous[device.id] || positions[device.id] || defaultPosition(index));
