@@ -1,5 +1,6 @@
-# test_keep_awake.py v1.4.85
+# test_keep_awake.py v1.4.89
 import contextlib
+import base64
 import io
 from pathlib import Path
 import runpy
@@ -42,6 +43,9 @@ class KeepAwake(unittest.TestCase):
             runpy.run_path(str(Path(__file__).with_name('keep_awake.py')))
         self.assertIn('"active": true',output.getvalue())
         self.assertIn('-EncodedCommand',prepare.call_args.args[0])
+        probe = base64.b64decode(prepare.call_args.args[0][-1]).decode('utf-16le')
+        self.assertIn('Test-Path', probe)
+        self.assertNotIn('WriteAllText', probe)
         self.assertIn('-EncodedCommand',hold.call_args.args[0])
         child.stdin.close.assert_called_once()
         child.terminate.assert_called_once()

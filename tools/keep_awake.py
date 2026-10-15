@@ -1,4 +1,4 @@
-# keep_awake.py v1.3.187
+# keep_awake.py v1.3.201
 """Keep the host awake until the owning Oaclis process closes stdin."""
 import json
 import base64
@@ -12,17 +12,6 @@ import subprocess
 import sys
 import time
 
-WINDOWS_SCRIPT = r'''param([switch]$Check)
-$ErrorActionPreference = 'Stop'
-Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class OaclisAwake { [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags); }'
-try {
-    if ([OaclisAwake]::SetThreadExecutionState(2147483649) -eq 0) { throw 'Windows ha rifiutato il blocco standby' }
-    Write-Output 'ready'
-    if (-not $Check) { [Console]::In.ReadToEnd() | Out-Null }
-} finally { [OaclisAwake]::SetThreadExecutionState(2147483648) | Out-Null }
-'''
-
-
 def windows_command(script):
     powershell = '/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe' if platform.system() == 'Linux' else 'powershell.exe'
     if platform.system() == 'Linux' and not Path(os.environ.get('WSL_INTEROP', '/nonexistent')).is_socket():
@@ -34,8 +23,7 @@ def windows_command(script):
 
 
 def windows_prepare():
-    content = base64.b64encode(WINDOWS_SCRIPT.encode()).decode()
-    script = "$ErrorActionPreference='Stop'; $dir=Join-Path $env:LOCALAPPDATA 'Oaclis'; [IO.Directory]::CreateDirectory($dir) | Out-Null; $path=Join-Path $dir 'keep-awake.ps1'; [IO.File]::WriteAllText($path,[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('" + content + "'))); & $path -Check"
+    script = "$ErrorActionPreference='Stop'; $path=Join-Path $env:LOCALAPPDATA 'Oaclis\\keep-awake.ps1'; if (-not (Test-Path $path)) { throw 'Preparare il supporto Windows con run.ps1' }; & $path -Check"
     result = subprocess.run(windows_command(script), capture_output=True, timeout=15)
     if result.returncode or result.stdout.strip() != b'ready':
         raise RuntimeError('Preparazione standby Windows: ' + (result.stderr.decode(errors='replace').strip() or 'PowerShell non raggiungibile da WSL'))

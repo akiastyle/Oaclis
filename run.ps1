@@ -1,18 +1,10 @@
-# run.ps1 v1.4.168
+# run.ps1 v1.6.215
 # Windows checks; an explicitly selected WSL prepares and installs Oaclis.
 param([switch]$Check, [string]$Distro, [switch]$PrepareAwake, [switch]$PrepareNetwork)
 $ErrorActionPreference = 'Stop'
+$bootstrapRoot = $PSScriptRoot
 if (@($Check, $PrepareAwake, $PrepareNetwork | Where-Object { $_ }).Count -gt 1) { throw 'Usare una sola modalita: -Check, -PrepareAwake, oppure -PrepareNetwork.' }
 if ($env:OS -ne 'Windows_NT') { throw 'Su macOS/Linux usare bash run.sh.' }
-if ($PrepareAwake) {
-    if ($Check) { throw 'Usare -Check oppure -PrepareAwake, non entrambi.' }
-    if ([string]::IsNullOrWhiteSpace($Distro)) { throw 'Specificare la distribuzione Oaclis con -Distro, per esempio Ubuntu.' }
-    $repo = (& wsl -d $Distro -- wslpath -u $PSScriptRoot | Out-String).Trim()
-    if ($LASTEXITCODE -ne 0 -or -not $repo) { throw 'Repository non raggiungibile dalla distribuzione WSL.' }
-    & wsl -d $Distro -- bash "$repo/run.sh" --prepare-awake
-    if ($LASTEXITCODE -ne 0) { throw 'Preparazione non riuscita; leggere il motivo sopra.' }
-    return
-}
 function Get-OaclisWslNetwork {
     param([string]$Distribution)
     $interfaces = @(Get-NetIPConfiguration | Where-Object {
@@ -44,7 +36,7 @@ function Test-OaclisTcp {
 function Initialize-OaclisWslNetwork {
     param($Network)
     if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        throw 'Per configurare inoltri e firewall, riaprire PowerShell come amministratore e usare .\run.ps1 -Distro <nome> -PrepareNetwork.'
+        throw 'Per configurare inoltri e firewall, riaprire PowerShell come amministratore e rieseguire .\run.ps1 -Distro <nome>.'
     }
     & (Join-Path $PSScriptRoot 'scripts/wsl-network.ps1') -LanIp $Network.lan_ip -WslIp $Network.wsl_ip
     foreach ($mapping in @(@{External=2222;Internal=22}, @{External=23232;Internal=23232})) {
@@ -81,17 +73,32 @@ function Save-Scenario {
     } finally { if (Test-Path $temporary) { [IO.File]::Delete($temporary) } }
     Write-Host "Settings: $path"
 }
+function Initialize-OaclisWindowsAwake {
+    $directory = Join-Path $env:LOCALAPPDATA 'Oaclis'
+    if ((Test-Path $directory) -and ((Get-Item $directory).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Cartella supporto Windows non regolare.' }
+    [void][IO.Directory]::CreateDirectory($directory)
+    $target = Join-Path $directory 'keep-awake.ps1'
+    if ((Test-Path $target) -and ((Get-Item $target).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Supporto Windows non regolare.' }
+    Copy-Item -LiteralPath (Join-Path $bootstrapRoot 'scripts/keep-awake.ps1') -Destination $target -Force
+    $ready = & $target -Check
+    if (($ready | Out-String).Trim() -ne 'ready') { throw 'Supporto standby Windows non disponibile.' }
+    Write-Host '[OK] Supporto standby Windows preparato; prova rilasciata.'
+}
+function Open-OaclisWebApp {
+    $ready = $false
+    for ($attempt = 0; $attempt -lt 10; $attempt++) {
+        try {
+            $response = Invoke-WebRequest -Uri 'http://127.0.0.1:23232/' -UseBasicParsing -TimeoutSec 1
+            if ($response.StatusCode -eq 200) { $ready = $true; break }
+        } catch { Start-Sleep -Seconds 1 }
+    }
+    if (-not $ready) { throw 'Oaclis non risponde su http://127.0.0.1:23232: verificare il servizio Linux.' }
+    Start-Process 'http://127.0.0.1:23232'
+    Write-Host '[OK] Webapp aperta: http://127.0.0.1:23232'
+}
+if ($PrepareAwake) { Initialize-OaclisWindowsAwake; return }
 Write-Host 'Sistema: Windows'
 if (-not $PrepareNetwork) {
-# Probe only: the application owns the lifetime of the actual standby block.
-if (-not ('OaclisSetupAwake' -as [type])) {
-    Add-Type -TypeDefinition 'using System; using System.Runtime.InteropServices; public class OaclisSetupAwake { [DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags); }'
-}
-try {
-    if ([OaclisSetupAwake]::SetThreadExecutionState(2147483649) -eq 0) {
-        Write-Warning 'Windows non consente il blocco standby: Sempre attivo non disponibile.'
-    } else { Write-Host '[OK] Blocco standby Windows disponibile (prova rilasciata).' }
-} finally { [OaclisSetupAwake]::SetThreadExecutionState(2147483648) | Out-Null }
 foreach ($name in @('git', 'wsl', 'docker', 'cargo', 'rustc', 'python', 'ssh', 'ssh-keygen', 'rsync')) {
     if (Get-Command $name -ErrorAction SilentlyContinue) { Write-Host "[OK] $name" }
     else { Write-Host "[Manca] $name" }
@@ -126,6 +133,7 @@ if ($Check) {
     }
 } else {
     Initialize-OaclisWslNetwork -Network $network
+    if (-not $PrepareNetwork) { Initialize-OaclisWindowsAwake }
     Save-Scenario -Runtime 'wsl' -Distribution $Distro -Network $network
     if ($PrepareNetwork) { Write-Host 'Rete aggiornata. Nessuna compilazione, installazione o sincronizzazione avviata.'; return }
 }
@@ -135,3 +143,4 @@ if ($LASTEXITCODE -ne 0 -or -not $path) { throw 'Percorso repository non convert
 if ($Check) { & wsl -d $Distro -- env 'OACLIS_HOST_OS=windows' "OACLIS_WSL_DISTRO=$Distro" bash "$path/run.sh" --check }
 else { & wsl -d $Distro -- env 'OACLIS_HOST_OS=windows' "OACLIS_WSL_DISTRO=$Distro" bash "$path/run.sh" }
 if ($LASTEXITCODE -ne 0) { throw 'Preparazione incompleta. Leggere i controlli indicati sopra.' }
+if (-not $Check) { Open-OaclisWebApp }

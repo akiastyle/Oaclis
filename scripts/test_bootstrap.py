@@ -1,4 +1,4 @@
-# test_bootstrap.py v1.4.68
+# test_bootstrap.py v1.5.81
 """Bootstrap checks must not install or start anything."""
 from pathlib import Path
 import os
@@ -10,15 +10,15 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 
 class BootstrapTests(unittest.TestCase):
-    def check(self, system, missing=None, normal=False):
+    def check(self, system, missing=None, normal=False, wsl=False):
         with tempfile.TemporaryDirectory() as directory:
             folder = Path(directory)
-            for command in ('git', 'curl', 'python3', 'ssh', 'ssh-keygen', 'rsync', 'tmux', 'cc', 'ip', 'rustc', 'cargo', 'codex', 'uname', 'apt-get', 'brew', 'xcode-select'):
+            for command in ('git', 'curl', 'python3', 'ssh', 'ssh-keygen', 'rsync', 'tmux', 'cc', 'ip', 'rustc', 'cargo', 'codex', 'uname', 'apt-get', 'brew', 'xcode-select', 'powershell.exe', 'wsl.exe'):
                 if command == missing: continue
                 text = '#!/bin/sh\nexit 0\n'
                 if command == 'uname': text = '#!/bin/sh\nif [ "$1" = -r ]; then echo native; else echo '+system+'; fi\n'
                 if command == 'rustc': text = '#!/bin/sh\necho "rustc 1.95.0"\n'
-                if command in ('apt-get', 'brew', 'curl'):
+                if command in ('apt-get', 'brew', 'curl', 'powershell.exe', 'wsl.exe'):
                     text = '#!/bin/sh\necho invoked >> "$OACLIS_TEST_LOG"\nexit 98\n'
                 path = folder / command
                 path.write_text(text); path.chmod(0o755)
@@ -41,6 +41,8 @@ printf '#!/bin/sh\necho setup >> "$OACLIS_TEST_LOG"\n' > "$HOME/.local/bin/oacli
 chmod +x "$HOME/.local/bin/oaclis"
 ''')
             env = dict(os.environ, HOME=str(folder/'home'), PATH=str(folder), OACLIS_TEST_LOG=str(folder/'mutations'))
+            env.pop('WSL_DISTRO_NAME', None)
+            if wsl: env['WSL_DISTRO_NAME'] = 'Ubuntu'
             arguments = [] if normal else ['--check']
             result = subprocess.run(['/bin/bash', str(repo/'run.sh'), *arguments], env=env, capture_output=True, text=True)
             if normal:
@@ -65,5 +67,10 @@ chmod +x "$HOME/.local/bin/oaclis"
         result = self.check('Linux', normal=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('Oaclis compilato e installato', result.stdout)
+
+    def test_wsl_does_not_prepare_windows_or_open_its_browser(self):
+        result = self.check('Linux', normal=True, wsl=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Windows: rete, standby e browser sono gestiti da run.ps1.', result.stdout)
 
 if __name__ == '__main__': unittest.main()

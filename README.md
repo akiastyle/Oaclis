@@ -14,7 +14,7 @@ Prima di procedere, scegliere dove verrà eseguito Oaclis: sul sistema direttame
 | macOS | macOS nativo | Terminale macOS | `bash run.sh` | Interfacce e firewall di macOS; collaudo su Mac ancora da fare. |
 | macOS | Container Linux con Docker Desktop o Docker in una VM | Terminale dentro il container | `bash run.sh` | Gestire il percorso container → VM → rete del Mac; procedura LAN ancora da definire. |
 | Windows | Windows nativo | PowerShell | `.\run.ps1 -Check` | Solo controlli: esecuzione nativa di Oaclis non ancora supportata. |
-| Windows | Distribuzione Linux in WSL | Terminale WSL, oppure PowerShell con distribuzione scelta esplicitamente | `bash run.sh`, oppure `.\run.ps1 -Distro Ubuntu` | Rilevare la modalità di rete WSL; NAT e rete condivisa richiedono verifiche diverse. |
+| Windows | Distribuzione Linux in WSL | PowerShell con distribuzione scelta esplicitamente | `.\run.ps1 -Distro Ubuntu` | Windows prepara rete, standby e browser; richiama `run.sh` per installazione e servizio Linux. |
 | Windows | Container Linux con Docker Desktop | Terminale dentro il container | `bash run.sh` | Gestire rete Docker e sistema ospitante; procedura LAN e avvio guidato da PowerShell ancora da definire. |
 | Windows | Container Linux con Docker Engine dentro WSL | Terminale dentro il container | `bash run.sh` | Considerare entrambi i livelli: rete del container e rete WSL. Non basta preparare soltanto WSL. |
 | Windows | Container Windows | PowerShell nel container | Nessun percorso funzionante attuale | Non supportato: non trattarlo come un container Linux. |
@@ -276,9 +276,9 @@ Questo riguarda il server SSH, non un timer di sincronizzazione Oaclis. Senza sy
 
 Alla fine di `bash run.sh` (o `run.ps1 -Distro Ubuntu`), dopo la configurazione del ruolo, viene abilitato e avviato il servizio systemd `oaclis-<UID>.service`. Il servizio usa lo stesso utente e la stessa home dell'installazione: conserva pairing, autorizzazioni, chat, impostazioni e Sempre attivo. Riparte dopo un errore e al boot Linux o all'avvio della distribuzione WSL. La prima preparazione può richiedere sudo; le accensioni successive non richiedono una nuova conferma. Eseguire lo script come utente dell'installazione, senza anteporre sudo all'intero script.
 
-Al termine della preparazione si apre la webapp `http://localhost:23232`, quando il servizio risponde. WSL apre il browser Windows; un Linux senza ambiente grafico mostra l'indirizzo senza installare un browser. Il servizio in background non apre finestre a ogni riavvio.
+Al termine della preparazione si apre la webapp `http://localhost:23232`, quando il servizio risponde. Su Windows è `run.ps1` ad aprire il browser su `http://127.0.0.1:23232`, dopo il completamento di `run.sh`, evitando che `localhost` risolva su un loopback IPv6 non raggiungibile; un Linux senza ambiente grafico mostra l'indirizzo senza installare un browser. Il servizio in background non apre finestre a ogni riavvio.
 
-Avvio del servizio e apertura della webapp fanno parte del normale `bash run.sh` / `.\run.ps1 -Distro Ubuntu`: non serve un secondo comando.
+Su Linux avvio e apertura fanno parte di `bash run.sh`; su Windows si usa `.\run.ps1 -Distro Ubuntu`, che prepara Windows e richiama lo script Linux. Non serve un secondo comando.
 
 Serve systemd attivo. In WSL aggiungere `[boot]` e `systemd=true` in `/etc/wsl.conf`, quindi riavviare la distribuzione. Questo non accende WSL al login Windows e non ripristina gli inoltri NAT Windows: per quelli resta `-PrepareNetwork` da PowerShell amministratore. Docker e macOS richiedono la gestione di avvio del rispettivo sistema ospitante e non ricevono un servizio systemd.
 
@@ -297,7 +297,7 @@ journalctl -u oaclis-$(id -u).service -n 50
 .\run.ps1 -Distro Ubuntu -PrepareNetwork
 ```
 
-Questa modalità non compila, installa o avvia Oaclis e non trasferisce dati. Configura SSH `2222 → 22`, Oaclis `23232 → 23232` e firewall TCP/UDP limitato alla sottorete locale; conserva gli inoltri già corretti. Salva gli IP rilevati in `wsl_network` nel file settings Windows. Distingue gli inoltri configurati dai servizi non ancora in ascolto. `-Check` controlla senza modificare la rete. Il ripristino avviene eseguendo lo script: non viene aggiunta un'attività automatica al riavvio.
+Questa modalità non compila, installa o avvia Oaclis e non trasferisce dati. Prepara anche `127.0.0.1:23232 → WSL:23232` per aprire la webapp dal browser Windows. Se gli inoltri sono salvati ma non ascoltano, riavvia IP Helper e verifica nuovamente le porte. Configura SSH `2222 → 22`, Oaclis `23232 → 23232` e firewall TCP/UDP limitato alla sottorete locale; conserva gli inoltri già corretti. Salva gli IP rilevati in `wsl_network` nel file settings Windows. Distingue gli inoltri configurati dai servizi non ancora in ascolto. `-Check` controlla senza modificare la rete. Il ripristino avviene eseguendo lo script: non viene aggiunta un'attività automatica al riavvio.
 
 I comandi seguenti sono la procedura manuale di diagnostica.
 
@@ -616,4 +616,4 @@ Su Windows con WSL, dalla repository in PowerShell:
 .\run.ps1 -Distro Ubuntu -PrepareAwake
 ```
 
-Sostituire Ubuntu con il nome della distribuzione Oaclis. In alternativa, dentro quella WSL usare lo stesso `bash run.sh --prepare-awake`. Il setup crea `%LOCALAPPDATA%\Oaclis\keep-awake.ps1`; la normale richiesta di Oaclis usa questo helper Windows e lo rilascia quando il blocco viene spento o l'app termina. La policy di esecuzione PowerShell viene impostata soltanto sul processo helper, senza cambiare quella del sistema.
+Questa preparazione è già inclusa nel normale `run.ps1`; l’opzione serve soltanto a riparare il supporto separatamente. Sostituire Ubuntu con il nome della distribuzione Oaclis. È PowerShell a copiare e verificare il supporto; `run.sh` dentro WSL gestisce solo la parte Linux e non prepara Windows né apre il suo browser. Il setup crea `%LOCALAPPDATA%\Oaclis\keep-awake.ps1`; la normale richiesta di Oaclis usa questo helper Windows e lo rilascia quando il blocco viene spento o l'app termina. La policy di esecuzione PowerShell viene impostata soltanto sul processo helper, senza cambiare quella del sistema.

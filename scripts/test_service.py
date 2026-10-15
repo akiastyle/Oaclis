@@ -1,4 +1,4 @@
-# test_service.py v1.5.55
+# test_service.py v1.7.62
 """Isolated startup/browser tests; do not change host services or open browsers."""
 import importlib.util
 from pathlib import Path
@@ -33,13 +33,12 @@ class StartupTests(unittest.TestCase):
             service.quoted('path\nExecStart=unwanted')
 
     @patch.object(ui.urllib.request, 'urlopen')
-    @patch.object(ui.subprocess, 'run')
+    @patch.object(ui.webbrowser, 'open')
     @patch.object(ui.platform, 'release', return_value='microsoft-standard-WSL2')
-    def test_wsl_browser_after_readiness(self, release, run, urlopen):
+    def test_wsl_does_not_launch_windows_browser(self, release, browser, urlopen):
         urlopen.return_value.__enter__.return_value.status = 200
         ui.open_ui()
-        self.assertIn('Start-Process', run.call_args.args[0][-1])
-        urlopen.assert_called_once()
+        browser.assert_not_called()
 
     @patch.dict(ui.os.environ, {}, clear=True)
     @patch.object(ui.urllib.request, 'urlopen')
