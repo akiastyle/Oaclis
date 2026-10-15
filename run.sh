@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# run.sh v1.4.137
-# Prepare prerequisites, compile and install. Application startup remains separate.
+# run.sh v1.4.151
+# Prepare prerequisites, compile, configure and enable application startup.
 set -euo pipefail
-case "${1:-}" in ''|--check|--prepare-awake) ;; *) echo 'Uso: bash run.sh [--check|--prepare-awake]' >&2; exit 2;; esac
+case "${1:-}" in ''|--check|--prepare-awake|--prepare-start) ;; *) echo 'Uso: bash run.sh [--check|--prepare-awake|--prepare-start]' >&2; exit 2;; esac
 check_only=${1:-}
 if [[ "$check_only" == --prepare-awake ]]; then
     exec python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/tools/keep_awake.py" --prepare "${@:2}"
@@ -16,6 +16,10 @@ if ! command -v codex >/dev/null && [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; th
     set +u
     if ! source "$NVM_DIR/nvm.sh"; then echo 'NVM esistente non caricato; continuo con i comandi nel PATH.'; fi
     set -u
+fi
+if [[ "$check_only" == --prepare-start ]]; then
+    python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/prepare_service.py"
+    exec python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/open_ui.py"
 fi
 container=no; wsl=no
 if [[ -f /.dockerenv || -f /run/.containerenv ]] || { [[ -r /proc/1/cgroup ]] && grep -Eq 'docker|containerd|kubepods|podman' /proc/1/cgroup; }; then container=yes; fi
@@ -96,6 +100,12 @@ finish() {
         bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/install.sh" --unconfigured
         echo 'Oaclis compilato e installato. Cerco il master nella LAN sulla 23232.'
         "$HOME/.local/bin/oaclis" setup
+        if [[ "$system" == Linux && "$container" == no ]]; then
+            python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/prepare_service.py"
+            python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/open_ui.py"
+        else
+            echo 'Avvio automatico non configurato su macOS/container: avviare Oaclis con la gestione del sistema ospitante.'
+        fi
     fi
 }
 if [[ ${#missing[@]} -eq 0 ]]; then finish; exit 0; fi

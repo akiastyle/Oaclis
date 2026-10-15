@@ -1,16 +1,17 @@
-# run.ps1 v1.4.148
+# run.ps1 v1.4.159
 # Windows checks; an explicitly selected WSL prepares and installs Oaclis.
-param([switch]$Check, [string]$Distro, [switch]$PrepareAwake, [switch]$PrepareNetwork)
+param([switch]$Check, [string]$Distro, [switch]$PrepareAwake, [switch]$PrepareNetwork, [switch]$PrepareStart)
 $ErrorActionPreference = 'Stop'
-if (($Check -and ($PrepareAwake -or $PrepareNetwork)) -or ($PrepareAwake -and $PrepareNetwork)) { throw 'Usare una sola modalita: -Check, -PrepareAwake oppure -PrepareNetwork.' }
+if (@($Check, $PrepareAwake, $PrepareNetwork, $PrepareStart | Where-Object { $_ }).Count -gt 1) { throw 'Usare una sola modalita: -Check, -PrepareAwake, -PrepareNetwork oppure -PrepareStart.' }
 if ($env:OS -ne 'Windows_NT') { throw 'Su macOS/Linux usare bash run.sh.' }
-if ($PrepareAwake) {
+if ($PrepareAwake -or $PrepareStart) {
     if ($Check) { throw 'Usare -Check oppure -PrepareAwake, non entrambi.' }
     if ([string]::IsNullOrWhiteSpace($Distro)) { throw 'Specificare la distribuzione Oaclis con -Distro, per esempio Ubuntu.' }
     $repo = (& wsl -d $Distro -- wslpath -u $PSScriptRoot | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $repo) { throw 'Repository non raggiungibile dalla distribuzione WSL.' }
-    & wsl -d $Distro -- bash "$repo/run.sh" --prepare-awake
-    if ($LASTEXITCODE -ne 0) { throw 'Preparazione Sempre attivo non riuscita; leggere il motivo sopra.' }
+    $mode = if ($PrepareStart) { '--prepare-start' } else { '--prepare-awake' }
+    & wsl -d $Distro -- bash "$repo/run.sh" $mode
+    if ($LASTEXITCODE -ne 0) { throw 'Preparazione non riuscita; leggere il motivo sopra.' }
     return
 }
 function Get-OaclisWslNetwork {

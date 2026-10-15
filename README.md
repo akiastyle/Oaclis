@@ -272,6 +272,33 @@ sudo systemctl enable ssh
 
 Questo riguarda il server SSH, non un timer di sincronizzazione Oaclis. Senza systemd, riavviare SSH manualmente quando necessario. L’utente SSH deve poter leggere/scrivere i percorsi scelti; root è stato usato nella prova, ma il suo accesso non viene abilitato dall’installer. Non attivare il login root con password per questi passaggi.
 
+### Avvio automatico Linux e WSL
+
+Alla fine di `bash run.sh` (o `run.ps1 -Distro Ubuntu`), dopo la configurazione del ruolo, viene abilitato e avviato il servizio systemd `oaclis-<UID>.service`. Il servizio usa lo stesso utente e la stessa home dell'installazione: conserva pairing, autorizzazioni, chat, impostazioni e Sempre attivo. Riparte dopo un errore e al boot Linux o all'avvio della distribuzione WSL. La prima preparazione può richiedere sudo; le accensioni successive non richiedono una nuova conferma. Eseguire lo script come utente dell'installazione, senza anteporre sudo all'intero script.
+
+Al termine della preparazione si apre la webapp `http://localhost:23232`, quando il servizio risponde. WSL apre il browser Windows; un Linux senza ambiente grafico mostra l'indirizzo senza installare un browser. Il servizio in background non apre finestre a ogni riavvio.
+
+Per abilitare l'avvio su un'installazione esistente senza ricompilare:
+
+```bash
+bash run.sh --prepare-start
+```
+
+Oppure da PowerShell, usando la distribuzione e l'utente della propria installazione:
+
+```powershell
+.\run.ps1 -Distro Ubuntu -PrepareStart
+```
+
+Serve systemd attivo. In WSL aggiungere `[boot]` e `systemd=true` in `/etc/wsl.conf`, quindi riavviare la distribuzione. Questo non accende WSL al login Windows e non ripristina gli inoltri NAT Windows: per quelli resta `-PrepareNetwork` da PowerShell amministratore. Docker e macOS richiedono la gestione di avvio del rispettivo sistema ospitante e non ricevono un servizio systemd.
+
+Controlli e allineamento riprendono normalmente; i trasferimenti restano subordinati al Play. Se Oaclis è già aperto fuori dal servizio, la preparazione non interrompe la sessione né eventuali trasferimenti: abilita il servizio per il prossimo avvio. Log e stato, sostituendo `<UID>` con `id -u`:
+
+```bash
+systemctl status oaclis-$(id -u).service
+journalctl -u oaclis-$(id -u).service -n 50
+```
+
 ### 5. Esporre SSH della WSL nella LAN — PowerShell amministratore
 
 `run.ps1 -Distro Ubuntu` prepara anche inoltri e firewall usando gli IP attuali. Eseguirlo da PowerShell **come amministratore**. Dopo un riavvio o un cambio IP, dalla cartella della repository si può ripristinare soltanto la rete:

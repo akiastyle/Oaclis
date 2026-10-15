@@ -1,4 +1,4 @@
-# test_bootstrap.py v1.4.66
+# test_bootstrap.py v1.4.68
 """Bootstrap checks must not install or start anything."""
 from pathlib import Path
 import os
@@ -32,6 +32,8 @@ class BootstrapTests(unittest.TestCase):
             (repo / 'scripts').mkdir(parents=True)
             shutil.copy(ROOT / 'run.sh', repo / 'run.sh')
             shutil.copy(ROOT / 'scripts/prepare_codex.sh', repo / 'scripts/prepare_codex.sh')
+            (repo / 'scripts/prepare_service.py').write_text('')
+            (repo / 'scripts/open_ui.py').write_text('')
             (repo / 'scripts/install.sh').write_text('''#!/bin/sh
 echo "install $*" >> "$OACLIS_TEST_LOG"
 mkdir -p "$HOME/.local/bin"
