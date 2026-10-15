@@ -278,17 +278,7 @@ Alla fine di `bash run.sh` (o `run.ps1 -Distro Ubuntu`), dopo la configurazione 
 
 Al termine della preparazione si apre la webapp `http://localhost:23232`, quando il servizio risponde. WSL apre il browser Windows; un Linux senza ambiente grafico mostra l'indirizzo senza installare un browser. Il servizio in background non apre finestre a ogni riavvio.
 
-Per abilitare l'avvio su un'installazione esistente senza ricompilare:
-
-```bash
-bash run.sh --prepare-start
-```
-
-Oppure da PowerShell, usando la distribuzione e l'utente della propria installazione:
-
-```powershell
-.\run.ps1 -Distro Ubuntu -PrepareStart
-```
+Avvio del servizio e apertura della webapp fanno parte del normale `bash run.sh` / `.\run.ps1 -Distro Ubuntu`: non serve un secondo comando.
 
 Serve systemd attivo. In WSL aggiungere `[boot]` e `systemd=true` in `/etc/wsl.conf`, quindi riavviare la distribuzione. Questo non accende WSL al login Windows e non ripristina gli inoltri NAT Windows: per quelli resta `-PrepareNetwork` da PowerShell amministratore. Docker e macOS richiedono la gestione di avvio del rispettivo sistema ospitante e non ricevono un servizio systemd.
 

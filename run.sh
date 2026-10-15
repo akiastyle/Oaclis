@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# run.sh v1.4.151
+# run.sh v1.4.157
 # Prepare prerequisites, compile, configure and enable application startup.
 set -euo pipefail
-case "${1:-}" in ''|--check|--prepare-awake|--prepare-start) ;; *) echo 'Uso: bash run.sh [--check|--prepare-awake|--prepare-start]' >&2; exit 2;; esac
+case "${1:-}" in ''|--check|--prepare-awake) ;; *) echo 'Uso: bash run.sh [--check|--prepare-awake]' >&2; exit 2;; esac
 check_only=${1:-}
 if [[ "$check_only" == --prepare-awake ]]; then
     exec python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/tools/keep_awake.py" --prepare "${@:2}"
@@ -16,10 +16,6 @@ if ! command -v codex >/dev/null && [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; th
     set +u
     if ! source "$NVM_DIR/nvm.sh"; then echo 'NVM esistente non caricato; continuo con i comandi nel PATH.'; fi
     set -u
-fi
-if [[ "$check_only" == --prepare-start ]]; then
-    python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/prepare_service.py"
-    exec python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/open_ui.py"
 fi
 container=no; wsl=no
 if [[ -f /.dockerenv || -f /run/.containerenv ]] || { [[ -r /proc/1/cgroup ]] && grep -Eq 'docker|containerd|kubepods|podman' /proc/1/cgroup; }; then container=yes; fi
