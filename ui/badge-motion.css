@@ -1,5 +1,6 @@
-/* badge-motion.css v1.0.73 */
+/* badge-motion.css v1.0.82 */
 :root {
+  --badge-action-x: 46px;
   --badge-ring-gap: 2px;
   --badge-ring-width: 2px;
   --badge-stagger: .3s;
@@ -11,7 +12,7 @@
 .motion-badge .link-main { z-index: 4; }
 .motion-badge .link-main .chat-badge { background: var(--panel); }
 .motion-badge .link-edit, .motion-badge .link-open {
-  left: 58px; right: auto; top: -20px; bottom: auto;
+  left: var(--badge-action-x); right: auto; top: -12px; bottom: auto;
   width: 20px; height: 20px; padding: 4px; z-index: 2;
   opacity: 0; visibility: visible; pointer-events: none;
   transform: translate(-44px,40px) scale(.5);
@@ -21,7 +22,7 @@
   transition-delay: var(--badge-stagger);
 }
 .motion-badge .link-edit svg,.motion-badge .link-open svg { width: 100%; height: 100%; }
-.motion-badge .link-open { top: 44px; transform: translate(-44px,-18px) scale(.5); transition-delay: 0s; }
+.motion-badge .link-open { top: 36px; transform: translate(-44px,-18px) scale(.5); transition-delay: 0s; }
 .motion-badge[data-motion-phase="idle"] .link-edit,.motion-badge[data-motion-phase="idle"] .link-open,
 .motion-badge[data-motion-phase="checking"] .link-edit,.motion-badge[data-motion-phase="checking"] .link-open { opacity:1; transform:translate(0,0) scale(1); pointer-events:auto; }
 .motion-badge[data-motion-phase="idle"] .link-edit,.motion-badge[data-motion-phase="checking"] .link-edit { transition-delay:0s; }
@@ -36,7 +37,7 @@
 .badge-ring.is-leaving { animation:badge-contract var(--duration-ui) ease-out var(--badge-delay) both; }
 @keyframes badge-expand { 0%{opacity:0;transform:scale(.45)}70%{opacity:1;transform:scale(1.07)}100%{opacity:1;transform:scale(1)} }
 @keyframes badge-contract { 0%{opacity:1;transform:scale(1)}25%{opacity:1;transform:scale(1.05)}100%{opacity:0;transform:scale(.45)} }
-.badge-check { opacity:0; transition:opacity var(--duration-ui); }
+.badge-check { transform:translateX(-12px); opacity:0; transition:opacity var(--duration-ui); }
 .badge-check path { fill:none; stroke:var(--badge-progress-start); stroke-width:var(--badge-ring-width); stroke-linecap:round; stroke-dasharray:12 22; animation:badge-flow 1.1s linear infinite; animation-play-state:paused; }
 .motion-badge[data-motion-phase="checking"] .badge-check { opacity:1; }
 .motion-badge[data-motion-phase="checking"] .badge-check path { animation-play-state:running; }
@@ -58,7 +59,7 @@
 
 :root { --link-ready-color: var(--scope-active); }
 .motion-badge .link-play {
-  position: absolute; left: 58px; top: 12px; width: 20px; height: 20px;
+  position: absolute; left: var(--badge-action-x); top: 12px; width: 20px; height: 20px;
   padding: 4px; z-index: 2; border-radius: var(--radius-icon);
   color: var(--link-ready-color);
   background: color-mix(in srgb,var(--panel) var(--glass-opacity),transparent);
