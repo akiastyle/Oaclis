@@ -1,4 +1,4 @@
-// device_runtime.rs v1.13.193
+// device_runtime.rs v1.13.201
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
@@ -99,7 +99,7 @@ impl Runtime {
             "toggle-awake" => {
                 self.status();
                 if self.child.is_some() { self.stop(); self.error = None; }
-                else { self.enable()?; }
+                else if let Err(error) = self.enable() { self.error = Some(error.to_string()); return Err(error); }
                 crate::staging::save_json(&self.config.join("keep-awake.json"), &self.child.is_some())?;
             },
             "restart" => {
@@ -134,7 +134,11 @@ request=urllib.request.Request('http://localhost:23232/api/device/control',data=
 try:
     print(urllib.request.urlopen(request,timeout=15).read().decode())
 except urllib.error.HTTPError as error:
-    print(error.read().decode())
+    detail = error.read().decode()
+    try: detail = json.loads(detail).get('error', detail)
+    except ValueError: pass
+    if 'Failed to inhibit: Access denied' in detail: detail = 'Permesso Linux mancante per bloccare lo standby'
+    print(detail, file=sys.stderr)
     sys.exit(1)
 "#;
     serde_json::from_slice(&crate::ssh::run(&device, &format!("python3 -c {} {} {}", crate::ssh::quote(script), crate::ssh::quote(action), crate::ssh::quote(env!("OACLIS_REVISION"))))?).map_err(io::Error::other)

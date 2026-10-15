@@ -1,4 +1,4 @@
-// test_frontend_modules.cjs v1.0.74
+// test_frontend_modules.cjs v1.0.75
 const assert=require('node:assert/strict');
 const {chromium}=require('/root/google-images-local/node_modules/playwright');
 (async()=>{
@@ -33,6 +33,7 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     await page.waitForFunction(()=>document.querySelector('.node-version')?.dataset.state==='outdated');
     assert.equal(await page.locator('.node-version').getAttribute('title'),'v1.0.0');
     assert.equal(await page.locator('.map-node[data-id="fixture-peer"] .node-toggle-awake').getAttribute('aria-pressed'),'true');
+    assert.equal(await page.locator('.map-node[data-id="fixture-peer"] .node-toggle-awake').getAttribute('title'),'Standby bloccato');
     assert.equal(await page.locator('.node-version').textContent(),'');
     assert.equal(await page.locator('.node-version svg').count(),1);
     await page.locator('.node-version').click();

@@ -1,4 +1,4 @@
-/* style.css v2.0.1253 */
+/* style.css v2.0.1259 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1182,3 +1182,9 @@ select {
 }
 .device-actions .node-color:hover,
 .device-actions .node-color[aria-pressed="true"] { background: var(--device-command-hover); }
+
+:root { --device-awake-active: #06d6a0; }
+.device-actions .node-toggle-awake[aria-pressed="true"] {
+  color: var(--device-awake-active);
+  background: color-mix(in srgb, var(--device-awake-active) 22%, transparent);
+}

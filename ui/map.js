@@ -1,4 +1,4 @@
-// map.js v3.115.2450
+// map.js v3.115.2457
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -439,19 +439,20 @@ function renderMap(animate = false) {
         result.observed_at ??= Date.now();
         data.device_runtime ??= {}; data.device_runtime[device.id] = result;
         button.setAttribute("aria-pressed", String(result.active));
-        button.title = label + (result.active ? " · attivo" : " · disattivato") + (result.error ? " · " + result.error : "");
+        button.title = (result.active ? "Standby bloccato" : "Standby consentito") + (result.error ? " · " + result.error : "");
       };
       if (action === "toggle-awake" && data.device_runtime?.[device.id]) update(data.device_runtime[device.id]);
       button.onclick = guard(async event => {
         event.stopPropagation();
         if (action === "restart" && !window.confirm("Riavviare Oaclis su “" + device.name + "”?")) return;
         button.disabled = true; button.dataset.busy = "true";
+        if (action === "toggle-awake") button.title = button.getAttribute("aria-pressed") === "true" ? "Disattivazione blocco standby…" : "Attivazione blocco standby…";
         try {
           const result = await api("device/control", { device_id: device.id, action });
           if (action === "toggle-awake") update(result);
           else if (device.id === "master") window.setTimeout(() => window.location.reload(), 1500);
           else notice("Riavvio Oaclis richiesto su " + device.name);
-        } finally { delete button.dataset.busy; button.disabled = device.id !== "master" && data.connections[device.id] !== "online"; }
+        } finally { delete button.dataset.busy; renderConnections(); }
       });
       actions.append(button);
     }
@@ -632,7 +633,7 @@ function renderConnections() {
     if (awake && !awake.dataset.busy) {
       const known = state === "online" && runtime?.available !== false && typeof runtime?.active === "boolean";
       awake.setAttribute("aria-pressed", known ? String(runtime.active) : "mixed");
-      awake.title = "Sempre attivo · " + (known ? runtime.active ? "attivo" : "disattivato" : "stato non disponibile") + (runtime?.error ? " · " + runtime.error : "");
+      awake.title = (known ? runtime.active ? "Standby bloccato" : "Standby consentito" : "Stato standby non disponibile") + (runtime?.error ? " · " + runtime.error : "");
       awake.setAttribute("aria-label", deviceName(id) + " · " + awake.title);
     }
     const version = node.querySelector(".node-version");
