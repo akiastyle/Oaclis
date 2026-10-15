@@ -1,4 +1,4 @@
-// device_runtime.rs v1.13.201
+// device_runtime.rs v1.13.211
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
@@ -127,7 +127,7 @@ impl Drop for Runtime { fn drop(&mut self) { self.stop(); } }
 pub(crate) fn remote(config: &Path, id: &str, action: &str) -> io::Result<Value> {
     if !matches!(action, "status" | "restart" | "toggle-awake" | "update") { return Err(invalid("Comando dispositivo non valido")); }
     let device = devices::load(config.join("devices.json"))?.into_iter().find(|d|d.id==id).ok_or_else(||invalid("Dispositivo non trovato"))?;
-    let script = r#"import json,re,sys,urllib.request,urllib.error
+    let script = r#"import json,os,pwd,re,sys,urllib.request,urllib.error
 page=urllib.request.urlopen('http://localhost:23232/',timeout=5).read().decode()
 token=re.search(r'name="oaclis-token" content="([^"]+)"',page).group(1)
 request=urllib.request.Request('http://localhost:23232/api/device/control',data=json.dumps({'device_id':'master','action':sys.argv[1],'revision':sys.argv[2]}).encode(),headers={'Content-Type':'application/json','X-Oaclis-Token':token})
@@ -137,11 +137,13 @@ except urllib.error.HTTPError as error:
     detail = error.read().decode()
     try: detail = json.loads(detail).get('error', detail)
     except ValueError: pass
-    if 'Failed to inhibit: Access denied' in detail: detail = 'Permesso Linux mancante per bloccare lo standby'
-    print(detail, file=sys.stderr)
+    if 'Failed to inhibit: Access denied' in detail:
+        user = pwd.getpwuid(os.geteuid()).pw_name
+        detail = f"L'utente {user} non è autorizzato da Linux a bloccare lo standby. Il gruppo sudo non concede automaticamente questo permesso."
+    print(sys.argv[3] + ": " + detail, file=sys.stderr)
     sys.exit(1)
 "#;
-    serde_json::from_slice(&crate::ssh::run(&device, &format!("python3 -c {} {} {}", crate::ssh::quote(script), crate::ssh::quote(action), crate::ssh::quote(env!("OACLIS_REVISION"))))?).map_err(io::Error::other)
+    serde_json::from_slice(&crate::ssh::run(&device, &format!("python3 -c {} {} {} {}", crate::ssh::quote(script), crate::ssh::quote(action), crate::ssh::quote(env!("OACLIS_REVISION")), crate::ssh::quote(&device.name)))?).map_err(io::Error::other)
 }
 
 #[cfg(test)]

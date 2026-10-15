@@ -1,4 +1,4 @@
-# keep_awake.py v1.0.53
+# keep_awake.py v1.0.60
 """Keep the host awake until the owning Oaclis process closes stdin."""
 import json
 import platform
@@ -31,7 +31,12 @@ try:
         raise RuntimeError('Blocco standby non supportato in questo ambiente')
     time.sleep(0.25)
     if child.poll() is not None:
-        raise RuntimeError(child.stderr.read().decode(errors='replace').strip() or 'Blocco standby terminato')
+        detail = child.stderr.read().decode(errors='replace').strip()
+        if system == 'Linux' and 'Access denied' in detail:
+            import os, pwd
+            user = pwd.getpwuid(os.geteuid()).pw_name
+            detail = f"L'utente {user} non è autorizzato da Linux a bloccare lo standby. Il gruppo sudo non concede automaticamente questo permesso."
+        raise RuntimeError(detail or 'Blocco standby terminato')
     print(json.dumps({'active': True}), flush=True)
     while not select.select([sys.stdin], [], [], 1)[0]:
         if child.poll() is not None:
