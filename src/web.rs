@@ -1,4 +1,4 @@
-// web.rs v2.25.1549
+// web.rs v2.25.1560
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -171,6 +171,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     }
     crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone(), peers.clone(), !checks_paused, !paused);
     println!("Oaclis UI: http://localhost:23232");
+    let runtime = Mutex::new(crate::device_runtime::Runtime::new(&config));
     let mutations = Mutex::new(());
     serve_requests(&server, |mut request| {
         if request.method() == &Method::Get && request.url() == "/peer/hello" {
@@ -266,6 +267,16 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Get, "/api/state") => Ok(
                     json!({"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
                 ),
+                (&Method::Post, "/api/device/control") => {
+                    let value = body(&mut request)?;
+                    let id = value["device_id"].as_str().ok_or_else(||invalid("Dispositivo richiesto"))?;
+                    let action = value["action"].as_str().ok_or_else(||invalid("Comando richiesto"))?;
+                    if id != "master" { return crate::device_runtime::remote(&config,id,action); }
+                    if action == "restart" && (job.lock().unwrap()["status"] == "running" || !analyses.lock().unwrap().is_empty()) {
+                        return Err(invalid("Attendi il completamento delle operazioni in corso prima di riavviare"));
+                    }
+                    runtime.lock().unwrap().action(action)
+                }
                 (&Method::Get, "/api/status") => {
                     let snapshot = environment::database(&config,"","status-read",None)?;
                     Ok(json!({"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),

@@ -1,4 +1,4 @@
-/* style.css v2.0.1158 */
+/* style.css v2.0.1162 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1149,3 +1149,7 @@ select {
   color: var(--muted);
   pointer-events: none;
 }
+
+.node-restart { right: calc(var(--space-5) + var(--size-24)); }
+.node-toggle-awake { right: calc(var(--space-5) + var(--size-24) * 2); }
+.node-toggle-awake[aria-pressed="true"] { color: var(--scope-active); }

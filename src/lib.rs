@@ -1,4 +1,4 @@
-// lib.rs v1.3.59
+// lib.rs v1.3.61
 mod app_inventory;
 mod automation;
 mod link_flow;
@@ -58,3 +58,5 @@ pub mod peers;
 pub mod setup;
 
 pub mod shared_settings;
+
+mod device_runtime;

@@ -1,4 +1,4 @@
-// test_frontend_modules.cjs v1.0.46
+// test_frontend_modules.cjs v1.0.51
 const assert=require('node:assert/strict');
 const {chromium}=require('/root/google-images-local/node_modules/playwright');
 (async()=>{
@@ -19,6 +19,7 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
       else if(endpoint==='/api/catalog')response={root:'/fixture',chats:[entry]};
       else if(endpoint==='/api/terminal')response={screen:'Console fixture'};
       else if(endpoint==='/api/links/play'){connection.flow.requested=true;response=state.links;}
+      else if(endpoint==='/api/device/control'){const body=route.request().postDataJSON();response={active:body.action==='toggle-awake'};}
       else if(endpoint==='/api/check')response=state.connections;
       else if(endpoint==='/api/positions')response={ok:true};
       else throw Error('Unexpected API '+endpoint);
@@ -28,6 +29,10 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     await page.waitForSelector('.map-node');
     assert.equal(await page.locator('.map-node').count(),2);
     assert.equal(await page.locator('.chat-link').count(),1);
+    assert.equal(await page.locator('.node-restart').count(),2);
+    await page.locator('.map-node[data-id="master"] .node-toggle-awake').click();
+    await page.waitForFunction(()=>document.querySelector('.map-node[data-id="master"] .node-toggle-awake').getAttribute('aria-pressed')==='true');
+    assert.equal(await page.locator('#panel').isVisible(),false);
     for(const asset of ['panels.js','map.js','console.js'])assert.equal(await page.evaluate(asset=>!!document.querySelector('script[src="/'+asset+'"]'),asset),true);
     await page.locator('.map-node[data-id="master"]').click();
     await page.locator('.library-row > .icon-button').click();

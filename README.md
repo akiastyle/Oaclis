@@ -564,3 +564,9 @@ I moduli frontend usano gli script differiti già previsti dall'applicazione, se
 bundler o nuove dipendenze. Le funzioni condividono lo stato del controller:
 `panels.js`, `map.js` e `console.js` definiscono i componenti prima che `app.js`
 registri gli eventi e avvii il polling. Il caricamento è dichiarato in `index.html`.
+
+### Comandi sulla card del dispositivo
+
+Accanto alla matita, Riavvia riavvia soltanto Oaclis e chiede conferma. Attendere la conclusione dei trasferimenti e delle analisi prima di riavviare. I comandi remoti passano dall’accesso SSH già configurato.
+
+Sempre attivo impedisce lo standby mentre Oaclis è aperto e conserva la scelta al riavvio: su Linux usa `systemd-inhibit`, su macOS `caffeinate`, in WSL una richiesta di alimentazione Windows. Non installa servizi. Nei container non può bloccare lo standby dell’host; se il sistema non concede il blocco mostra l’errore e non lo dichiara attivo. La sospensione esplicita dell’utente resta dipendente dalle regole del sistema operativo.

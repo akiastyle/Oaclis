@@ -1,4 +1,4 @@
-// map.js v3.114.2254
+// map.js v3.115.2299
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -422,6 +422,38 @@ function renderMap(animate = false) {
       editDevice(device, customize);
     };
     node.append(customize);
+    for (const [action, label, shape] of [
+      ["restart", "Riavvia Oaclis", '<path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5"/>'],
+      ["toggle-awake", "Sempre attivo", '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>'],
+    ]) {
+      const button = document.createElement("button");
+      button.className = "node-color node-" + action + " icon-button";
+      button.title = label; button.setAttribute("aria-label", label + " · " + device.name);
+      button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + shape + '</svg>';
+      if (action === "toggle-awake") button.setAttribute("aria-pressed", "mixed");
+      const update = result => {
+        data.device_runtime ??= {}; data.device_runtime[device.id] = result;
+        button.setAttribute("aria-pressed", String(result.active));
+        button.title = label + (result.active ? " · attivo" : " · disattivato") + (result.error ? " · " + result.error : "");
+      };
+      if (action === "toggle-awake" && data.device_runtime?.[device.id]) update(data.device_runtime[device.id]);
+      if (action === "toggle-awake") button.onpointerenter = button.onfocus = async () => {
+        if (button.disabled) return;
+        try { const result = await api("device/control", { device_id: device.id, action: "status" }); if (!button.disabled) update(result); } catch (_) { /* A disconnected device remains unchanged. */ }
+      };
+      button.onclick = guard(async event => {
+        event.stopPropagation();
+        if (action === "restart" && !window.confirm("Riavviare Oaclis su “" + device.name + "”?")) return;
+        button.disabled = true; button.dataset.busy = "true";
+        try {
+          const result = await api("device/control", { device_id: device.id, action });
+          if (action === "toggle-awake") update(result);
+          else if (device.id === "master") window.setTimeout(() => window.location.reload(), 1500);
+          else notice("Riavvio Oaclis richiesto su " + device.name);
+        } finally { delete button.dataset.busy; button.disabled = device.id !== "master" && data.connections[device.id] !== "online"; }
+      });
+      node.append(button);
+    }
     $("#nodes").append(node);
     place(node, previous[device.id] || positions[device.id] || defaultPosition(index));
     {
@@ -568,6 +600,7 @@ function renderConnections() {
       checking: "verifica in corso",
       unknown: "non verificato",
     }[state];
+    node.querySelectorAll(".node-restart, .node-toggle-awake").forEach(button => { button.disabled = state !== "online" || button.dataset.busy === "true"; });
     node.title = deviceName(id) + " · " + label;
     node.setAttribute(
       "aria-label",
