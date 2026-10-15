@@ -1,4 +1,4 @@
-// map.js v3.115.2364
+// map.js v3.115.2389
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -456,15 +456,19 @@ function renderMap(animate = false) {
     }
     if (device.id !== "master" && data.role === "master") {
       const version = document.createElement("button");
-      version.className = "node-version icon-button";
+      version.className = "node-color node-version icon-button";
+      version.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 7 14L19 5"/></svg>';
       version.type = "button";
       version.onclick = guard(async event => {
         event.stopPropagation();
-        if (version.dataset.state === "unknown") {
-          const result = await api("device/control", {device_id:device.id,action:"status"});
-          data.device_runtime ??= {}; data.device_runtime[device.id] = result;
-          renderConnections(); return;
-        }
+        version.dataset.checking = "true"; version.disabled = true;
+        let current;
+        try {
+          current = await api("device/control", {device_id:device.id,action:"status"});
+          data.device_runtime ??= {}; data.device_runtime[device.id] = current;
+        } finally { delete version.dataset.checking; renderConnections(); }
+        if (!current.build?.source_id) throw new Error("Il dispositivo non comunica la versione installata");
+        if (current.build.source_id === data.build?.source_id) { notice("Oaclis è allineato su " + device.name); return; }
         if (!window.confirm("Aggiornare Oaclis su “" + device.name + "” alla versione del master?\n\nL’app verrà ricompilata e riavviata; configurazione e chat restano conservate.")) return;
         version.dataset.busy = "true"; version.disabled = true;
         try {
@@ -654,11 +658,10 @@ function renderConnections() {
       const aligned = known && build.source_id === data.build.source_id;
       const status = pending ? "updating" : known ? aligned ? "aligned" : "outdated" : "unknown";
       version.dataset.state = status;
-      version.disabled = state !== "online" || status === "aligned" || !!pending;
-      const shape = status === "aligned" ? '<path d="m5 12 4 4L19 6"/>' : '<path d="M12 20V4m-6 6 6-6 6 6"/>';
-      version.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + shape + '</svg><span>' + esc(pending ? "Aggiornamento…" : build?.version || "Versione ?") + '</span>';
-      version.title = ({aligned:"Allineato al master",outdated:"Da aggiornare · clic per aggiornare",unknown:"Versione non verificata · clic per verificare",updating:"Aggiornamento in corso"})[status];
-      version.setAttribute("aria-label", deviceName(id) + " · " + version.textContent + " · " + version.title);
+      version.disabled = state !== "online" || !!pending || !!version.dataset.checking;
+      const description = ({aligned:"Allineato al master · clic per verificare",outdated:"Da aggiornare · clic per verificare e aggiornare",unknown:"Versione non verificata · clic per verificare",updating:"Aggiornamento in corso"})[status];
+      version.title = description + (build?.version ? " · " + build.version : "");
+      version.setAttribute("aria-label", deviceName(id) + " · " + version.title);
     }
     node.title = deviceName(id) + " · " + label;
     node.setAttribute(
