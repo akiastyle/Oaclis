@@ -1,4 +1,4 @@
-// core.rs v1.12.197
+// core.rs v1.13.225
 use oaclis::devices::{self, Device};
 use oaclis::{
     chat::Chat,
@@ -195,4 +195,32 @@ fn maps_paths_with_spaces() {
         mapping.map("/work/app/docs/note con spazi.md").unwrap(),
         PathBuf::from("/home/user/progetto/docs/note con spazi.md")
     );
+}
+
+#[test]
+fn first_chat_transfer_creates_missing_remote_parents_and_rejects_symlinks() {
+    use std::os::unix::fs::{PermissionsExt, symlink};
+    use std::process::Command;
+    let fixture = Fixture::new();
+    let ssh = fixture.write("ssh", b"#!/bin/sh\nfor arg do command=$arg; done\nexec sh -c \"$command\"\n");
+    fs::set_permissions(&ssh, fs::Permissions::from_mode(0o700)).unwrap();
+    let config = fixture.0.join("devices.json");
+    devices::save(&config, &[device("peer", "Peer")]).unwrap();
+    // Invalid chat stops before publication; SSH runs only inside this fixture.
+    let source = fixture.write("chat.jsonl", b"not a chat\n");
+    let destination = fixture.0.join("remote/sessions/2026/09/chat.jsonl");
+    let run = || Command::new(env!("CARGO_BIN_EXE_oaclis"))
+        .env("PATH", format!("{}:{}", fixture.0.display(), std::env::var("PATH").unwrap()))
+        .args(["sync-chat", config.to_str().unwrap(), "peer", source.to_str().unwrap(), destination.to_str().unwrap(), fixture.0.join("checkpoint").to_str().unwrap()])
+        .output().unwrap();
+    let result = run();
+    assert!(!result.status.success());
+    assert!(destination.parent().unwrap().is_dir(), "{}", String::from_utf8_lossy(&result.stderr));
+    assert!(!destination.exists());
+    fs::remove_dir_all(fixture.0.join("remote")).unwrap();
+    let outside = fixture.0.join("outside");
+    fs::create_dir(&outside).unwrap();
+    symlink(&outside, fixture.0.join("remote")).unwrap();
+    assert!(!run().status.success());
+    assert!(!outside.join("sessions").exists());
 }

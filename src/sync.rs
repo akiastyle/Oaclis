@@ -1,4 +1,4 @@
-// sync.rs v1.7.302
+// sync.rs v1.7.305
 use crate::{
     chat::Chat,
     check_unchanged,
@@ -149,6 +149,9 @@ pub fn synchronize_with_direction(
         Err(error) => return Err(error),
     };
     let downloaded = StagedFile::new(parent)?;
+    if direction != Direction::Receive {
+        crate::rules::ensure_remote(device, remote.parent().ok_or_else(|| invalid("Cartella remota mancante"))?)?;
+    }
     let peer = transfer::inspect_remote(device, remote)?;
     if kind == Kind::Chat && peer.is_some() {
         let fetched = transfer::fetch_file(device, remote, &downloaded.path, &mut notify)?;
