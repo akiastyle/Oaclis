@@ -1,4 +1,4 @@
-// panels.js v3.130.2297
+// panels.js v3.130.2305
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -187,7 +187,7 @@ function renderScopeDetails(panel, entry) {
 }
 
 async function saveChatScopes(entry, scopes, origin = sourceId || "master") {
-  const result = await api("scopes", { source_device_id: origin, chat_id: entry.id, scopes });
+  const result = await saveLinkChange(() => api("scopes", { source_device_id: origin, chat_id: entry.id, scopes }));
   data.chat_settings = result.preferences; chatLinks = result.links;
   if (link?.entry.id === entry.id) link.scopes = scopes;
   renderLink(true);
@@ -220,8 +220,7 @@ async function removePresentation(kind, id) {
   if (kind === "device") document.querySelectorAll(".map-node").forEach(node => { if (node.dataset.id === id) node.remove(); });
   renderLibrary();
   try {
-    await saveLinks;
-    const result = await api(kind === "chat" ? "chat/hide" : "device/delete", { id });
+    const result = await saveLinkChange(() => api(kind === "chat" ? "chat/hide" : "device/delete", { id }));
     data.chat_settings = result.preferences;
     chatLinks = result.links;
   } catch (error) {
@@ -262,8 +261,7 @@ async function removeConnection(connection, panel) {
   chatLinks = chatLinks.filter(item => !matches(item));
   renderLink(true);
   try {
-    await saveLinks;
-    await api("links/delete", connection);
+    await saveLinkChange(() => api("links/delete", connection));
   } catch (error) {
     for (const item of removed) if (!chatLinks.some(matches)) chatLinks.push(item);
     renderLink(true);

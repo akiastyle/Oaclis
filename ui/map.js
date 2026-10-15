@@ -1,4 +1,4 @@
-// map.js v3.115.2465
+// map.js v3.115.2476
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -165,7 +165,7 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
   play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg>';
   play.onclick = guard(async () => {
     play.disabled = true;
-    try { chatLinks = await api("links/play", connection); renderLink(true); }
+    try { chatLinks = await saveLinkChange(() => api("links/play", connection)); renderLink(true); }
     finally { if (play.isConnected) renderLink(true); }
   });
   marker.title = name + (connection.flow?.error ? " · " + connection.flow.error : phase === "conflict" ? " · Le copie divergono: scegliere quale mantenere" : phase === "offline" ? " · In attesa del dispositivo" : "");
@@ -664,9 +664,10 @@ async function selectChat(entry, targetId, operation = "copy") {
   const association = { source: sourceId, target: targetId, operation, entry: { id: entry.id, name: entry.name },
     scopes: data.chat_settings?.[entry.id]?.scopes || { chat: true, paths: true, apps: true }, transfer_pending: true };
   try {
-    await saveLinks;
-    chatLinks = await api("links", association);
-    link = null;
-    renderLink(true);
+    await saveLinkChange(async () => {
+      chatLinks = await api("links", association);
+      link = null;
+      renderLink(true);
+    });
   } catch (error) { notice("Associazione non salvata: " + error.message); }
 }

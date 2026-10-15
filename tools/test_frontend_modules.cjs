@@ -1,4 +1,4 @@
-// test_frontend_modules.cjs v1.0.125
+// test_frontend_modules.cjs v1.0.141
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
@@ -7,7 +7,7 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
   const browser=await chromium.launch({headless:true,executablePath:'/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome',args:['--no-sandbox']});
   try {
     const page=await browser.newPage({viewport:{width:1440,height:960}});
-    const errors=[],requests=[];let deleteFailure=false,releaseDelete=null;page.on('pageerror',error=>errors.push(error.message));
+    const errors=[],requests=[];let deleteFailure=false,releaseDelete=null,holdStatus=false,releaseStatus=null;page.on('pageerror',error=>errors.push(error.message));
     const entry={id:'fixture-chat',name:'Fixture',bytes:1024,modified_ns:'1000000000'};
     const connection={entry,source:'master',target:'fixture-peer',operation:'sync',scopes:{chat:true,paths:true,apps:true},flow:{phase:'ready',initialized:true,requested:false}};
     const state={device_runtime:{'fixture-peer':{available:true,active:true,build:{version:'v1.0.0',source_id:'fixture-old'}}},build:{version:'v1.0.1',source_id:'fixture-master'},role:'master',paused:false,checks_paused:true,settings_paused:false,devices:[{id:'fixture-peer',name:'Peer'}],chats:[entry],ssh_settings:{},appearance:{'device:master':{label:'ROG',icon:'desktop'}},chat_settings:{},links:[connection],positions:{master:{x:220,y:160},'fixture-peer':{x:720,y:550}},link_positions:{},connections:{'fixture-peer':'online'},job:{status:'idle'},rules:[]};
@@ -17,7 +17,7 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
       const endpoint=new URL(route.request().url()).pathname;requests.push(endpoint);
       let response;
       if(endpoint==='/api/state')response=state;
-      else if(endpoint==='/api/status')response=status;
+      else if(endpoint==='/api/status'){response=structuredClone(status);if(holdStatus){holdStatus=false;await new Promise(resolve=>{releaseStatus=resolve;});}}
       else if(endpoint==='/api/peers')response=status.discovery;
       else if(endpoint==='/api/catalog')response={root:'/fixture',chats:[entry]};
       else if(endpoint==='/api/scopes'){const body=route.request().postDataJSON();state.chat_settings[entry.id]={scopes:body.scopes};connection.scopes=body.scopes;response={preferences:state.chat_settings,links:state.links};}
@@ -76,9 +76,15 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     connection.flow.phase='checking';
     await page.evaluate(()=>poll());
     assert(await page.evaluate(()=>document.querySelector('.map-node[data-id="master"]')===window.fixtureMapNode),'link state changes must preserve device nodes');
+    holdStatus=true;releaseStatus=null;
+    await page.evaluate(()=>{window.staleLinkPoll=poll();});
+    while(!releaseStatus)await new Promise(resolve=>setTimeout(resolve,10));
     await page.locator('.link-main').hover();
     await page.evaluate(()=>{sourceId='master';return selectChat({id:'second-fixture',name:'Second fixture'},'fixture-peer','sync');});
     assert.equal(await page.locator('.chat-link').count(),2,'a saved link must appear even while another badge is hovered');
+    releaseStatus();await page.evaluate(()=>window.staleLinkPoll);
+    await page.mouse.move(1300,900);await page.evaluate(()=>renderLink(true));
+    assert.equal(await page.locator('.chat-link').count(),2,'an older status response must not hide the newly saved link');
     await page.evaluate(()=>poll());
     assert(await page.evaluate(()=>document.querySelector('.map-node[data-id="master"]')===window.fixtureMapNode),'adding links must not rebuild device nodes');
     status.shared.positions={...state.positions,master:{x:260,y:160}};
@@ -94,12 +100,16 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     assert.match(await page.evaluate(()=>window.deleteRequest),/Collegamento ripristinato/);
     assert.equal(await page.locator('.chat-link').count(),2,'failed deletion restores the association');
     assert(await page.evaluate(()=>!window.deleteEditor.isConnected),'failed deletion must not leave the editor open');
-    deleteFailure=false;releaseDelete=null;
+    deleteFailure=false;releaseDelete=null;holdStatus=true;releaseStatus=null;
+    await page.evaluate(()=>{window.staleDeletePoll=poll();});
+    while(!releaseStatus)await new Promise(resolve=>setTimeout(resolve,10));
     await page.evaluate(()=>{window.deleteEditor=editChat(connectionToDelete.entry,document.querySelector('.link-edit'),'master',connectionToDelete);window.deleteRequest=removeConnection(connectionToDelete,deleteEditor).then(()=>null,error=>error.message);});
     await page.waitForFunction(()=>!window.deleteEditor.isConnected);
     while(!releaseDelete)await new Promise(resolve=>setTimeout(resolve,10));
     releaseDelete();
     assert.equal(await page.evaluate(()=>window.deleteRequest),null);
+    releaseStatus();await page.evaluate(()=>window.staleDeletePoll);
+    await page.evaluate(()=>renderLink(true));
     assert.equal(await page.locator('.chat-link').count(),1);
     console.log('Split frontend: assets load, map/library/context editor/console/Play work together; APIs mocked, no real writes.');
   }finally{await browser.close();}

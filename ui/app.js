@@ -1,4 +1,4 @@
-// app.js v3.159.2903
+// app.js v3.160.2913
 "use strict";
 const $ = (s) => document.querySelector(s);
 const token = $('meta[name="oaclis-token"]').content;
@@ -36,6 +36,11 @@ try {
 const catalogFailures = new Set();
 let chatLinks = [];
 let saveLinks = Promise.resolve();
+function saveLinkChange(action) {
+  const pending = saveLinks.then(action);
+  saveLinks = pending.catch(() => {});
+  return pending;
+}
 let removingPresentation = false;
 let drawingMap = false;
 const master = { id: "master", name: "Questo dispositivo" };
@@ -297,6 +302,9 @@ $("#add-device").onclick = () => openDiscovery();
 $("#edit-device").onclick = () => editDevice(data.devices.find(d => d.id === sourceId), $("#edit-device"));
 const lastConnection = {};
 async function poll() {
+  const saved = saveLinks;
+  await saved;
+  if (saved !== saveLinks) return;
   const next = await api("status");
   for (const device of data.devices) {
     const state = next.connections[device.id];
@@ -307,7 +315,7 @@ async function poll() {
     }
     if (state !== "checking") lastConnection[device.id] = state;
   }
-  if (next.shared && !removingPresentation && !positionsSaving && !linkPositionSaving && !drag && !document.querySelector('.map-node[data-dragging="true"], .link-badge[data-dragging="true"]')) {
+  if (next.shared && saved === saveLinks && !removingPresentation && !positionsSaving && !linkPositionSaving && !drag && !document.querySelector('.map-node[data-dragging="true"], .link-badge[data-dragging="true"]')) {
     const previous = JSON.stringify([data.devices, data.appearance, chatLinks, data.chat_settings, positions, linkPositions]);
     const shared = next.shared;
     if (previous !== JSON.stringify([shared.devices, shared.appearance, shared.links, shared.chat_settings, shared.positions, shared.link_positions])) {
