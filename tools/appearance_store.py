@@ -1,4 +1,4 @@
-# appearance_store.py v1.2.172
+# appearance_store.py v1.2.180
 """Oaclis storage adapter; chat metadata lives in the appearance record."""
 import json
 import os
@@ -41,6 +41,10 @@ if operation in READS:
                 rows = values(db,'appearance')
                 columns = {row[1] for row in db.execute('PRAGMA table_info(appearance)')}
                 print(json.dumps(rows));sys.exit(0)
+            if operation == 'links-get':
+                print(json.dumps(list(values(db,'chat_links').values())));sys.exit(0)
+            if operation == 'preferences-get' and 'sync' in {row[1] for row in db.execute('PRAGMA table_info(appearance)')}:
+                print(json.dumps({'preferences':unified_preferences(db), 'links':list(values(db,'chat_links').values())}));sys.exit(0)
             data = read_data(db)
         if operation in ('status-read','preferences-get'):
             result = data if operation == 'status-read' else {name:data[name] for name in ('preferences','links')}
@@ -122,14 +126,14 @@ with sqlite3.connect(path,timeout=10) as db:
                     saved['transfer_pending']=not bool(update.get('initialized'))
                     db.execute('UPDATE chat_links SET value=? WHERE key=?',(json.dumps(saved),key))
         elif operation=='links-save':
-            value=json.load(sys.stdin);chat=value['entry']['id'];record=chat_object(db,chat)
+            value=json.load(sys.stdin);chat=value['entry']['id']
             existing=db.execute('SELECT value FROM chat_links WHERE key=?',(key,)).fetchone()
             if existing:
                 existing=json.loads(existing[0])
                 if any(existing.get(name)!=value.get(name) for name in ('source','target','operation')):
                     raise ValueError('Elimina e ricrea il collegamento per cambiarne la direzione')
                 if 'flow' in existing:value['flow']=existing['flow']
-            preference=unified_preferences(db).get(chat)
+            preference=unified_preferences(db,chat).get(chat)
             if preference:value['scopes']=preference['scopes']
             if 'flow' in value:value['transfer_pending']=not bool(value['flow'].get('initialized'))
             db.execute('INSERT INTO chat_links VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(key,json.dumps(value)))

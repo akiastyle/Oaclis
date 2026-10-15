@@ -1,4 +1,4 @@
-# test_api_reads.py v1.3.45
+# test_api_reads.py v1.4.61
 """Status reads must work alongside writers without changing the database."""
 import json
 import pathlib
@@ -41,6 +41,22 @@ class ApiReads(unittest.TestCase):
                 self.assertEqual(snapshot["preferences"], {})
                 writer.rollback()
                 self.assertEqual(writer.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall(), [("app_checks",)])
+
+    def test_link_save_does_not_scan_unrelated_inventories(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = pathlib.Path(folder) / "appearance.sqlite"
+            with sqlite3.connect(path) as db:
+                db.executescript("CREATE TABLE appearance(key TEXT PRIMARY KEY,value TEXT NOT NULL,hidden INTEGER DEFAULT 0,sync TEXT DEFAULT '{}'); CREATE TABLE chat_links(key TEXT PRIMARY KEY,value TEXT NOT NULL);")
+                db.execute("INSERT INTO appearance VALUES(?,?,?,?)", ('chat:fixture','{}',0,json.dumps({'chat':{'enabled':0},'paths':{'enabled':None},'apps':{}})))
+                db.execute("INSERT INTO appearance VALUES(?,?,?,?)", ('chat:unrelated','{}',0,'unrelated inventory must not be decoded'))
+            self.assertEqual(read(path, 'links-get'), [])
+            link = {'entry':{'id':'fixture'},'source':'master','target':'peer','operation':'sync','scopes':dict.fromkeys(('chat','paths','apps'), True)}
+            result = subprocess.run(['python3',str(SCRIPT),str(path),'links-save','fixture'],input=json.dumps(link),text=True,capture_output=True,timeout=3)
+            self.assertEqual(result.returncode,0,result.stderr)
+            self.assertEqual(json.loads(result.stdout)[0]['scopes'],{'chat':False,'paths':False,'apps':True})
+            self.assertEqual(read(path,'links-get'),json.loads(result.stdout))
+            with sqlite3.connect(path) as db:
+                self.assertEqual(db.execute("SELECT sync FROM appearance WHERE key='chat:unrelated'").fetchone()[0], 'unrelated inventory must not be decoded')
 
 if __name__ == "__main__":
     unittest.main()

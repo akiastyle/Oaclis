@@ -1,4 +1,4 @@
-// map.js v3.115.2463
+// map.js v3.115.2465
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -667,6 +667,6 @@ async function selectChat(entry, targetId, operation = "copy") {
     await saveLinks;
     chatLinks = await api("links", association);
     link = null;
-    renderLink();
+    renderLink(true);
   } catch (error) { notice("Associazione non salvata: " + error.message); }
 }

@@ -1,4 +1,4 @@
-# chat_records.py v1.10.114
+# chat_records.py v1.10.122
 """One chat record: presentation, visibility, switches and source-owned measurements."""
 import hashlib
 import json
@@ -52,9 +52,11 @@ def save_preparation(db, key, data, config):
     value.setdefault('paths', {}).setdefault('sources', {})[source] = {'status':data['status'], 'items':data['paths'], 'bytes':data['paths_bytes'], 'files':data['path_files'], 'measured_at':data['measured_at']}
     save_chat_object(db, chat, value)
 
-def unified_preferences(db):
-    return {key[5:]: {'hidden':bool(hidden), 'scopes':{name:bool(json.loads(raw or '{}').get(name, {}).get('enabled', 1)) for name in MODULES}}
-            for key, hidden, raw in db.execute("SELECT key,hidden,sync FROM appearance WHERE key LIKE 'chat:%'")}
+def unified_preferences(db, chat=None):
+    fields = ','.join("CASE WHEN json_type(sync,'$." + name + ".enabled') IS NULL THEN 1 ELSE json_extract(sync,'$." + name + ".enabled') END" for name in MODULES)
+    where, args = ("key=?", ('chat:' + chat,)) if chat is not None else ("key LIKE 'chat:%'", ())
+    return {key[5:]: {'hidden':bool(hidden), 'scopes':dict(zip(MODULES, map(bool, flags)))}
+            for key, hidden, *flags in db.execute('SELECT key,hidden,' + fields + ' FROM appearance WHERE ' + where, args)}
 
 def unified_data(db, config):
     reverse = {global_id:local for local, global_id in source_mapping(config).items()}

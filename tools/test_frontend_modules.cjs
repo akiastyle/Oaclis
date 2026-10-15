@@ -1,4 +1,4 @@
-// test_frontend_modules.cjs v1.0.90
+// test_frontend_modules.cjs v1.0.106
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
@@ -24,8 +24,9 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
       else if(endpoint==='/api/analyze')response=status.analyses['master:fixture-chat'];
       else if(endpoint==='/api/app-check')response=status.app_checks['master:fixture-chat'];
       else if(endpoint==='/api/terminal')response={screen:'Console fixture'};
+      else if(endpoint==='/api/links'){const body=route.request().postDataJSON();state.links=[...state.links,{...body,flow:{phase:'checking'}}];status.shared.links=state.links;response=state.links;}
       else if(endpoint==='/api/links/play'){connection.flow.requested=true;response=state.links;}
-      else if(endpoint==='/api/device/control'){const body=route.request().postDataJSON();response={active:body.action==='toggle-awake',build:{version:'v1.0.0',source_id:'fixture-old'},update:body.action==='update'?{status:'running'}:null};}
+      else if(endpoint==='/api/device/control'){const body=route.request().postDataJSON();const previous=state.device_runtime[body.device_id]||{build:state.build};response={...previous,active:body.action==='toggle-awake'?!previous.active:previous.active,update:body.action==='update'?{status:'running'}:previous.update,observed_at:Date.now()};state.device_runtime[body.device_id]=response;}
       else if(endpoint==='/api/check')response=state.connections;
       else if(endpoint==='/api/positions')response={ok:true};
       else throw Error('Unexpected API '+endpoint);
@@ -70,6 +71,19 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     await page.locator('.link-play').click();
     await page.waitForFunction(()=>document.querySelector('.link-play')?.disabled===true);
     assert(requests.includes('/api/links/play'));assert.equal(requests.filter(path=>path==='/api/device/control').length,3,'only explicit clicks use device control; automatic status uses the unified flow');assert.deepEqual(errors,[]);
+    await page.evaluate(()=>{window.fixtureMapNode=document.querySelector('.map-node[data-id="master"]');});
+    connection.flow.phase='checking';
+    await page.evaluate(()=>poll());
+    assert(await page.evaluate(()=>document.querySelector('.map-node[data-id="master"]')===window.fixtureMapNode),'link state changes must preserve device nodes');
+    await page.locator('.link-main').hover();
+    await page.evaluate(()=>{sourceId='master';return selectChat({id:'second-fixture',name:'Second fixture'},'fixture-peer','sync');});
+    assert.equal(await page.locator('.chat-link').count(),2,'a saved link must appear even while another badge is hovered');
+    await page.evaluate(()=>poll());
+    assert(await page.evaluate(()=>document.querySelector('.map-node[data-id="master"]')===window.fixtureMapNode),'adding links must not rebuild device nodes');
+    status.shared.positions={...state.positions,master:{x:260,y:160}};
+    await page.mouse.move(1300,900);
+    await page.evaluate(()=>poll());
+    assert(await page.evaluate(()=>document.querySelector('.map-node[data-id="master"]')!==window.fixtureMapNode),'real device position changes still update the map');
     console.log('Split frontend: assets load, map/library/context editor/console/Play work together; APIs mocked, no real writes.');
   }finally{await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

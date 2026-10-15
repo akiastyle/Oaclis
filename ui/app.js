@@ -1,4 +1,4 @@
-// app.js v3.159.2897
+// app.js v3.159.2903
 "use strict";
 const $ = (s) => document.querySelector(s);
 const token = $('meta[name="oaclis-token"]').content;
@@ -311,8 +311,12 @@ async function poll() {
     const previous = JSON.stringify([data.devices, data.appearance, chatLinks, data.chat_settings, positions, linkPositions]);
     const shared = next.shared;
     if (previous !== JSON.stringify([shared.devices, shared.appearance, shared.links, shared.chat_settings, shared.positions, shared.link_positions])) {
+      const nodesChanged = JSON.stringify([data.devices, Object.fromEntries(Object.entries(data.appearance || {}).filter(([key]) => key.startsWith("device:"))), positions]) !==
+        JSON.stringify([shared.devices, Object.fromEntries(Object.entries(shared.appearance || {}).filter(([key]) => key.startsWith("device:"))), shared.positions]);
+      const libraryChanged = JSON.stringify([data.appearance, data.chat_settings]) !== JSON.stringify([shared.appearance, shared.chat_settings]);
       Object.assign(data, shared); chatLinks = shared.links; positions = shared.positions; linkPositions = shared.link_positions || {};
-      renderMap(true); renderLibrary();
+      if (nodesChanged) renderMap(true);
+      if (nodesChanged || libraryChanged) renderLibrary();
     }
   }
   data.device_runtime ??= {};
