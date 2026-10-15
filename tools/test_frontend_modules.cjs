@@ -1,4 +1,4 @@
-// test_frontend_modules.cjs v1.0.71
+// test_frontend_modules.cjs v1.0.74
 const assert=require('node:assert/strict');
 const {chromium}=require('/root/google-images-local/node_modules/playwright');
 (async()=>{
@@ -31,11 +31,10 @@ const {chromium}=require('/root/google-images-local/node_modules/playwright');
     assert.equal(await page.locator('.chat-link').count(),1);
     assert.equal(await page.locator('.node-restart').count(),2);
     await page.waitForFunction(()=>document.querySelector('.node-version')?.dataset.state==='outdated');
-    assert.match(await page.locator('.node-version').getAttribute('title'),/Da aggiornare/);
+    assert.equal(await page.locator('.node-version').getAttribute('title'),'v1.0.0');
     assert.equal(await page.locator('.map-node[data-id="fixture-peer"] .node-toggle-awake').getAttribute('aria-pressed'),'true');
     assert.equal(await page.locator('.node-version').textContent(),'');
     assert.equal(await page.locator('.node-version svg').count(),1);
-    page.once('dialog',dialog=>dialog.accept());
     await page.locator('.node-version').click();
     await page.waitForFunction(()=>document.querySelector('.node-version')?.dataset.state==='updating');
     await page.locator('.map-node[data-id="master"] .node-toggle-awake').click();

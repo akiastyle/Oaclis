@@ -1,4 +1,4 @@
-// map.js v3.115.2444
+// map.js v3.115.2450
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -470,7 +470,6 @@ function renderMap(animate = false) {
         } finally { delete version.dataset.checking; renderConnections(); }
         if (!current.build?.source_id) throw new Error("Il dispositivo non comunica la versione installata");
         if (current.build.source_id === data.build?.source_id) { notice("Oaclis è allineato su " + device.name); return; }
-        if (!window.confirm("Aggiornare Oaclis su “" + device.name + "” alla versione del master?\n\nL’app verrà ricompilata e riavviata; configurazione e chat restano conservate.")) return;
         version.dataset.busy = "true"; version.disabled = true;
         try {
           const result = await api("device/control", {device_id:device.id,action:"update"});
@@ -646,9 +645,8 @@ function renderConnections() {
       const status = pending ? "updating" : known ? aligned ? "aligned" : "outdated" : "unknown";
       version.dataset.state = status;
       version.disabled = state !== "online" || !!pending || !!version.dataset.checking;
-      const description = ({aligned:"Allineato al master · clic per verificare",outdated:"Da aggiornare · clic per verificare e aggiornare",unknown:"Versione non verificata · clic per verificare",updating:"Aggiornamento in corso"})[status];
-      version.title = description + (build?.version ? " · " + build.version : "");
-      version.setAttribute("aria-label", deviceName(id) + " · " + version.title);
+      version.title = build?.version || "";
+      version.setAttribute("aria-label", build?.version || "Versione non disponibile");
     }
     node.title = deviceName(id) + " · " + label;
     node.setAttribute(
