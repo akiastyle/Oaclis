@@ -1,4 +1,4 @@
-# keep_awake.py v1.3.146
+# keep_awake.py v1.3.156
 """Keep the host awake until the owning Oaclis process closes stdin."""
 import json
 import base64
@@ -41,7 +41,7 @@ def windows_prepare():
         raise RuntimeError('Preparazione standby Windows: ' + (result.stderr.decode(errors='replace').strip() or 'PowerShell non raggiungibile da WSL'))
 
 
-def prepare():
+def prepare(user=None):
     if Path('/.dockerenv').exists() or Path('/run/.containerenv').exists():
         raise RuntimeError('Il blocco standby deve essere preparato sul sistema host, non nel container')
     system = platform.system()
@@ -55,7 +55,7 @@ def prepare():
     if system != 'Linux' or not shutil.which('systemd-inhibit'):
         raise RuntimeError('Serve Linux con systemd-inhibit oppure macOS/Windows supportato')
     import pwd
-    user = os.environ.get('SUDO_USER') or pwd.getpwuid(os.getuid()).pw_name
+    user = user or os.environ.get('SUDO_USER') or pwd.getpwuid(os.getuid()).pw_name
     uid = pwd.getpwnam(user).pw_uid
     if not re.fullmatch(r'[a-zA-Z_][a-zA-Z0-9_-]*[$]?', user):
         raise RuntimeError('Nome utente non supportato per la regola standby')
@@ -72,11 +72,13 @@ def prepare():
         Path(path).write_text(rule)
         Path(path).chmod(0o644)
         os.chown(path, 0, 0)
+    return user
 
 if '--prepare' in sys.argv:
     try:
-        prepare()
-        print('Supporto Sempre attivo preparato. Il blocco si attiva dal pulsante Oaclis.')
+        target = sys.argv[sys.argv.index('--user') + 1] if '--user' in sys.argv else None
+        user = prepare(target)
+        print('Supporto Sempre attivo preparato' + (' per ' + user if user else '') + '. Il blocco si attiva dal pulsante Oaclis.')
     except Exception as error:
         print(str(error), file=sys.stderr)
         sys.exit(1)

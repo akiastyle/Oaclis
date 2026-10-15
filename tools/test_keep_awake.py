@@ -1,4 +1,4 @@
-# test_keep_awake.py v1.3.65
+# test_keep_awake.py v1.4.75
 import contextlib
 import io
 from pathlib import Path
@@ -58,6 +58,16 @@ class KeepAwake(unittest.TestCase):
         self.assertIn('subject.user === "kimrusso"',rule)
         self.assertEqual(rule.count('action.id ==='),2)
         self.assertNotIn('subject.isInGroup',rule)
+
+    def test_explicit_user_is_preserved_when_preparing_from_root_shell(self):
+        import types
+        user=types.SimpleNamespace(pw_name='kimrusso',pw_uid=1000)
+        with patch('sys.argv',['keep_awake.py','--prepare','--user','kimrusso']), patch('pathlib.Path.exists',return_value=False), patch('pathlib.Path.is_symlink',return_value=False), patch('platform.system',return_value='Linux'), patch('platform.release',return_value='native'), patch('shutil.which',return_value='/usr/bin/systemd-inhibit'), patch.dict('os.environ',{'SUDO_USER':'root'}), patch('os.geteuid',return_value=0), patch('pwd.getpwnam',return_value=user) as lookup, patch('pathlib.Path.write_text') as write, patch('pathlib.Path.chmod'), patch('os.chown'), contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaises(SystemExit) as stopped:
+                runpy.run_path(str(Path(__file__).with_name('keep_awake.py')))
+        self.assertEqual(stopped.exception.code,0)
+        lookup.assert_called_once_with('kimrusso')
+        self.assertIn('subject.user === "kimrusso"',write.call_args.args[0])
 
 
 if __name__ == '__main__':

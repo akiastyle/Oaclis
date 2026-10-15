@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# run.sh v1.4.135
+# run.sh v1.4.137
 # Prepare prerequisites, compile and install. Application startup remains separate.
 set -euo pipefail
 case "${1:-}" in ''|--check|--prepare-awake) ;; *) echo 'Uso: bash run.sh [--check|--prepare-awake]' >&2; exit 2;; esac
 check_only=${1:-}
 if [[ "$check_only" == --prepare-awake ]]; then
-    exec python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/tools/keep_awake.py" --prepare
+    exec python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/tools/keep_awake.py" --prepare "${@:2}"
 fi
 system=$(uname -s)
 case "$system" in Linux|Darwin) ;; *) echo 'Usare run.ps1 su Windows nativo.' >&2; exit 1;; esac
