@@ -1,4 +1,4 @@
-// environment.rs v1.17.584
+// environment.rs v1.21.703
 //! Chat environment analysis and destination preparation, independent of the UI.
 use crate::{
     devices::{self, Device},
@@ -247,16 +247,49 @@ pub fn analyze(device: Option<&Device>, path: &str, chat: &str) -> io::Result<Ma
 pub fn fresh(device: Option<&Device>, manifest: &Manifest) -> io::Result<bool> {
     manifest.validate()?;Ok(request(device,"verify",serde_json::to_value(&manifest.fingerprints)?)?["fresh"]==true)
 }
-fn mapped(path: &Path, from: &Path, to: &Path) -> PathBuf {
-    path.strip_prefix(from)
-        .map(|p| to.join(p))
-        .unwrap_or_else(|_| path.to_path_buf())
-}
 fn digest(value: &impl Serialize) -> io::Result<String> {
     Ok(Sha256::digest(serde_json::to_vec(value)?)
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect())
+}
+
+fn paths_command(device: &Device, list: &Path, incoming: bool) -> std::process::Command {
+    let mut command = std::process::Command::new("rsync");
+    command.args(["--recursive", "--links", "--safe-links", "--times", "--omit-dir-times",
+        "--relative", "--no-implied-dirs", "--from0", "--info=progress2,name0", "--outbuf=L",
+        "--partial", "--partial-dir=.oaclis-rsync", "--timeout=30", "--secluded-args"])
+        .arg("--files-from").arg(list).arg("--rsh").arg(crate::ssh::OPTIONS);
+    // Preserve the existing project exclusions without enumerating or comparing files ourselves.
+    for pattern in [".git", ".ssh", ".codex", "node_modules", "target", "__pycache__", ".venv", "venv",
+        "gpg*.txt", ".env", ".env.*", ".htaccess", ".oaclis-*", "*.pem", "*.key", "*.pyc"] {
+        command.arg(format!("--exclude={pattern}"));
+    }
+    command.arg("--");
+    if incoming { command.arg(format!("{}:/", device.ssh_alias)).arg("/"); }
+    else { command.arg("/").arg(format!("{}:/", device.ssh_alias)); }
+    command
+}
+
+fn transfer_paths(device: &Device, paths: &[PathBuf], incoming: bool, state: &Path,
+    notify: &mut impl FnMut(Value)) -> io::Result<()> {
+    if paths.is_empty() { return Ok(()); }
+    device.validate()?;
+    let mut list = staging::StagedFile::new(state)?;
+    for path in paths {
+        validate_absolute(path)?;
+        list.file.write_all(path.strip_prefix("/").map_err(io::Error::other)?.as_os_str().as_encoded_bytes())?;
+        list.file.write_all(b"/\0")?;
+    }
+    list.file.flush()?;
+    let mut command = paths_command(device, &list.path, incoming);
+    crate::state_transport::log(format!("EXEC {command:?}"));
+    let result = crate::progress::run(&mut command, &mut |mut event| {
+        if let crate::progress::Event::Transferring { percent, .. } = &mut event { *percent = (*percent).min(99); }
+        notify(json!({"event":event}));
+    });
+    crate::state_transport::log(format!("EXIT rsync {}", match &result { Ok(()) => "OK".into(), Err(error) => error.to_string() }));
+    result
 }
 
 pub fn execute(
@@ -273,6 +306,13 @@ pub fn execute(
     manifest.validate()?;
     rules::ensure_local(state)?;
     let target_device = if incoming { None } else { Some(device) };
+    let mut results = Vec::new();
+    if scopes.paths {
+        for path in &manifest.paths { prepare_path(target_device, path)?; }
+        transfer_paths(device, &manifest.paths, incoming, state, &mut notify)?;
+        results.push(json!({"paths":manifest.paths}));
+    }
+    if !scopes.apps { return Ok(json!(results)); }
     let identity = request(target_device,"identity",Value::Null)?;
     let target_home = PathBuf::from(
         identity["home"]
@@ -286,22 +326,7 @@ pub fn execute(
     );
     validate_absolute(&target_home)?;
     validate_absolute(&target_codex)?;
-    let destination_paths: Vec<_> = manifest
-        .paths
-        .iter()
-        .map(|p| mapped(p, &manifest.home, &target_home))
-        .collect();
-    let mut results = Vec::new();
-    let mut directories: Vec<(PathBuf, PathBuf)> = if scopes.paths {
-        manifest
-            .paths
-            .iter()
-            .cloned()
-            .zip(destination_paths.iter().cloned())
-            .collect()
-    } else {
-        vec![]
-    };
+    let mut directories: Vec<(PathBuf, PathBuf)> = Vec::new();
     if scopes.apps {
         for plugin in &manifest.plugins {
             let target = if plugin.kind == "plugin" {
@@ -320,7 +345,6 @@ pub fn execute(
         }
     }
     for (source, destination) in directories {
-        if scopes.paths { prepare_path(target_device, &destination)?; }
         let (local, remote) = if incoming {
             (destination, source)
         } else {
@@ -396,6 +420,44 @@ pub fn execute(
 mod tests {
     use super::*;
     #[test]
+    fn one_rsync_preserves_absolute_layout_and_destination_only_files() {
+        let root = std::env::temp_dir().join(format!("oaclis-paths-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&root).unwrap();
+        let first = root.join("first project"); let second = root.join("second\nproject");
+        let destination = root.join("destination");
+        for path in [&first,&second,&destination] {fs::create_dir(path).unwrap();}
+        fs::write(first.join("file"),"new source content").unwrap();
+        fs::write(second.join("file"),"second source").unwrap();
+        fs::write(first.join(".env"),"secret").unwrap();
+        let target = destination.join(first.strip_prefix("/").unwrap());
+        fs::create_dir_all(&target).unwrap();
+        fs::write(target.join("file"),"old").unwrap();
+        fs::write(target.join("keep"),"destination only").unwrap();
+        let mut list = staging::StagedFile::new(&root).unwrap();
+        for path in [&first,&second] {list.file.write_all(path.strip_prefix("/").unwrap().as_os_str().as_encoded_bytes()).unwrap();list.file.write_all(b"/\0").unwrap();}
+        list.file.flush().unwrap();
+        let device = Device {id:"fixture".into(),name:"Fixture".into(),ssh_alias:"fixture".into()};
+        let command = paths_command(&device,&list.path,false);
+        let args: Vec<_> = command.get_args().map(|a|a.to_owned()).collect();
+        assert!(!args.iter().any(|a|a=="--delete" || a=="--checksum"));
+        let incoming = paths_command(&device,&list.path,true);
+        let reverse: Vec<_> = incoming.get_args().map(|a|a.to_string_lossy().into_owned()).collect();
+        assert_eq!(&reverse[reverse.len()-2..], &["fixture:/", "/"]);
+        // Exercise the identical rsync arguments against isolated local directories.
+        let mut local = std::process::Command::new("rsync");
+        local.args(&args[..args.len()-1]).arg(&destination);
+        let mut progress = false;
+        crate::progress::run(&mut local,&mut |event| {if matches!(event,crate::progress::Event::Transferring{..}) {progress=true;}}).unwrap();
+        assert!(progress);
+        assert_eq!(fs::read_to_string(target.join("file")).unwrap(),"new source content");
+        assert_eq!(fs::read_to_string(target.join("keep")).unwrap(),"destination only");
+        assert!(!target.join(".env").exists());
+        assert_eq!(fs::read_to_string(destination.join(second.strip_prefix("/").unwrap()).join("file")).unwrap(),"second source");
+        drop(list);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn rejects_system_roots_and_arbitrary_packages() {
         let mut manifest = Manifest {
             home: "/root".into(),
@@ -415,13 +477,6 @@ mod tests {
         manifest.paths = vec!["/root/app".into()];
         manifest.packages = vec!["curl; touch /tmp/x".into()];
         assert!(manifest.validate().is_err());
-        assert_eq!(
-            mapped(
-                Path::new("/root/app"),
-                Path::new("/root"),
-                Path::new("/home/kim")
-            ),
-            Path::new("/home/kim/app")
-        );
+
     }
 }

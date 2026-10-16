@@ -41,7 +41,7 @@
 - Do not use `rsync --relative` with absolute paths unless the resulting destination layout is explicitly intended and verified.
 - An unreachable device remains paused. Do not attempt transfers or remote test actions at every development step.
 - Reconnection follows the saved automatic/manual rule; it does not authorize repeating completed analysis.
-- Standing user authorization: after a verified code change, update file version headers, commit and push to Git, then align ROG and the configured reachable devices. A code change that changes the application version must not remain local. Preserve user data; do not interrupt active transfers for deployment. Report offline or busy devices explicitly and leave their update pending. Do not restart completed checks or transfers as part of deployment.
+- Standing user authorization: after a verified code change, update file version headers, commit and push to Git. Updating remote devices requires an explicit user request; publication is not deployment authorization. Preserve user data and do not interrupt active transfers.
 
 ## Background Services
 - Background workers perform network probes and subprocess waits outside shared state locks. HTTP reads use the last committed immutable memory snapshot; JSON persistence serializes writers without blocking readers.
