@@ -1,4 +1,4 @@
-// map.js v3.115.2485
+// map.js v3.115.2490
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -480,6 +480,9 @@ function renderMap(animate = false) {
           result.observed_at ??= Date.now();
           data.device_runtime ??= {}; data.device_runtime[device.id] = result;
           notice("Aggiornamento Oaclis avviato su " + device.name);
+        } catch (error) {
+          console.error("Oaclis update:", error);
+          notice("Aggiornamento non riuscito");
         } finally { delete version.dataset.busy; renderConnections(); }
       });
       actions.append(version);

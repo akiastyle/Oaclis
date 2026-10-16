@@ -1,4 +1,4 @@
-// badge-motion.js v1.6.91
+// badge-motion.js v1.6.97
 /* Passive presentation only: no network, storage, timers for progress or transfer decisions. */
 (function () {
   const names = ['chat', 'paths', 'apps'];
@@ -47,7 +47,7 @@
       const working = ['transferring', 'paused'].includes(state.phase);
       if (working) {
         clearTimeout(this.exitTimer);
-        const active = names.filter(name => state.modules?.[name]?.changed === true);
+        const active = names;
         names.forEach(name => {
           const index = active.indexOf(name), ring = this.rings[name], icon = this.icons[name];
           if (index < 0) { ring.classList.remove('is-active', 'is-leaving'); icon.classList.remove('is-active'); return; }
@@ -56,11 +56,11 @@
             icon.style.setProperty('--badge-delay', (index * this.stagger) + 'ms');
             ring.classList.remove('is-leaving'); ring.classList.add('is-active'); icon.classList.add('is-active');
           }
-          this.progress(name, state.modules[name].progress);
+          this.progress(name, state.modules?.[name]?.changed === true ? state.modules[name].progress : 1);
         });
         this.active = active; this.setPhase(state.phase);
       } else if (this.active.length) {
-        this.active.forEach(name => this.progress(name, state.modules?.[name]?.progress));
+        this.active.forEach(name => this.progress(name, state.modules?.[name]?.changed === true ? state.modules[name].progress : 1));
         this.restPhase = state.phase === 'checking' ? 'checking' : 'idle';
         if (this.phase === 'finishing') return;
         this.setPhase('finishing');

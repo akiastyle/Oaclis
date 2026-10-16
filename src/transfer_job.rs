@@ -1,4 +1,4 @@
-// transfer_job.rs v2.26.1535
+// transfer_job.rs v2.28.1599
 //! Executes an authorized transfer; independent of routes and scheduling.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid,rules};
 use serde_json::{Value,json};
@@ -206,25 +206,35 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
             } else {
                 let chat = chat.unwrap();
                 fs::create_dir_all(&state)?;
-                let transfer_environment = || -> io::Result<Value> {
-                    let mut results = Vec::new();
-                    for (module, enabled) in [("paths",scopes.paths),("apps",scopes.apps)] {
-                        if !enabled {continue;}
+                thread::scope(|scope| -> io::Result<Value> {
+                let mut workers = Vec::new();
+                for (module, enabled) in [("paths",scopes.paths),("apps",scopes.apps)] {
+                    if !enabled {continue;}
+                    let device = &device;
+                    let manifest = &manifest;
+                    let app_inventory = &app_inventory;
+                    let v = &v;
+                    let state = &state;
+                    let chat = &chat;
+                    let job = &job;
+                    workers.push((module, scope.spawn(move || -> io::Result<Value> {
                         let selected = environment::Scopes {chat:false,paths:module=="paths",apps:module=="apps"};
-                        results.push(environment::execute(
-                            &device,manifest.as_ref().unwrap(),&app_inventory,selected,incoming,
+                        let result = environment::execute(
+                            device,manifest.as_ref().unwrap(),app_inventory,selected,incoming,
                             v["operation"].as_str().unwrap_or("copy"),
-                            &state.join(format!("environment-{}-{}",device.id,chat["id"].as_str().unwrap())),
-                            |target,path| crate::path_access::ensure(target,path,&job),
-                            |progress| module_event(&job,module,progress),
-                        )?);
-                        module_event(&job,module,json!({"event":{"phase":"completed"}}));
-                    }
-                    Ok(json!(results))
-                };
-                if !scopes.chat {
-                    return Ok(json!({"environment":transfer_environment()?}));
+                            &state.join(format!("environment-{}-{}{}",device.id,chat["id"].as_str().unwrap(),if module == "apps" { "-apps" } else { "" })),
+                            |target,path| crate::path_access::ensure(target,path,job),
+                            |progress| module_event(job,module,progress),
+                        );
+                        match &result {
+                            Ok(_) => module_event(job,module,json!({"event":{"phase":"completed"}})),
+                            Err(error) => job.lock().unwrap()["module_progress"][module]["error"] = json!(error.to_string()),
+                        }
+                        result
+                    })));
                 }
+                let chat_result = (|| -> io::Result<Value> {
+                if !scopes.chat { return Ok(Value::Null); }
                 let source = Path::new(chat["path"].as_str().unwrap());
                 if incoming || synchronize {
                     let destination = remote.unwrap();
@@ -261,7 +271,7 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                     )?;
                     if outcome != crate::sync::Outcome::Conflict { module_event(&job,"chat",json!({"event":{"phase":"completed"}})); }
                     return Ok(
-                        json!({"chat":outcome,"environment":if outcome == crate::sync::Outcome::Conflict {json!([])} else {transfer_environment()?}}),
+                        json!(outcome),
                     );
                 }
                 crate::chat::Chat::read(source)?;
@@ -282,7 +292,25 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                     },
                 )?;
                 module_event(&job,"chat",json!({"event":{"phase":"completed"}}));
-                Ok(json!({"chat":receipt,"environment":transfer_environment()?}))
+                Ok(json!(receipt))
+                })();
+                let mut results = json!({});
+                let mut errors = Vec::new();
+                match chat_result {
+                    Ok(value) => results["chat"] = value,
+                    Err(error) => {
+                        job.lock().unwrap()["module_progress"]["chat"]["error"] = json!(error.to_string());
+                        errors.push(format!("Chat: {error}"));
+                    }
+                }
+                for (module, worker) in workers {
+                    match worker.join().unwrap_or_else(|_| Err(io::Error::other("Worker interrotto"))) {
+                        Ok(value) => results[module] = value,
+                        Err(error) => errors.push(format!("{module}: {error}")),
+                    }
+                }
+                if errors.is_empty() { Ok(results) } else { Err(io::Error::other(errors.join("; "))) }
+                })
             }
         })();
         let mut finished = job.lock().unwrap().clone();

@@ -1,4 +1,4 @@
-/* style.css v2.0.1272 */
+/* style.css v2.0.1280 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -476,8 +476,8 @@ progress {
   left: 50%;
   transform: translateX(-50%);
   z-index: var(--z-notice);
-  background: var(--ink);
-  color: var(--panel);
+  background: #fff;
+  color: #111;
   border-radius: var(--radius-notice);
   padding: var(--space-11) var(--space-16);
   max-width: min(var(--notice-width), 90vw);
@@ -802,7 +802,6 @@ select {
 .map-node.selected,
 .map-node.drop-target,
 #panel,
-#notice,
 .connection-port,
 .link-badge,
 .terminal-screen,
@@ -831,10 +830,9 @@ select {
   --glass-base: color-mix(in srgb, var(--icon-color) 24%, var(--panel));
   border-color: var(--icon-color);
 }
-#notice { --glass-base: var(--ink); }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .toolbar, .map-node, .map-node.selected, .map-node.drop-target, #panel, #notice,
+  .toolbar, .map-node, .map-node.selected, .map-node.drop-target, #panel,
   .connection-port, .link-badge {
     background: var(--glass-base);
   }
