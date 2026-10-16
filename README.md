@@ -544,7 +544,7 @@ I tre passaggi sono separati:
 
 1. Ogni dispositivo rileva localmente Percorsi e App e salva l'inventario nel DB. Le analisi AI completate restano salvate; il refresh manuale riguarda soltanto il modulo scelto. Aprire un pannello non avvia check.
 2. Ogni 60 secondi il match confronta le chat e i risultati locali dei moduli attivi, senza eseguire trasferimenti. I contenuti delle cartelle hanno una prova SHA-256; le impronte dei file immutati vengono riutilizzate localmente e non inviate alla UI o agli altri dispositivi.
-3. Play compare soltanto in presenza di differenze e inventari pronti. Il trasferimento parte esclusivamente con Play, anche la prima volta, in ordine Chat → Percorsi → App.
+3. Play compare soltanto in presenza di differenze e inventari pronti. Il trasferimento parte esclusivamente con Play, anche la prima volta. Chat, Percorsi e App lavorano in parallelo.
 
 La chat più recente decide il verso per tutti i moduli attivi. Un'estensione della cronologia prevale sulla copia precedente; in caso di storie divergenti si usa l'ultima attività UTC registrata nella chat, non la data di copia del file. Se non è possibile distinguere le copie, il collegamento segnala conflitto. Con chat identiche rimane il verso dell'ultimo confronto, oppure la sorgente scelta con il drag.
 
@@ -552,17 +552,39 @@ La chat più recente decide il verso per tutti i moduli attivi. Un'estensione de
 - Bidirezionale: confronto periodico e trasferimenti manuali con Play.
 - Offline: attesa, senza tentativi di trasferimento; il Play già richiesto resta in attesa della riconnessione.
 - I toggle Chat, Percorsi e App sono indipendenti e valgono per tutti i collegamenti della chat.
-- Il loading ad arco indica un check in corso. Durante il trasferimento gli anelli mostrano l'avanzamento dei soli moduli con variazioni; alla fine tornano Modifica e Console.
+- Il loading ad arco indica un check in corso. Durante il trasferimento compaiono tutti e tre gli anelli; quelli senza lavoro vanno subito al 100%. Alla fine tornano Modifica e Console.
 
 `chat_match_interval_seconds` in `~/.config/oaclis/settings.json` regola il
 controllo periodico: valore predefinito 60 secondi, intervallo 10–3600 secondi.
 L'inventario di Percorsi e App resta persistente: non si rilancia l'analisi AI a
 ogni nuovo messaggio. I rispettivi refresh manuali aggiornano le definizioni.
 
-L'esecuzione usa i moduli abilitati, in ordine Chat → Percorsi → App. Il modulo App
-trasferisce l'inventario della sorgente, le configurazioni e i plugin/skill previsti
-dal motore esistente; questa versione non installa automaticamente i pacchetti di
-sistema sulla destinazione.
+I Percorsi vengono copiati con un unico rsync per tutte le radici assolute,
+leggendo l'avanzamento di rsync senza confronti aggiuntivi per file. Non viene
+usato `--delete`.
+
+Il modulo App trasferisce la definizione e i file di skill/plugin, poi avvia
+l'installazione esplicita sulla destinazione attraverso il canale SSH gia'
+autorizzato. Il primo installatore supporta Node.js e npm nelle versioni della
+sorgente, usando NVM gia' preparato da `run.sh`, e i pacchetti Node del progetto
+tramite [npm ci](https://docs.npmjs.com/cli/v11/commands/npm-ci/). Richiede
+`package-lock.json` coerente con le versioni individuate. I pacchetti gia'
+presenti nella versione richiesta vengono verificati e saltati. Skill e plugin
+sono verificati nelle cartelle in cui sono stati trasferiti.
+
+Il log registra `APP INSTALL START`, `APP CHECK`, `EXEC`, `EXIT`, `APP INSTALLED`
+o `APP PRESENT`, e infine `APP INSTALL COMPLETE` oppure `APP INSTALL FAILED`.
+L'anello App avanza in proporzione alle dipendenze completate sul totale; una
+singola installazione puo' restare sulla stessa percentuale finche' il comando
+non termina. Il 100% richiede verifica delle versioni ed esito positivo salvato.
+Se Percorsi sta ancora copiando il manifest necessario, solo quel passaggio
+attende la disponibilita' del file, con `APP WAIT MANIFEST` nel log.
+
+I tipi di dipendenze non ancora supportati (per esempio Python e pacchetti di
+sistema) producono un errore esplicito; non vengono dichiarati installati.
+Non si attivano servizi dell'applicazione. Occorre aggiornare anche il device
+destinatario prima di usare questa funzione. Commit e push non aggiornano
+automaticamente i device remoti.
 
 Lo stato del ciclo risiede in `chat_links.value.flow`, viene replicato con il
 collegamento e contiene l'esecutore, una generazione, il primo completamento,
@@ -635,7 +657,7 @@ Oaclis carica in memoria quattro file in `~/.config/oaclis/`, corrispondenti all
 
 L'importazione iniziale legge il precedente `appearance.sqlite` senza modificarlo; se i quattro JSON sono gia' presenti, SQLite non viene piu' usato come archivio Oaclis. I database appartenenti a Codex sono consultati soltanto in lettura per ricavare i titoli. Non si convertono chat, cartelle o dati dell'applicazione Codex.
 
-Catalogo, confronto delle chat e scambio delle impostazioni fra device sono nativi Rust. SSH conserva alias, identita' e autorizzazioni esistenti; il comando interno `state-request` inoltra i messaggi all'app gia' avviata tramite un socket locale accessibile allo stesso utente. Non viene avviato un worker Python. Gli script Python di analisi, installazione e gestione del sistema restano indipendenti da questo flusso.
+Catalogo, confronto delle chat e scambio delle impostazioni fra device sono nativi Rust. SSH conserva alias, identita' e autorizzazioni esistenti; il comando interno `state-request` inoltra i messaggi all'app gia' avviata tramite un socket locale accessibile allo stesso utente. Non viene avviato un worker Python. Oaclis non richiede script Python operativi per analisi, installazione o gestione del sistema.
 
 Ogni file viene sostituito atomicamente. Un salvataggio che coinvolge piu' tabelle usa un registro temporaneo `.state-commit.json`, recuperato all'avvio e rimosso a completamento, per evitare modifiche parziali dopo un'interruzione. `shared-settings.json`, i file dei device e le posizioni conservano il loro ruolo e formato esistenti.
 
@@ -644,4 +666,4 @@ Ogni file viene sostituito atomicamente. Un salvataggio che coinvolge piu' tabel
 
 I file di test separati (`tests/`, `src/state_tests.rs`, `tools/test_*`, `scripts/test_*`) e gli strumenti diagnostici `tools/path_analysis.py` e `tools/probe_codex.py` restano soltanto sul computer di sviluppo e sono esclusi da Git. Non servono per compilare o installare Oaclis. I test integrati nei sorgenti Rust restano disponibili con `cargo test`, ma non vengono inclusi nelle build release. La versione applicativa e l’impronta della build escludono i test locali e i due strumenti diagnostici, per dare lo stesso risultato sui client.
 
-L'analisi dei percorsi e l'inventario sono implementati in Rust. Il codice Python dei progetti viene analizzato come testo tramite un parser, senza importarlo o eseguirlo; le versioni delle librerie si ricavano dai metadati installati. I programmi riconosciuti possono essere interrogati con il proprio comando di versione. La selezione dei percorsi usa Codex effimero, con strumenti disabilitati e risultati limitati alle evidenze osservate. Il trasferimento delle App conserva il comportamento corrente: salva la definizione sul destinatario; non avvia automaticamente i vecchi installer.
+L'analisi dei percorsi e l'inventario sono implementati in Rust. Il codice Python dei progetti viene analizzato come testo tramite un parser, senza importarlo o eseguirlo; le versioni delle librerie si ricavano dai metadati installati. I programmi riconosciuti possono essere interrogati con il proprio comando di versione. La selezione dei percorsi usa Codex effimero, con strumenti disabilitati e risultati limitati alle evidenze osservate. Le App vengono installate soltanto con Play, per i tipi di dipendenze supportati descritti sopra; l'esito e' registrato separatamente dalla sola consegna della definizione.

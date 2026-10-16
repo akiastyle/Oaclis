@@ -1,4 +1,4 @@
-// state_transport.rs v1.14.226
+// state_transport.rs v1.17.291
 //! A local Unix socket forwards approved SSH requests into the running Rust app.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -72,33 +72,44 @@ pub fn forward(home: &Path) -> io::Result<()> {
     Ok(())
 }
 pub(crate) fn remote(device: &Device, value: &Value) -> io::Result<Value> {
+    remote_progress(device,value,&mut |_| {})
+}
+pub(crate) fn remote_progress(device: &Device, value: &Value, notify: &mut impl FnMut(Value)) -> io::Result<Value> {
     device.validate()?;
     log_request("SEND", &device.ssh_alias, value);
+    let mut errors=crate::staging::StagedFile::new(&std::env::temp_dir())?;
     let mut child = Command::new("ssh")
         .args(crate::ssh::OPTIONS.split_whitespace().skip(1))
         .arg(&device.ssh_alias)
         .arg(if value["kind"]=="environment" {"$HOME/.local/bin/oaclis environment-request"} else {"$HOME/.local/bin/oaclis state-request"})
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()?;
-    child
-        .stdin
-        .take()
-        .unwrap()
-        .write_all(&serde_json::to_vec(value)?)?;
-    let output = child.wait_with_output()?;
-    log(format!("RECV {} {}", device.ssh_alias, output.status));
-    if !output.status.success() {
-        return Err(io::Error::other(format!(
-            "SSH: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )));
+        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(errors.file.try_clone()?).spawn()?;
+    if let Err(error)=child.stdin.take().unwrap().write_all(&serde_json::to_vec(value)?) {let _=child.kill();let _=child.wait();return Err(error);}
+    let result=read_response(BufReader::new(child.stdout.take().unwrap()),value["kind"]=="environment" && value["operation"]=="install",notify);
+    if result.is_err() {let _=child.kill();}
+    let status=child.wait()?;
+    log(format!("RECV {} {}", device.ssh_alias, status));
+    if !status.success() {
+        use std::io::{Seek,SeekFrom};
+        let size=errors.file.metadata()?.len();errors.file.seek(SeekFrom::Start(size.saturating_sub(4096)))?;
+        let mut text=String::new();errors.file.read_to_string(&mut text)?;
+        log(crate::environment_analysis::redact(&text));
+        if text.trim().is_empty() {return result.and_then(|_|Err(io::Error::other(format!("SSH: {status}"))));}
+        return Err(io::Error::other(format!("SSH: {}",text.trim())));
     }
-    if output.stdout.len() as u64 > LIMIT {
-        return Err(invalid("Impostazioni troppo grandi"));
+    result
+}
+fn read_response(reader: impl Read, streaming: bool, notify: &mut impl FnMut(Value)) -> io::Result<Value> {
+    let mut result=None;
+    let stream=reader.take(LIMIT);
+    for item in serde_json::Deserializer::from_reader(stream).into_iter::<Value>() {
+        let item=item.map_err(io::Error::other)?;
+        if streaming && item.get("_oaclis_progress").is_some() {notify(item["_oaclis_progress"].clone());}
+        else if streaming && item.get("_oaclis_error").is_some() {return Err(io::Error::other(item["_oaclis_error"].as_str().unwrap_or("Installazione non riuscita")));}
+        else if result.is_some() {return Err(invalid("Risposta multipla inattesa"));}
+        else if streaming && item.get("_oaclis_result").is_none() {return Err(invalid("Risposta installazione non valida"));}
+        else {result=Some(Ok(if streaming {item["_oaclis_result"].clone()} else {item}));}
     }
-    serde_json::from_slice(&output.stdout).map_err(io::Error::other)
+    result.unwrap_or_else(||Err(invalid("Risposta dispositivo assente")))
 }
 pub(crate) fn start(
     config: PathBuf,
@@ -170,6 +181,18 @@ pub(crate) fn start(
 
 #[cfg(test)]
 mod log_tests {
+    #[test]
+    fn receiver_streams_installation_progress_and_preserves_regular_responses() {
+        let input=b"{\"_oaclis_progress\":{\"event\":{\"phase\":\"transferring\",\"percent\":50}}}\n{\"_oaclis_result\":{\"status\":\"completed\"}}\n";
+        let mut events=Vec::new();
+        let result=super::read_response(&input[..],true,&mut |event|events.push(event)).unwrap();
+        assert_eq!(events[0]["event"]["percent"],50);assert_eq!(result["status"],"completed");
+        let regular=super::read_response(&b"{\"runtime\":{},\"devices\":[]}"[..],false,&mut |_|panic!("ordinary response is not progress")).unwrap();
+        assert_eq!(regular["devices"],serde_json::json!([]));
+        assert!(super::read_response(&b"{} {}"[..],false,&mut |_|{}).is_err());
+        assert!(super::read_response(&b"{\"_oaclis_error\":\"failed\"}"[..],true,&mut |_|{}).is_err());
+        assert!(super::read_response(&b"{}"[..],true,&mut |_|{}).is_err());
+    }
     #[test]
     fn receiver_log_omits_passwords_and_payloads_and_is_bounded() {
         super::log_request("RECV", "fixture", &serde_json::json!({"kind":"prepare-path","path":"/var/www/log-fixture","password":"never-log-password","value":{"token":"never-log-token"}}));

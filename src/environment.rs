@@ -1,4 +1,4 @@
-// environment.rs v1.21.703
+// environment.rs v1.21.726
 //! Chat environment analysis and destination preparation, independent of the UI.
 use crate::{
     devices::{self, Device},
@@ -238,7 +238,17 @@ pub fn forward()->io::Result<()>{
     let mut bytes=Vec::new();io::stdin().take(16*1024*1024+1).read_to_end(&mut bytes)?;
     if bytes.len()>16*1024*1024{return Err(invalid("Richiesta troppo grande"));}
     let request:Value=serde_json::from_slice(&bytes)?;
-    serde_json::to_writer(io::stdout(),&native(&request)?)?;Ok(())
+    if request["operation"]=="install" {
+        let path=Path::new(request["value"]["definition"].as_str().ok_or_else(||invalid("Definizione richiesta"))?);
+        let mut output=io::stdout().lock();
+        let result=crate::app_install::saved(path,&mut |event| {
+            let _=serde_json::to_writer(&mut output,&json!({"_oaclis_progress":event}));
+            let _=output.write_all(b"\n");let _=output.flush();
+        });
+        let response=match result {Ok(value)=>json!({"_oaclis_result":value}),Err(error)=>json!({"_oaclis_error":error.to_string()})};
+        serde_json::to_writer(&mut output,&response)?;output.write_all(b"\n")?;
+    } else {serde_json::to_writer(io::stdout(),&native(&request)?)?;}
+    Ok(())
 }
 pub fn analyze(device: Option<&Device>, path: &str, chat: &str) -> io::Result<Manifest> {
     let manifest:Manifest=serde_json::from_value(request(device,"analyze",json!({"path":path,"chat_id":chat}))?).map_err(io::Error::other)?;
@@ -373,7 +383,7 @@ pub fn execute(
             exclude: vec![],
         };
         let files = rules::execute(device, &rule, &state.join(&id), |p| {
-            notify(json!({"event":p.event,"path":p.path,"index":p.index,"total":p.total}))
+            crate::state_transport::log(format!("APPS FILE {} {}", p.path.display(),serde_json::to_string(&p.event).unwrap_or_default()))
         })?;
         if files.iter().any(|f| f.outcome == Outcome::Conflict) {
             return Err(invalid("Conflitto nelle cartelle: copie conservate"));
@@ -398,7 +408,7 @@ pub fn execute(
             if content.len() > 131072 { return Err(invalid("Configurazione troppo grande")); }
             configs.push(json!({"path":config.path,"service":config.service,"modules":config.modules,"content":content}));
         }
-        let definition = json!({"paths":manifest.paths,"requirements":inventory["requirements"],"configs":configs,"plugins":manifest.plugins});
+        let definition = json!({"paths":manifest.paths,"wait_for_paths":inventory["paths_pending"]==true,"requirements":inventory["requirements"],"configs":configs,"plugins":manifest.plugins});
         let directory = target_home.join(".config/oaclis/environments");
         let target = directory.join(format!("{}.json",state.file_name().and_then(|v|v.to_str()).ok_or_else(||invalid("Identificativo ambiente assente"))?));
         if incoming {
@@ -410,9 +420,14 @@ pub fn execute(
             staged.file.write_all(&serde_json::to_vec_pretty(&definition)?)?;
             staged.file.sync_all()?;
             let previous = transfer::inspect_remote(device, &target)?.map(|(receipt,_)|receipt);
-            transfer::write_file(device, &staged.path, &target, previous.as_ref(), None, &mut |event|notify(json!({"event":event})))?;
+            transfer::write_file(device, &staged.path, &target, previous.as_ref(), None, &mut |event|crate::state_transport::log(format!("APPS DEFINITION {}",serde_json::to_string(&event).unwrap_or_default())))?;
         }
         results.push(json!({"definition":target}));
+        let installation=if incoming {crate::app_install::saved(&target,&mut notify)} else {
+            crate::state_transport::remote_progress(device,&json!({"kind":"environment","operation":"install","value":{"definition":target}}),&mut notify)
+        }.map_err(|error| {crate::state_transport::log(format!("APP INSTALL FAILED {}",crate::environment_analysis::redact(&error.to_string())));invalid("Installazione delle app non riuscita. Dettagli nel log.")})?;
+        if installation["status"]!="completed" {return Err(invalid("Installazione delle app non completata. Dettagli nel log."));}
+        results.push(json!({"installation":installation}));
     }
     Ok(json!(results))
 }

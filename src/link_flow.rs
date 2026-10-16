@@ -1,4 +1,4 @@
-// link_flow.rs v1.21.386
+// link_flow.rs v1.21.399
 //! Link lifecycle: compare immutable proofs, persist intent, never transfer from a poll.
 use crate::{devices::Device, environment, invalid, catalog};
 use serde_json::{Value, json};
@@ -83,7 +83,9 @@ fn remember_delivery(config: &Path, link: &Value, flow: &mut Value) -> io::Resul
     for name in ["paths","apps"] {
         if record["scopes"][name]!=true || record["module_progress"][name]["progress"].as_f64()!=Some(1.0)
             || record["results"][name].is_null() || !modules[name][side].is_array() {continue;}
+        if name=="apps" && !record["results"][name].as_array().is_some_and(|items|items.iter().any(|item|item["installation"]["status"]=="completed")) {continue;}
         flow["delivered"][name]=json!({"source":side,"signature":modules[name][side],"target_before":modules[name][other]});
+        if name=="apps" {flow["delivered"][name]["installed"]=json!(true);}
     }
     Ok(())
 }
@@ -101,7 +103,7 @@ fn match_modules(link: &Value, flow: &mut Value, source: Option<&Value>, target:
         let empty=if winner=="target" {b.as_ref()} else {a.as_ref()}.is_some_and(|v|v==&json!([]));
         let receipt=&flow["delivered"][name];
         let (selected_signature,other_signature)=if winner=="target" {(&b,&a)} else {(&a,&b)};
-        let delivered=name!="chat" && receipt["source"]==winner
+        let delivered=name!="chat" && (name!="apps" || receipt["installed"]==true) && receipt["source"]==winner
             && selected_signature.as_ref().is_some_and(|signature|signature==&receipt["signature"])
             && other_signature.as_ref().is_some_and(|signature|signature==&receipt["target_before"] || signature==&receipt["signature"]);
         let different=enabled && !empty && a!=b && !delivered;
@@ -267,10 +269,17 @@ mod tests {
         environment::database(&root,"master:chat","transfer-save",Some(&record)).unwrap();
         remember_delivery(&root,&link,&mut flow).unwrap();
         match_modules(&link,&mut flow,Some(&source),Some(&target),"aligned",None);
-        assert_eq!(flow["phase"],"aligned");
+        assert_eq!(flow["phase"],"ready");
         assert_eq!(flow["modules"]["paths"]["changed"],false);
+        assert_eq!(flow["modules"]["apps"]["changed"],true);
         assert_eq!(flow["modules"]["apps"]["target"],json!([]));
         assert!(flow["delivered"]["apps"].get("installed").is_none());
+        record["results"]["apps"]=json!([{"installation":{"status":"completed"}}]);
+        environment::database(&root,"master:chat","transfer-save",Some(&record)).unwrap();
+        remember_delivery(&root,&link,&mut flow).unwrap();
+        match_modules(&link,&mut flow,Some(&source),Some(&target),"aligned",None);
+        assert_eq!(flow["phase"],"aligned");
+        assert_eq!(flow["delivered"]["apps"]["installed"],true);
         let mut changed=source.clone();changed["sync_data"]["paths"]["items"][0]["sha256"]=json!("files-v2");
         match_modules(&link,&mut flow,Some(&changed),Some(&target),"aligned",None);
         assert_eq!(flow["phase"],"ready");

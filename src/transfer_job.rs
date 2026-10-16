@@ -1,4 +1,4 @@
-// transfer_job.rs v2.28.1601
+// transfer_job.rs v2.28.1605
 //! Executes an authorized transfer; independent of routes and scheduling.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid,rules};
 use serde_json::{Value,json};
@@ -208,13 +208,15 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
             } else {
                 let chat = chat.unwrap();
                 fs::create_dir_all(&state)?;
+                let mut installation_inventory=app_inventory.clone();
+                installation_inventory["paths_pending"]=json!(scopes.paths);
                 thread::scope(|scope| -> io::Result<Value> {
                 let mut workers = Vec::new();
                 for (module, enabled) in [("paths",scopes.paths),("apps",scopes.apps)] {
                     if !enabled {continue;}
                     let device = &device;
                     let manifest = &manifest;
-                    let app_inventory = &app_inventory;
+                    let app_inventory = &installation_inventory;
                     let v = &v;
                     let state = &state;
                     let chat = &chat;
