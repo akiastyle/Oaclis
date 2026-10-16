@@ -1,9 +1,10 @@
-// app_update.rs v1.8.146
+// app_update.rs v1.8.148
 //! Explicit fast-forward update; never discard local changes.
 use crate::{invalid, staging::StagedFile};
 use std::{io::{self, Read, Seek, SeekFrom}, path::Path, process::{Command, Stdio}, thread, time::{Duration, Instant}};
 
 pub(crate) fn run(command: &mut Command, timeout: Duration) -> io::Result<String> {
+    crate::state_transport::log(format!("EXEC {command:?}"));
     let mut log = StagedFile::new(&std::env::temp_dir())?;
     command.stdin(Stdio::null()).stdout(log.file.try_clone()?).stderr(log.file.try_clone()?);
     #[cfg(unix)] {
@@ -22,6 +23,7 @@ pub(crate) fn run(command: &mut Command, timeout: Duration) -> io::Result<String
         }
         thread::sleep(Duration::from_millis(50));
     };
+    crate::state_transport::log(format!("EXIT {status}"));
     let length = log.file.metadata()?.len();
     log.file.seek(SeekFrom::Start(length.saturating_sub(65536)))?;
     let mut output = String::new();

@@ -1,10 +1,11 @@
-// transfer_job.rs v2.28.1599
+// transfer_job.rs v2.28.1600
 //! Executes an authorized transfer; independent of routes and scheduling.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid,rules};
 use serde_json::{Value,json};
 use std::{fs,io,path::{Path,PathBuf},sync::{Arc,Mutex},thread};
 
 fn module_event(job: &Arc<Mutex<Value>>, module: &str, progress: Value) {
+    crate::state_transport::log(format!("TRANSFER {module} {progress}"));
     let mut state = job.lock().unwrap();
     let event = &progress["event"];
     let fraction = if event["phase"] == "completed" { 1.0 }

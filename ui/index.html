@@ -1,4 +1,4 @@
-<!-- index.html v1.0.146 -->
+<!-- index.html v1.0.148 -->
 <!doctype html>
 <html lang="it">
   <head>
@@ -39,6 +39,7 @@
         </svg>
       </button>
 
+      <button id="toggle-log" class="icon-button" type="button" aria-label="Log" title="Log" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 10h16M4 15h10M4 20h10"/></svg></button>
       <button id="palette" class="icon-button" type="button" popovertarget="palette-menu" aria-label="Scegli palette colori" title="Palette colori"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h2a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a2 2 0 0 0 2-2 9 9 0 0 0-9-9z"/><circle cx="7" cy="10" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/><circle cx="18" cy="10" r="1"/></svg></button>
       <div id="palette-menu" popover="auto" role="radiogroup" aria-label="Palette colori">
         <button type="button" class="palette-option" data-palette="sienna" role="radio" aria-checked="false"><span class="palette-name">Sienna · Blue</span></button>
@@ -142,6 +143,7 @@
       </div>
       <div id="details" hidden></div>
     </aside>
+    <section id="orchestrator-log" class="context-popover" hidden aria-label="Log"><button type="button" class="icon-button popover-close" aria-label="Chiudi log">×</button><h2>Log</h2><pre></pre></section>
     <div id="notice" hidden role="status" aria-live="polite"></div>
   </body>
 </html>

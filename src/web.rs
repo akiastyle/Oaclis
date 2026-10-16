@@ -1,4 +1,4 @@
-// web.rs v2.26.1628
+// web.rs v2.26.1630
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -238,6 +238,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
         let _configuration_edit = if request.method() == &Method::Post && matches!(url.as_str(), "/api/device" | "/api/device/delete" | "/api/rule") {
             Some(configuration_edits.lock().unwrap())
         } else { None };
+        if request.method() == &Method::Post { crate::state_transport::log(format!("HTTP POST {url}")); }
         let result = (|| -> io::Result<Value> {
             match (request.method(), url.as_str()) {
                 (&Method::Get, "/api/peers") => Ok(crate::peers::snapshot(&peers)),
@@ -264,6 +265,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     crate::device_runtime::control(&runtime,&job,&analyses,&role,action,value["revision"].as_str().unwrap_or(""))
                 }
                 (&Method::Post, "/api/path/authorize") => crate::path_access::authorize(body(&mut request)?),
+                (&Method::Get, "/api/log") => Ok(crate::state_transport::logs()),
                 (&Method::Get, "/api/status") => {
                     let snapshot = environment::database(&config,"","status-read",None)?;
                     Ok(json!({"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),

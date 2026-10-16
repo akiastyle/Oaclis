@@ -1,4 +1,4 @@
-/* style.css v2.0.1280 */
+/* style.css v2.0.1301 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1199,3 +1199,24 @@ select {
 .path-authorization .authorization-path { overflow-wrap: anywhere; }
 .path-authorization form { display: grid; gap: var(--space-12); }
 .path-authorization .authorization-error:empty { display: none; }
+
+/* Diagnostic panel stays beneath map devices, outside the popover top layer. */
+#orchestrator-log {
+  z-index: 0;
+  left: 24px;
+  top: 80px;
+  width: min(700px, calc(100vw - 48px));
+  --glass-opacity: var(--glass-device-opacity);
+  --glass-blur: var(--glass-device-blur);
+  background: color-mix(in srgb, var(--panel) var(--glass-opacity), transparent);
+}
+#orchestrator-log pre {
+  max-height: min(400px, calc(100dvh - 180px));
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  font-size: var(--font-small);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}

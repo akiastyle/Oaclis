@@ -1,4 +1,4 @@
-// panels.js v3.132.2355
+// panels.js v3.133.2384
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -313,7 +313,7 @@ function bindPanelDrag(panel, reference = false) {
   heading.onpointerdown = event => {
     if (event.button !== 0 || event.target.closest("button, input, textarea, select")) return;
     event.preventDefault();
-    panel.hidePopover(); panel.showPopover();
+    if (panel.hasAttribute("popover")) { panel.hidePopover(); panel.showPopover(); }
     const start = { x: event.clientX, y: event.clientY, left: panel.offsetLeft, top: panel.offsetTop };
     panel.dataset.dragging = "true";
     heading.setPointerCapture(event.pointerId);
@@ -636,3 +636,30 @@ function renderPathAuthorization(auth) {
   panel.addEventListener('cancel', event => {event.preventDefault(); submit(true);});
   document.body.append(panel); panel.showModal(); panel.querySelector('input').focus();
 }
+
+
+const logPanel = document.querySelector("#orchestrator-log");
+let logPolling = false;
+bindPanelDrag(logPanel);
+async function refreshOrchestratorLog() {
+  if (logPanel.hidden || logPolling) return;
+  logPolling = true;
+  try {
+    const rows = await api("log");
+    const pre = logPanel.querySelector("pre");
+    const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
+    const text = rows.map(row => new Date(row.time).toLocaleTimeString() + " " + row.text).join("\n");
+    if (pre.textContent !== text) { pre.textContent = text; if (atBottom) pre.scrollTop = pre.scrollHeight; }
+  } catch (error) { console.error(error); }
+  finally { logPolling = false; }
+}
+document.querySelector("#toggle-log").onclick = () => {
+  logPanel.hidden = !logPanel.hidden;
+  document.querySelector("#toggle-log").setAttribute("aria-expanded", String(!logPanel.hidden));
+  refreshOrchestratorLog();
+};
+logPanel.querySelector(".popover-close").onclick = () => {
+  logPanel.hidden = true;
+  document.querySelector("#toggle-log").setAttribute("aria-expanded", "false");
+};
+setInterval(refreshOrchestratorLog, 1000);

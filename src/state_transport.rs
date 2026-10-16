@@ -1,4 +1,4 @@
-// state_transport.rs v1.10.189
+// state_transport.rs v1.14.226
 //! A local Unix socket forwards approved SSH requests into the running Rust app.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -15,6 +15,26 @@ use std::{
     time::Duration,
 };
 const LIMIT: u64 = 16 * 1024 * 1024;
+
+static LOG: std::sync::OnceLock<Mutex<std::collections::VecDeque<Value>>> = std::sync::OnceLock::new();
+
+pub(crate) fn log(message: String) {
+    let mut rows = LOG.get_or_init(Default::default).lock().unwrap();
+    let id = rows.back().and_then(|row|row["id"].as_u64()).unwrap_or(0) + 1;
+    if rows.len() == 500 { rows.pop_front(); }
+    rows.push_back(json!({"id":id,"time":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),"text":message}));
+}
+
+pub(crate) fn logs() -> Value {
+    json!(*LOG.get_or_init(Default::default).lock().unwrap())
+}
+
+fn log_request(direction: &str, peer: &str, value: &Value) {
+    let fields: serde_json::Map<String,Value> = ["kind","action","operation","key","path","root","chat_id","revision"]
+        .into_iter().filter_map(|key|value.get(key).filter(|v|v.is_string()).map(|v|(key.into(),v.clone()))).collect();
+    log(format!("{direction} {peer} {}", Value::Object(fields)));
+}
+
 
 fn receive(stream: &mut impl Read) -> io::Result<Value> {
     let mut bytes = Vec::new();
@@ -53,6 +73,7 @@ pub fn forward(home: &Path) -> io::Result<()> {
 }
 pub(crate) fn remote(device: &Device, value: &Value) -> io::Result<Value> {
     device.validate()?;
+    log_request("SEND", &device.ssh_alias, value);
     let mut child = Command::new("ssh")
         .args(crate::ssh::OPTIONS.split_whitespace().skip(1))
         .arg(&device.ssh_alias)
@@ -67,6 +88,7 @@ pub(crate) fn remote(device: &Device, value: &Value) -> io::Result<Value> {
         .unwrap()
         .write_all(&serde_json::to_vec(value)?)?;
     let output = child.wait_with_output()?;
+    log(format!("RECV {} {}", device.ssh_alias, output.status));
     if !output.status.success() {
         return Err(io::Error::other(format!(
             "SSH: {}",
@@ -113,6 +135,7 @@ pub(crate) fn start(
                 let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
                 let result = (|| -> io::Result<Value> {
                     let request = receive(&mut stream)?;
+                    log_request("RECV", "local", &request);
                     match request["kind"].as_str(){
                 Some("terminal")=>crate::terminal::local(&request["value"]),
                 Some("device-control")=>crate::device_runtime::control(&runtime,&job,&analyses,&role,request["action"].as_str().ok_or_else(||invalid("Comando richiesto"))?,request["revision"].as_str().unwrap_or("")),
@@ -125,6 +148,7 @@ pub(crate) fn start(
                 _=>Err(invalid("Azione stato non valida")),
             }
                 })();
+                log(format!("SEND local {}", match &result { Ok(_) => "OK".to_owned(), Err(error) => error.to_string() }));
                 let response = match result {
                     Ok(value) => json!({"ok":true,"value":value}),
                     Err(error) => json!({"ok":false,"error":error.to_string()}),
@@ -142,4 +166,17 @@ pub(crate) fn start(
         }
     });
     Ok(())
+}
+
+#[cfg(test)]
+mod log_tests {
+    #[test]
+    fn receiver_log_omits_passwords_and_payloads_and_is_bounded() {
+        super::log_request("RECV", "fixture", &serde_json::json!({"kind":"prepare-path","path":"/var/www/log-fixture","password":"never-log-password","value":{"token":"never-log-token"}}));
+        let rows = super::logs();
+        let row = rows.as_array().unwrap().iter().find(|r|r["text"].as_str().unwrap().contains("/var/www/log-fixture")).unwrap();
+        assert!(!row.to_string().contains("never-log"));
+        for _ in 0..510 {super::log("fixture".into());}
+        assert!(super::logs().as_array().unwrap().len() <= 500);
+    }
 }
