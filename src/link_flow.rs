@@ -1,4 +1,4 @@
-// link_flow.rs v1.19.298
+// link_flow.rs v1.19.312
 //! Link lifecycle: compare immutable proofs, persist intent, never transfer from a poll.
 use crate::{devices::Device, environment, invalid, catalog};
 use serde_json::{Value, json};
@@ -93,18 +93,18 @@ fn match_modules(link: &Value, flow: &mut Value, source: Option<&Value>, target:
     flow["error"]=if waiting {json!("In attesa del check locale dei moduli attivi sulla sorgente")} else {Value::Null};
 }
 
-pub(crate) fn inspect(config: &Path, codex: &Path, device: &Device, link: &Value, force: bool) -> io::Result<Value> {
+pub(crate) fn inspect(config: &Path, codex: &Path, device: &Device, link: &Value, catalogs: &mut catalog::Catalogs) -> io::Result<Value> {
     let id = link["entry"]["id"].as_str().ok_or_else(||invalid("Chat richiesta"))?;
-    let local = catalog::local(codex)?;
-    let remote = catalog::remote(device)?;
-    let find = |list: &Value| list.as_array().and_then(|all|all.iter().find(|chat|chat["id"] == id)).cloned();
-    let local = find(&json!(local));
-    let remote = find(&remote["chats"]);
+    let find = |list: &[Value]| list.iter().find(|chat|chat["id"] == id).cloned();
+    let local = find(catalog::cached(catalogs, "master", || catalog::local_at(codex, config))?);
+    let remote = find(catalog::cached(catalogs, &device.id, || {
+        serde_json::from_value(catalog::remote(device)?["chats"].clone()).map_err(io::Error::other)
+    })?);
     let (source,target) = if link["source"] == "master" { (local,remote) } else { (remote,local) };
     let stamp = |chat: &Option<Value>| chat.as_ref().map(|chat|json!([chat["path"],chat["bytes"],chat["modified_ns"]])).unwrap_or(Value::Null);
     let signatures = json!({"source":stamp(&source),"target":stamp(&target)});
     let mut flow = link["flow"].clone();
-    if !force && flow["signatures"] == signatures && flow["comparison"].is_string() {
+    if flow["signatures"] == signatures && flow["comparison"].is_string() {
         let phase=flow["comparison"].as_str().unwrap().to_owned();
         match_modules(link,&mut flow,source.as_ref(),target.as_ref(),&phase,None);
         save(config,link,flow.clone())?;return Ok(flow);

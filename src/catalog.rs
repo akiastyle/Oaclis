@@ -1,14 +1,24 @@
-// catalog.rs v2.25.1356
+// catalog.rs v2.27.1398
 //! Read Codex archives natively; Oaclis metadata comes from its in-memory JSON state.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap},
     fs,
     io::{self, BufRead, BufReader},
     path::Path,
     time::UNIX_EPOCH,
 };
+
+pub(crate) type Catalogs = HashMap<String, Result<std::sync::Arc<Vec<Value>>, String>>;
+
+// One snapshot (including failures) per device in a comparison cycle.
+pub(crate) fn cached<'a>(catalogs: &'a mut Catalogs, id: &str, load: impl FnOnce() -> io::Result<Vec<Value>>) -> io::Result<&'a [Value]> {
+    match catalogs.entry(id.into()).or_insert_with(|| load().map(std::sync::Arc::new).map_err(|error| error.to_string())) {
+        Ok(chats) => Ok(chats),
+        Err(error) => Err(io::Error::other(error.clone())),
+    }
+}
 
 pub(crate) fn local(root: &Path) -> io::Result<Vec<Value>> {
     let home = std::env::var_os("HOME").ok_or_else(|| crate::invalid("HOME non definita"))?;
@@ -219,4 +229,30 @@ with sqlite3.connect(sys.argv[1]) as db:
         );
         fs::remove_dir_all(root).unwrap();
     }
+    #[test]
+    fn cycle_reuses_each_devices_catalog_and_errors_then_reloads_next_cycle() {
+        let mut catalogs = Catalogs::new();
+        let calls = std::cell::Cell::new(0);
+        for id in ["master", "peer-a", "peer-b", "master", "peer-a", "peer-b"] {
+            let chats = cached(&mut catalogs, id, || {
+                calls.set(calls.get()+1);
+                Ok(vec![json!({"id":id})])
+            }).unwrap();
+            assert_eq!(chats[0]["id"], id);
+        }
+        assert_eq!(calls.get(), 3);
+        let shared = catalogs.clone();
+        assert!(std::sync::Arc::ptr_eq(catalogs["master"].as_ref().unwrap(), shared["master"].as_ref().unwrap()));
+        for _ in 0..2 {
+            assert!(cached(&mut catalogs,"offline",|| {
+                calls.set(calls.get()+1);
+                Err(io::Error::other("offline"))
+            }).is_err());
+        }
+        assert_eq!(calls.get(), 4);
+        catalogs.clear();
+        assert!(cached(&mut catalogs,"offline",||Ok(vec![])).unwrap().is_empty());
+        assert_eq!(cached(&mut catalogs,"master",||Ok(vec![json!({"id":"updated"})])).unwrap()[0]["id"],"updated");
+    }
+
 }

@@ -1,4 +1,4 @@
-// transfer_job.rs v2.23.1436
+// transfer_job.rs v2.26.1534
 //! Executes an authorized transfer; independent of routes and scheduling.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid,rules};
 use serde_json::{Value,json};
@@ -15,6 +15,21 @@ fn module_event(job: &Arc<Mutex<Value>>, module: &str, progress: Value) {
     let previous = state["module_progress"][module]["progress"].as_f64().unwrap_or(0.0);
     state["module_progress"][module]["progress"] = json!(previous.max(fraction.clamp(0.0,1.0)));
     state["progress"] = progress;
+}
+
+// Reserve the slot in memory; roll back if persistence fails before work starts.
+fn begin(config: &Path, key: Option<&str>, job: &Mutex<Value>, pending: Value) -> io::Result<()> {
+    let mut current = job.lock().unwrap();
+    if current["status"] == "running" { return Err(invalid("Un trasferimento è già in corso")); }
+    let previous = std::mem::replace(&mut *current, pending.clone());
+    drop(current);
+    if let Some(key) = key {
+        if let Err(error) = environment::database(config, key, "transfer-save", Some(&pending)) {
+            *job.lock().unwrap() = previous;
+            return Err(error);
+        }
+    }
+    Ok(())
 }
 
 pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value>>) -> io::Result<Value> {
@@ -157,27 +172,22 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
     } else {
         None
     };
-    let mut lock = job.lock().unwrap();
-    if lock["status"] == "running" {
-        return Err(invalid("Un trasferimento è già in corso"));
-    }
-    *lock = json!({"status":"running","link_key":v["link_key"],"generation":v["generation"],"message":"Preparazione","progress":null,"chat_id":v["chat_id"],"source_device_id":v["source_device_id"].as_str().unwrap_or("master"),"scopes":scopes,"device_id":v["device_id"],
+    let mut pending = json!({"status":"running","link_key":v["link_key"],"generation":v["generation"],"message":"Preparazione","progress":null,"chat_id":v["chat_id"],"source_device_id":v["source_device_id"].as_str().unwrap_or("master"),"scopes":scopes,"device_id":v["device_id"],
         "title":chat.as_ref().map(|c|c["name"].clone()).unwrap_or_else(||json!(rule.as_ref().unwrap().name)),
         "source":if incoming {device.name.as_str()}else{"Questo dispositivo"},
         "destination":if incoming {"Questo dispositivo"}else{device.name.as_str()}});
-    lock["module_progress"] = json!({
+    pending["module_progress"] = json!({
         "chat":{"changed":scopes.chat,"progress":0.0},
         "paths":{"changed":scopes.paths && manifest.as_ref().is_some_and(|m|!m.paths.is_empty()),"progress":0.0},
         "apps":{"changed":scopes.apps,"progress":0.0}
     });
     if v["modules"].is_object() {
         for name in ["chat","paths","apps"] {
-            lock["module_progress"][name]["changed"]=json!(v["modules"][name]["enabled"]==true && v["modules"][name]["changed"]==true);
+            pending["module_progress"][name]["changed"]=json!(v["modules"][name]["enabled"]==true && v["modules"][name]["changed"]==true);
         }
     }
     let transfer_key = chat.as_ref().map(|c| environment::key(v["source_device_id"].as_str().unwrap_or("master"), c["id"].as_str().unwrap())).transpose()?;
-    if let Some(key) = &transfer_key { environment::database(&config, key, "transfer-save", Some(&lock))?; }
-    drop(lock);
+    begin(config, transfer_key.as_deref(), job, pending)?;
     let transfer_config = config.to_path_buf();
     let job = job.clone();
     let flow_key = v["link_key"].as_str().map(str::to_owned);
@@ -274,20 +284,21 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                 Ok(json!({"chat":receipt,"environment":transfer_environment()?}))
             }
         })();
-        let mut lock = job.lock().unwrap();
+        let mut finished = job.lock().unwrap().clone();
         match result {
             Ok(results) => {
-                lock["status"] = json!("completed");
-                lock["results"] = results;
+                finished["status"] = json!("completed");
+                finished["results"] = results;
             }
             Err(e) => {
-                lock["status"] = json!("failed");
-                lock["message"] = json!(e.to_string());
+                finished["status"] = json!("failed");
+                finished["message"] = json!(e.to_string());
             }
         }
-        if crate::automation::conflict(&lock["results"]) {lock["status"]=json!("failed");lock["message"]=json!("Copie divergenti: nessuna sovrascrittura");}
-        if let Some(key) = &transfer_key { let _ = environment::database(&transfer_config, key, "transfer-save", Some(&lock)); }
-        if let Some(key) = &flow_key { let _ = crate::link_flow::finish(&transfer_config,key,&flow_generation,lock["status"]=="completed",lock["message"].as_str().unwrap_or("Trasferimento non completato")); }
+        if crate::automation::conflict(&finished["results"]) {finished["status"]=json!("failed");finished["message"]=json!("Copie divergenti: nessuna sovrascrittura");}
+        if let Some(key) = &transfer_key { let _ = environment::database(&transfer_config, key, "transfer-save", Some(&finished)); }
+        if let Some(key) = &flow_key { let _ = crate::link_flow::finish(&transfer_config,key,&flow_generation,finished["status"]=="completed",finished["message"].as_str().unwrap_or("Trasferimento non completato")); }
+        *job.lock().unwrap() = finished;
     });
     Ok(json!({"ok":true}))
 }
@@ -309,4 +320,57 @@ mod tests {
         module_event(&job,"chat",json!({"event":{"phase":"completed"}}));
         assert_eq!(job.lock().unwrap()["module_progress"]["chat"]["progress"],1.0);
     }
+    #[test]
+    fn failed_start_save_preserves_job_and_allows_retry() {
+        let path = std::env::temp_dir().join(format!("oaclis-job-start-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&path).unwrap();
+        environment::database(&path,"","migrate",None).unwrap();
+        fs::remove_file(path.join("transfers.json")).unwrap();
+        fs::create_dir(path.join("transfers.json")).unwrap();
+        let previous = json!({"status":"completed","chat_id":"previous"});
+        let job = Mutex::new(previous.clone());
+        let pending = json!({"status":"running","chat_id":"next"});
+        assert!(begin(&path,Some("master:next"),&job,pending.clone()).is_err());
+        assert_eq!(*job.lock().unwrap(),previous);
+        assert_eq!(environment::database(&path,"","transfer-list",None).unwrap(),json!({}));
+        fs::remove_dir(path.join("transfers.json")).unwrap();
+        begin(&path,Some("master:next"),&job,pending.clone()).unwrap();
+        assert_eq!(*job.lock().unwrap(),pending);
+        assert!(begin(&path,None,&job,json!({"status":"running","chat_id":"duplicate"})).is_err());
+        assert_eq!(*job.lock().unwrap(),pending);
+        fs::remove_dir_all(path).unwrap();
+    }
+
+    #[test]
+    fn saving_start_does_not_hold_the_job_lock_and_still_rejects_duplicates() {
+        use std::{sync::mpsc, time::{Duration, Instant}};
+        let path = std::env::temp_dir().join(format!("oaclis-job-lock-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir(&path).unwrap();
+        environment::database(&path,"","migrate",None).unwrap();
+        let (started, ready) = mpsc::channel();
+        let (release, wait) = mpsc::channel();
+        let config = path.clone();
+        let writer = thread::spawn(move || crate::state_store::change(&config, |_| {
+            started.send(()).unwrap(); wait.recv().unwrap(); Ok(())
+        }));
+        ready.recv_timeout(Duration::from_secs(2)).unwrap();
+        let job = Arc::new(Mutex::new(json!({"status":"idle"})));
+        let state = job.clone();
+        let config = path.clone();
+        let starter = thread::spawn(move || begin(&config, Some("master:next"), &state, json!({"status":"running"})));
+        let deadline = Instant::now()+Duration::from_secs(1);
+        let mut readable = false;
+        while Instant::now()<deadline {
+            if job.try_lock().is_ok_and(|value|value["status"]=="running") {readable=true;break;}
+            thread::yield_now();
+        }
+        let duplicate = if readable { Some(begin(&path,None,&job,json!({"status":"running"}))) } else {None};
+        release.send(()).unwrap();
+        writer.join().unwrap().unwrap();
+        starter.join().unwrap().unwrap();
+        assert!(readable,"Job reads blocked by JSON persistence");
+        assert!(duplicate.unwrap().is_err());
+        fs::remove_dir_all(path).unwrap();
+    }
+
 }

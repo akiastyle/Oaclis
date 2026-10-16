@@ -1,4 +1,4 @@
-// device_runtime.rs v1.15.242
+// device_runtime.rs v1.16.261
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
@@ -22,10 +22,7 @@ pub(crate) fn build() -> Value {
 }
 
 pub(crate) fn snapshot(config: &Path, local: &std::sync::Mutex<Runtime>) -> io::Result<Value> {
-    let fresh = fs::metadata(config.join("shared-status.json")).and_then(|m|m.modified()).ok()
-        .and_then(|time|time.elapsed().ok()).is_some_and(|age|age < Duration::from_secs(30));
-    let mut states = if fresh { crate::shared_settings::read_positions(config,"shared-status.json")?["runtime"].clone() } else { Value::Null };
-    if !states.is_object() { states = json!({}); }
+    let mut states = crate::shared_settings::runtime(config)?;
     states["master"] = local.lock().unwrap().status();
     Ok(states)
 }
@@ -86,8 +83,11 @@ impl Runtime {
         let executable = executable_path(std::env::current_exe()?)?;
         let revision = revision.to_owned();
         let state = self.update.clone();
+        let mut current_job = job.lock().unwrap();
+        if current_job["status"] == "running" { return Err(invalid("Un'operazione e' gia' in corso")); }
         *state.lock().unwrap() = json!({"status":"running"});
-        *job.lock().unwrap() = json!({"status":"running","kind":"app_update"});
+        *current_job = json!({"status":"running","kind":"app_update"});
+        drop(current_job);
         thread::spawn(move || {
             let result = Command::new("python3").args(["-c", include_str!("../tools/update_app.py"), env!("CARGO_MANIFEST_DIR"), &revision]).output();
             let error = match result {
@@ -206,4 +206,13 @@ mod update_tests {
         assert!(state.start_update("HEAD; exit 1",job.clone()).is_err());
         assert_eq!(job.lock().unwrap()["status"],"idle");
     }
+    #[test]
+    fn app_update_cannot_replace_an_active_transfer() {
+        let mut runtime = Runtime::new(Path::new("/unused"));
+        let job = std::sync::Arc::new(std::sync::Mutex::new(json!({"status":"running","chat_id":"active"})));
+        assert!(runtime.start_update(&"a".repeat(40),job.clone()).is_err());
+        assert_eq!(job.lock().unwrap()["chat_id"],"active");
+        assert_ne!(runtime.status()["update"]["status"],"running");
+    }
+
 }

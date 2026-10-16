@@ -1,4 +1,4 @@
-// web.rs v2.25.1580
+// web.rs v2.25.1596
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -173,7 +173,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     }
     crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone(), peers.clone(), !paused);
     println!("Oaclis UI: http://localhost:23232");
-    let mutations = Mutex::new(());
+    let configuration_edits = Mutex::new(());
     serve_requests(&server, |mut request| {
         if request.method() == &Method::Get && request.url() == "/peer/hello" {
             if !request.remote_addr().is_some_and(|address| crate::peers::local_address(address.ip())) {
@@ -246,9 +246,9 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
             );
             return;
         }
-        // Keep settings writes serialized while slow catalogs leave other workers available.
-        let _mutation = if request.method() == &Method::Post && !matches!(url.as_str(), "/api/catalog" | "/api/analysis" | "/api/check" | "/api/terminal") {
-            Some(mutations.lock().unwrap())
+        // Only legacy config-file edits need a route lock; state_store serializes metadata.
+        let _configuration_edit = if request.method() == &Method::Post && matches!(url.as_str(), "/api/device" | "/api/device/delete" | "/api/rule") {
+            Some(configuration_edits.lock().unwrap())
         } else { None };
         let result = (|| -> io::Result<Value> {
             match (request.method(), url.as_str()) {
@@ -362,9 +362,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         .ok_or_else(|| invalid("Oggetto richiesto"))?;
                     let value: crate::appearance::Appearance =
                         serde_json::from_value(v["value"].clone()).map_err(io::Error::other)?;
-                    let mut entries = crate::appearance::load(config.join("appearance.json"))?;
-                    entries.insert(key.into(), value);
-                    crate::appearance::save(config.join("appearance.json"), &entries)?;
+                    crate::appearance::save(config.join("appearance.json"), &std::collections::BTreeMap::from([(key.into(), value)]))?;
                     Ok(json!({"ok":true}))
                 }
                 (&Method::Post, "/api/app-check") => {
@@ -470,9 +468,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     }
                     devices::save(config.join("devices.json"), &ds)?;
                     if let Some(value) = appearance {
-                        let mut entries = crate::appearance::load(config.join("appearance.json"))?;
-                        entries.insert(format!("device:{}", d.id), value);
-                        crate::appearance::save(config.join("appearance.json"), &entries)?;
+                        crate::appearance::save(config.join("appearance.json"), &std::collections::BTreeMap::from([(format!("device:{}", d.id), value)]))?;
                     }
 
                     Ok(json!({"ok":true}))

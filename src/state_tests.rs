@@ -1,4 +1,4 @@
-// state_tests.rs v1.33.705
+// state_tests.rs v1.34.753
 //! Isolated fixtures cover JSON persistence, former SQLite import and peer convergence.
 use crate::{shared_settings as shared, state_store as store};
 use serde_json::{Value, json};
@@ -534,4 +534,52 @@ fn slow_writer_does_not_block_committed_memory_reads() {
             .unwrap()
             .contains("pending")
     );
+}
+
+#[test]
+fn interrupted_settings_commit_recovers_before_detecting_local_changes() {
+    let f = Fixture::new();
+    fs::write(f.0.join("pairing_ed25519.pub"), "ssh-ed25519 fixture").unwrap();
+    fs::write(f.0.join("role"), "master").unwrap();
+    shared::exchange(&f.0, None).unwrap();
+    fs::write(
+        f.0.join("devices.json"),
+        json!([{"id":"peer-a","name":"Jetson","ssh_alias":"alias-a"}]).to_string(),
+    )
+    .unwrap();
+    shared::save_positions(&f.0, &json!({"master":{"x":200,"y":100}})).unwrap();
+    shared::write_positions(
+        &f.0,
+        "link-position",
+        &json!({"id":"chat-a","source":"master","target":"peer-a","x":20,"y":30}),
+    )
+    .unwrap();
+    let expected = shared::exchange(&f.0, None).unwrap();
+    let mut journal = json!({});
+    for name in [
+        "appearance.json",
+        "analysis.json",
+        "chat_links.json",
+        "transfers.json",
+        "shared-settings.json",
+        "devices.json",
+        "positions.json",
+        "link-positions.json",
+    ] {
+        journal[name] =
+            serde_json::from_slice::<Value>(&fs::read(f.0.join(name)).unwrap()).unwrap();
+    }
+    // Simulate interruption after the central state was saved but before these files.
+    fs::write(f.0.join("devices.json"), "[]").unwrap();
+    fs::write(f.0.join("positions.json"), "{}").unwrap();
+    fs::write(f.0.join("link-positions.json"), "{}").unwrap();
+    fs::write(f.0.join(".state-commit.json"), journal.to_string()).unwrap();
+    assert_eq!(shared::exchange(&f.0, None).unwrap(), expected);
+    for name in ["devices.json", "positions.json", "link-positions.json"] {
+        assert_eq!(
+            serde_json::from_slice::<Value>(&fs::read(f.0.join(name)).unwrap()).unwrap(),
+            journal[name]
+        );
+    }
+    assert!(!f.0.join(".state-commit.json").exists());
 }

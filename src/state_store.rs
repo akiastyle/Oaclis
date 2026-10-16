@@ -1,4 +1,4 @@
-// state_store.rs v2.35.1143
+// state_store.rs v2.36.1174
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -176,6 +176,12 @@ pub(crate) fn change<T>(
     config: &Path,
     action: impl FnOnce(&mut State) -> io::Result<T>,
 ) -> io::Result<T> {
+    change_with_files(config, |state, _| action(state))
+}
+pub(crate) fn change_with_files<T>(
+    config: &Path,
+    action: impl FnOnce(&mut State, &mut Value) -> io::Result<T>,
+) -> io::Result<T> {
     let store = store(config)?;
     let _writer = store
         .writer
@@ -195,14 +201,19 @@ pub(crate) fn change<T>(
         .map_err(|_| io::Error::other("Stato non disponibile"))?
         .clone();
     let mut next = (*current).clone();
-    let result = action(&mut next)?;
-    if next != *current || !store.persisted.load(Ordering::Relaxed) {
+    let mut files = json!({});
+    let result = action(&mut next, &mut files)?;
+    if next != *current
+        || !files.as_object().unwrap().is_empty()
+        || !store.persisted.load(Ordering::Relaxed)
+    {
         // Readers retain the last committed snapshot while disk writes complete.
         persist(
             config,
             &current,
             &next,
             !store.persisted.load(Ordering::Relaxed),
+            files,
         )?;
         *store
             .state
@@ -228,6 +239,9 @@ fn recover_commit(config: &Path) -> io::Result<()> {
             "chat_links.json",
             "transfers.json",
             "shared-settings.json",
+            "devices.json",
+            "positions.json",
+            "link-positions.json",
         ]
         .contains(&name.as_str())
     }) {
@@ -239,7 +253,13 @@ fn recover_commit(config: &Path) -> io::Result<()> {
     std::fs::remove_file(journal)?;
     File::open(config)?.sync_all()
 }
-fn persist(config: &Path, before: &State, after: &State, force: bool) -> io::Result<()> {
+fn persist(
+    config: &Path,
+    before: &State,
+    after: &State,
+    force: bool,
+    related: Value,
+) -> io::Result<()> {
     let old = [
         serde_json::to_value(&before.appearance)?,
         serde_json::to_value(&before.analysis)?,
@@ -267,6 +287,11 @@ fn persist(config: &Path, before: &State, after: &State, force: bool) -> io::Res
     {
         if force || old[index] != next[index] {
             files[*name] = next[index].clone();
+        }
+    }
+    for (name, value) in related.as_object().unwrap() {
+        if read_json(&config.join(name), Value::Null)? != *value {
+            files[name] = value.clone();
         }
     }
     if files.as_object().unwrap().len() == 1 {
