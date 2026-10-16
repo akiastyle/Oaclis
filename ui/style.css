@@ -1,4 +1,4 @@
-/* style.css v2.0.1301 */
+/* style.css v2.0.1318 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1220,3 +1220,20 @@ select {
   scrollbar-width: thin;
   scrollbar-color: var(--line) transparent;
 }
+
+/* Native corner resize, shared by the console and receiver log. */
+.resizable-panel {
+  resize: both;
+  overflow: hidden;
+  min-width: min(280px, calc(100vw - 16px));
+  min-height: min(240px, calc(100dvh - 16px));
+  transition-property: background, color, border-color, box-shadow;
+}
+.chat-terminal.resizable-panel:popover-open,
+#orchestrator-log.resizable-panel:not([hidden]) { display: flex; flex-direction: column; }
+.chat-terminal.resizable-panel { height: min(740px, calc(100dvh - 16px)); }
+#orchestrator-log.resizable-panel { height: min(480px, calc(100dvh - 96px)); }
+.resizable-panel > h2, .resizable-panel > form, .resizable-panel > .terminal-keys { flex-shrink: 0; }
+.chat-terminal.resizable-panel .terminal-screen,
+#orchestrator-log.resizable-panel pre { flex: 1; min-height: 0; height: auto; max-height: none; }
+.chat-terminal.resizable-panel textarea { resize: none; }

@@ -1,4 +1,4 @@
-// panels.js v3.133.2384
+// panels.js v3.133.2395
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -294,6 +294,17 @@ function positionContext(popover, anchor) {
 function bindPanelDrag(panel, reference = false) {
   const heading = panel.querySelector("h2, .panel-bar");
   panel.classList.add("draggable-panel");
+  if (panel.matches(".chat-terminal, #orchestrator-log")) {
+    panel.classList.add("resizable-panel");
+    panel.addEventListener("pointerdown", () => {
+      const rect = panel.getBoundingClientRect();
+      const width = Math.max(0, innerWidth - rect.left - 8), height = Math.max(0, innerHeight - rect.top - 8);
+      panel.style.minWidth = Math.min(280, width) + "px";
+      panel.style.minHeight = Math.min(240, height) + "px";
+      panel.style.maxWidth = width + "px";
+      panel.style.maxHeight = height + "px";
+    });
+  }
   const move = (left, top) => {
     if (panel.id === "panel" && panel.dataset.moved !== "true") {
       panel.style.width = panel.offsetWidth + "px"; panel.style.right = "auto";
