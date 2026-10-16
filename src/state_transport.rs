@@ -1,4 +1,4 @@
-// state_transport.rs v1.10.176
+// state_transport.rs v1.10.178
 //! A local Unix socket forwards approved SSH requests into the running Rust app.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -111,7 +111,7 @@ pub(crate) fn start(
                 Some("catalog")=>crate::catalog::local_at(request["root"].as_str().map(Path::new).unwrap_or(&codex),&config).map(|chats|json!({"root":request["root"].as_str().map(Path::new).unwrap_or(&codex),"chats":chats})),
                 Some("chat-proof")=>crate::chat::proof(Path::new(request["path"].as_str().ok_or_else(||invalid("Percorso chat mancante"))?),request["chat_id"].as_str().ok_or_else(||invalid("Chat mancante"))?,request["prefix_bytes"].as_u64().ok_or_else(||invalid("Prefisso non valido"))?),
                 Some("shared-exchange")=>{let mut value=crate::shared_settings::exchange(&config,Some(&request["value"]))?;value["runtime"]=runtime.lock().unwrap().status();Ok(value)},
-                Some("snapshot")=>serde_json::to_value(crate::state_store::snapshot(&config)?).map_err(io::Error::other),
+                Some("snapshot")=>serde_json::to_value(crate::state_store::snapshot(&config)?.as_ref()).map_err(io::Error::other),
                 Some("database")=>crate::state_store::database(&config,request["key"].as_str().unwrap_or(""),request["operation"].as_str().ok_or_else(||invalid("Operazione mancante"))?,request.get("value")),
                 _=>Err(invalid("Azione stato non valida")),
             }

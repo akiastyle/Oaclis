@@ -44,6 +44,8 @@
 - Do not publish local changes, push Git commits, or update clients unless the user requests that action.
 
 ## Background Services
+- Background workers perform network probes and subprocess waits outside shared state locks. HTTP reads use the last committed immutable memory snapshot; JSON persistence serializes writers without blocking readers.
+- Reuse `state_transport` as the bounded native request receiver. Do not add a second orchestrator or storage writer; publish worker results through the existing state owner.
 - Do not start, stop, remove, or recreate services/timers unless explicitly requested or required by an already authorized operation.
 - Opening the UI does not authorize synchronization, installations, or new environment checks.
 - Simulations must be isolated from real transfers and databases. Remove temporary demos when the user asks.

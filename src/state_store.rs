@@ -1,4 +1,4 @@
-// state_store.rs v2.35.1099
+// state_store.rs v2.35.1143
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -9,7 +9,7 @@ use std::{
     io,
     path::{Path, PathBuf},
     sync::{
-        Arc, Mutex, OnceLock,
+        Arc, Mutex, OnceLock, RwLock,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -54,7 +54,8 @@ impl Default for State {
     }
 }
 pub(crate) struct Store {
-    pub state: Mutex<State>,
+    state: RwLock<Arc<State>>,
+    writer: Mutex<()>,
     pub shared_lock: Mutex<()>,
     persisted: AtomicBool,
     _lock: File,
@@ -126,7 +127,8 @@ pub(crate) fn store(config: &Path) -> io::Result<Arc<Store>> {
         return Err(invalid("Moduli JSON non validi"));
     }
     let result = Arc::new(Store {
-        state: Mutex::new(state),
+        state: RwLock::new(Arc::new(state)),
+        writer: Mutex::new(()),
         shared_lock: Mutex::new(()),
         persisted: AtomicBool::new(native),
         _lock: lock,
@@ -155,17 +157,18 @@ fn external(config: &Path) -> bool {
         .unwrap_or(false);
     !owned && std::os::unix::net::UnixStream::connect(config.join("state.sock")).is_ok()
 }
-pub(crate) fn snapshot(config: &Path) -> io::Result<State> {
+pub(crate) fn snapshot(config: &Path) -> io::Result<Arc<State>> {
     if external(config) {
         return serde_json::from_value(crate::state_transport::local(
             config,
             &json!({"kind":"snapshot"}),
         )?)
+        .map(Arc::new)
         .map_err(io::Error::other);
     }
     Ok(store(config)?
         .state
-        .lock()
+        .read()
         .map_err(|_| io::Error::other("Stato non disponibile"))?
         .clone())
 }
@@ -174,24 +177,37 @@ pub(crate) fn change<T>(
     action: impl FnOnce(&mut State) -> io::Result<T>,
 ) -> io::Result<T> {
     let store = store(config)?;
-    let mut current = store
-        .state
+    let _writer = store
+        .writer
         .lock()
-        .map_err(|_| io::Error::other("Stato non disponibile"))?;
+        .map_err(|_| io::Error::other("Scrittura stato non disponibile"))?;
     if config.join(".state-commit.json").exists() {
         recover_commit(config)?;
-        *current = read_tables(config)?;
+        *store
+            .state
+            .write()
+            .map_err(|_| io::Error::other("Stato non disponibile"))? =
+            Arc::new(read_tables(config)?);
     }
-    let mut next = current.clone();
+    let current = store
+        .state
+        .read()
+        .map_err(|_| io::Error::other("Stato non disponibile"))?
+        .clone();
+    let mut next = (*current).clone();
     let result = action(&mut next)?;
     if next != *current || !store.persisted.load(Ordering::Relaxed) {
+        // Readers retain the last committed snapshot while disk writes complete.
         persist(
             config,
             &current,
             &next,
             !store.persisted.load(Ordering::Relaxed),
         )?;
-        *current = next;
+        *store
+            .state
+            .write()
+            .map_err(|_| io::Error::other("Stato non disponibile"))? = Arc::new(next);
         store.persisted.store(true, Ordering::Relaxed);
     }
     Ok(result)
@@ -605,11 +621,7 @@ pub fn database(
         "transfer-list",
     ];
     if reads.contains(&operation) {
-        let owner = store(config)?;
-        let state = owner
-            .state
-            .lock()
-            .map_err(|_| io::Error::other("Stato non disponibile"))?;
+        let state = snapshot(config)?;
         read_operation(config, &state, key, operation)
     } else {
         change(config, |state| {

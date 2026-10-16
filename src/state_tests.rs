@@ -1,4 +1,4 @@
-// state_tests.rs v1.32.662
+// state_tests.rs v1.33.705
 //! Isolated fixtures cover JSON persistence, former SQLite import and peer convergence.
 use crate::{shared_settings as shared, state_store as store};
 use serde_json::{Value, json};
@@ -491,4 +491,47 @@ fn shared_validation_rejects_invalid_records_before_any_write() {
     ] {
         assert!(crate::shared_records::validate(&record).is_err());
     }
+}
+
+#[test]
+fn slow_writer_does_not_block_committed_memory_reads() {
+    use std::{sync::mpsc, thread, time::Duration};
+    let f = Fixture::new();
+    f.call("migrate", "", None);
+    let before = store::snapshot(&f.0).unwrap();
+    let (started, ready) = mpsc::channel();
+    let (release, wait) = mpsc::channel();
+    let path = f.0.clone();
+    let writer = thread::spawn(move || {
+        store::change(&path, |state| {
+            state
+                .analysis
+                .insert("pending".into(), json!({"ready":true}));
+            started.send(()).unwrap();
+            wait.recv().unwrap();
+            Ok(())
+        })
+    });
+    ready.recv_timeout(Duration::from_secs(2)).unwrap();
+    let (read, result) = mpsc::channel();
+    let path = f.0.clone();
+    let reader = thread::spawn(move || read.send(store::snapshot(&path).unwrap()).unwrap());
+    let observed = result.recv_timeout(Duration::from_millis(500));
+    release.send(()).unwrap();
+    writer.join().unwrap().unwrap();
+    reader.join().unwrap();
+    let observed = observed.expect("Reads must not wait for the writer");
+    assert!(std::sync::Arc::ptr_eq(&before, &observed));
+    assert!(!observed.analysis.contains_key("pending"));
+    assert!(
+        store::snapshot(&f.0)
+            .unwrap()
+            .analysis
+            .contains_key("pending")
+    );
+    assert!(
+        fs::read_to_string(f.0.join("analysis.json"))
+            .unwrap()
+            .contains("pending")
+    );
 }

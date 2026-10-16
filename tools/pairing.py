@@ -1,4 +1,4 @@
-# pairing.py v1.19.330
+# pairing.py v1.19.335
 """LAN identities, signed discovery and mutually approved OpenSSH access."""
 import base64
 import fcntl
@@ -288,14 +288,15 @@ def commit(home, config, card, settings, atomic):
 
 
 def request(home, config, operation, value, source):
+    # Pure probes must not wait for pairing mutations or Windows setup.
+    if operation == 'verify': return verify(value)
+    if operation == 'neighbors': return neighbors()
     helpers = {'__name__': 'oaclis_ssh_settings'}
     exec(source, helpers)
     with open(config / 'pairing.lock', 'a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         if operation == 'prepare': return prepare(home, config)
-        if operation == 'neighbors': return neighbors()
         if operation == 'sign': return sign(config, value)
-        if operation == 'verify': return verify(value)
         if operation == 'state': return state(config)
         if operation == 'forget': return forget(home, config, value['id'], helpers['atomic'])
         if operation == 'restore':

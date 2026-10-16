@@ -1,4 +1,4 @@
-# test_pairing.py v1.7.101
+# test_pairing.py v1.8.107
 """Pairing must never grant SSH access on a single approval or forged packet."""
 import json
 from pathlib import Path
@@ -10,6 +10,12 @@ import pairing
 import ssh_settings
 
 class PairingTests(unittest.TestCase):
+    def test_read_only_probes_do_not_take_pairing_lock(self):
+        with patch.object(pairing.fcntl, 'flock', side_effect=AssertionError('probe locked pairing')), patch.object(pairing, 'verify', return_value={'id':'verified'}), patch.object(pairing, 'neighbors', return_value=['192.168.1.2']):
+            missing = Path('/not-used-by-read-only-probes')
+            self.assertEqual(pairing.request(missing, missing, 'verify', {}, ''), {'id':'verified'})
+            self.assertEqual(pairing.request(missing, missing, 'neighbors', {}, ''), ['192.168.1.2'])
+
     def test_neighbor_cache_only_provides_addresses_not_device_roles(self):
         neighbors = [{'dst':'192.168.1.138','lladdr':'aa:bb:cc:dd:ee:ff','state':['STALE']},
                      {'dst':'192.168.1.199','state':['FAILED']},
