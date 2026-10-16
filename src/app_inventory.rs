@@ -1,9 +1,8 @@
-// app_inventory.rs v1.4.76
+// app_inventory.rs v1.4.79
 //! Define synchronization requirements from the master's actual project environment.
 use crate::{environment::{self,Manifest},invalid};
 use serde_json::{Value,json};
 use std::{io,path::Path,time::{SystemTime,UNIX_EPOCH}};
-const SCRIPT:&str=include_str!("../tools/app_inventory.py");
 fn now()->u64 {SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()}
 
 pub(crate) fn recover_interrupted(config: &Path) -> io::Result<()> {
@@ -38,7 +37,7 @@ pub(crate) fn request(config:&Path,value:&Value)->io::Result<Value> {
     let config=config.to_path_buf();
     std::thread::spawn(move||{
         let input=json!({"paths":manifest.paths,"configs":manifest.configs,"plugins":manifest.plugins});
-        let mut result=match environment::python(None,SCRIPT,&["source",&input.to_string()]) {
+        let mut result=match crate::dependency_inventory::source(&input) {
             Ok(profile)=>json!({"status":"ready","paths":profile["paths"],"requirements":profile["requirements"],"configs":manifest.configs}),
             Err(error)=>json!({"status":"failed","error":error.to_string()})
         };

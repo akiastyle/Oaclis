@@ -1,4 +1,4 @@
-// sync.rs v1.7.305
+// sync.rs v1.7.312
 use crate::{
     chat::Chat,
     check_unchanged,
@@ -153,7 +153,8 @@ pub fn synchronize_with_direction(
         crate::rules::ensure_remote(device, remote.parent().ok_or_else(|| invalid("Cartella remota mancante"))?)?;
     }
     let peer = transfer::inspect_remote(device, remote)?;
-    if kind == Kind::Chat && peer.is_some() {
+    let identical = local_receipt.as_ref().is_some_and(|receipt| peer.as_ref().is_some_and(|(remote,_)|receipt==remote));
+    if kind == Kind::Chat && peer.is_some() && !identical {
         let fetched = transfer::fetch_file(device, remote, &downloaded.path, &mut notify)?;
         if fetched != peer {
             return Err(invalid("La copia remota è cambiata durante il confronto"));
@@ -168,6 +169,10 @@ pub fn synchronize_with_direction(
             Outcome::Received
         }
         None => Outcome::Conflict,
+        Some(_) if kind == Kind::Chat && identical => {
+            Chat::read(&snapshot.path)?;
+            Outcome::Identical
+        }
         Some(receipt) if kind == Kind::File => {
             file_direction(receipt, peer_receipt, previous.as_ref().map(|p| &p.common), direction)
         }

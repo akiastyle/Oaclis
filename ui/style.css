@@ -1,4 +1,4 @@
-/* style.css v2.0.1259 */
+/* style.css v2.0.1272 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1188,3 +1188,16 @@ select {
   color: var(--device-awake-active);
   background: color-mix(in srgb, var(--device-awake-active) 22%, transparent);
 }
+
+.path-authorization {
+  inset: 0;
+  margin: auto;
+  height: fit-content;
+  background: color-mix(in srgb, var(--panel) var(--glass-device-opacity), transparent);
+  backdrop-filter: blur(var(--glass-device-blur)) saturate(var(--glass-saturation));
+  -webkit-backdrop-filter: blur(var(--glass-device-blur)) saturate(var(--glass-saturation));
+}
+.path-authorization::backdrop { background: transparent; }
+.path-authorization .authorization-path { overflow-wrap: anywhere; }
+.path-authorization form { display: grid; gap: var(--space-12); }
+.path-authorization .authorization-error:empty { display: none; }

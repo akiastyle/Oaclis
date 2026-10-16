@@ -1,4 +1,4 @@
-// lib.rs v1.3.68
+// lib.rs v1.3.85
 pub mod state_store;
 mod state_migration;
 mod shared_records;
@@ -15,6 +15,7 @@ pub mod compare;
 pub mod devices;
 pub mod environment;
 pub mod paths;
+pub mod path_access;
 pub mod progress;
 pub mod preparation;
 pub mod rules;
@@ -65,5 +66,19 @@ pub mod shared_settings;
 
 mod device_runtime;
 
-#[cfg(test)]
+#[cfg(all(test, oaclis_local_tests))]
 mod state_tests;
+
+pub mod bootstrap_settings;
+pub mod service_setup;
+pub mod open_ui;
+
+pub mod keep_awake;
+mod app_update;
+
+mod ssh_settings;
+mod pairing;
+
+mod environment_setup;
+mod environment_analysis;
+mod dependency_inventory;

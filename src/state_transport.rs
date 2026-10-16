@@ -1,4 +1,4 @@
-// state_transport.rs v1.10.178
+// state_transport.rs v1.10.189
 //! A local Unix socket forwards approved SSH requests into the running Rust app.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -56,7 +56,7 @@ pub(crate) fn remote(device: &Device, value: &Value) -> io::Result<Value> {
     let mut child = Command::new("ssh")
         .args(crate::ssh::OPTIONS.split_whitespace().skip(1))
         .arg(&device.ssh_alias)
-        .arg("$HOME/.local/bin/oaclis state-request")
+        .arg(if value["kind"]=="environment" {"$HOME/.local/bin/oaclis environment-request"} else {"$HOME/.local/bin/oaclis state-request"})
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -82,6 +82,9 @@ pub(crate) fn start(
     config: PathBuf,
     codex: PathBuf,
     runtime: Arc<Mutex<crate::device_runtime::Runtime>>,
+    job: Arc<Mutex<Value>>,
+    analyses: Arc<Mutex<std::collections::HashSet<String>>>,
+    role: String,
 ) -> io::Result<()> {
     let path = config.join("state.sock");
     if let Ok(metadata) = path.symlink_metadata() {
@@ -99,6 +102,9 @@ pub(crate) fn start(
         let config = config.clone();
         let codex = codex.clone();
         let runtime = runtime.clone();
+        let job = job.clone();
+        let analyses = analyses.clone();
+        let role = role.clone();
         thread::spawn(move || {
             loop {
                 let stream = receiver.lock().unwrap().recv();
@@ -108,6 +114,9 @@ pub(crate) fn start(
                 let result = (|| -> io::Result<Value> {
                     let request = receive(&mut stream)?;
                     match request["kind"].as_str(){
+                Some("terminal")=>crate::terminal::local(&request["value"]),
+                Some("device-control")=>crate::device_runtime::control(&runtime,&job,&analyses,&role,request["action"].as_str().ok_or_else(||invalid("Comando richiesto"))?,request["revision"].as_str().unwrap_or("")),
+                Some("prepare-path")=>crate::path_access::prepare(request.clone()),
                 Some("catalog")=>crate::catalog::local_at(request["root"].as_str().map(Path::new).unwrap_or(&codex),&config).map(|chats|json!({"root":request["root"].as_str().map(Path::new).unwrap_or(&codex),"chats":chats})),
                 Some("chat-proof")=>crate::chat::proof(Path::new(request["path"].as_str().ok_or_else(||invalid("Percorso chat mancante"))?),request["chat_id"].as_str().ok_or_else(||invalid("Chat mancante"))?,request["prefix_bytes"].as_u64().ok_or_else(||invalid("Prefisso non valido"))?),
                 Some("shared-exchange")=>{let mut value=crate::shared_settings::exchange(&config,Some(&request["value"]))?;value["runtime"]=runtime.lock().unwrap().status();Ok(value)},

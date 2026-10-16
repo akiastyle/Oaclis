@@ -1,4 +1,4 @@
-// catalog.rs v2.27.1398
+// catalog.rs v2.27.1418
 //! Read Codex archives natively; Oaclis metadata comes from its in-memory JSON state.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -199,19 +199,11 @@ mod tests {
         let unindexed = local_at(&root, &root.join("config")).unwrap();
         assert_eq!(unindexed.len(), 1);
         assert_eq!(unindexed[0]["name"], "Senza titolo");
-        let script = r#"import sqlite3,sys
-with sqlite3.connect(sys.argv[1]) as db:
-    db.execute('CREATE TABLE threads(id TEXT,name TEXT,title TEXT,source TEXT)')
-    db.execute('INSERT INTO threads VALUES(?,?,?,?)',('01a0568c-cf6c-7d62-bb6d-12c20b4d9b16','Titolo Codex','Primo messaggio','cli'))
-    db.execute('INSERT INTO threads VALUES(?,?,?,?)',('01a0568c-cf6c-7d62-bb6d-12c20b4d9b18',None,'','{"subagent":{}}'))"#;
-        assert!(
-            std::process::Command::new("python3")
-                .args(["-c", script])
-                .arg(root.join("state_5.sqlite"))
-                .status()
-                .unwrap()
-                .success()
-        );
+        let database=rusqlite::Connection::open(root.join("state_5.sqlite")).unwrap();
+        database.execute_batch("CREATE TABLE threads(id TEXT,name TEXT,title TEXT,source TEXT)").unwrap();
+        database.execute("INSERT INTO threads VALUES(?1,?2,?3,?4)",rusqlite::params!["01a0568c-cf6c-7d62-bb6d-12c20b4d9b16","Titolo Codex","Primo messaggio","cli"]).unwrap();
+        database.execute("INSERT INTO threads VALUES(?1,?2,?3,?4)",rusqlite::params!["01a0568c-cf6c-7d62-bb6d-12c20b4d9b18",Option::<String>::None,"",r#"{"subagent":{}}"#]).unwrap();
+        drop(database);
         fs::write(
             root.join(
                 "sessions/rollout-2026-08-31T08-41-03-01a0568c-cf6c-7d62-bb6d-12c20b4d9b18.jsonl",
@@ -222,7 +214,7 @@ with sqlite3.connect(sys.argv[1]) as db:
         let titled = local_at(&root, &root.join("config")).unwrap();
         assert_eq!(titled.len(), 1);
         assert_eq!(titled[0]["name"], "Titolo Codex");
-        assert!(std::process::Command::new("python3").args(["-c","import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.execute(\"UPDATE threads SET name='Titolo aggiornato' WHERE source='cli'\"); db.commit()"]).arg(root.join("state_5.sqlite")).status().unwrap().success());
+        rusqlite::Connection::open(root.join("state_5.sqlite")).unwrap().execute("UPDATE threads SET name='Titolo aggiornato' WHERE source='cli'",[]).unwrap();
         assert_eq!(
             local_at(&root, &root.join("config")).unwrap()[0]["name"],
             "Titolo aggiornato"

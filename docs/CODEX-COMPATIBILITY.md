@@ -4,7 +4,7 @@ Data: 10 ottobre 2026. Ambiente di riferimento: installazione locale Codex 0.162
 
 ## Metodo
 
-Lo script diagnostico [probe_codex.py](../tools/probe_codex.py) usa soltanto la libreria standard Python. È uno strumento di verifica preliminare, non il motore di Oaclis, che sarà Rust.
+Lo script diagnostico `tools/probe_codex.py` (strumento solo locale) usa soltanto la libreria standard Python. È uno strumento di verifica preliminare, non il motore di Oaclis, che sarà Rust.
 
 Seleziona la più piccola chat principale non archiviata per ciascuno dei due formati presenti nell'installazione, legge il database in modalità read-only e copia il solo file JSONL in una directory temporanea privata. Non copia credenziali, configurazione personale, database o chiavi SSH.
 

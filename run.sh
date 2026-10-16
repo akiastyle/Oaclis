@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# run.sh v1.4.186
+# run.sh v1.5.213
 # Prepare prerequisites, compile, configure and enable application startup.
 set -euo pipefail
 case "${1:-}" in ''|--check|--prepare-awake) ;; *) echo 'Uso: bash run.sh [--check|--prepare-awake]' >&2; exit 2;; esac
 check_only=${1:-}
 if [[ "$check_only" == --prepare-awake ]]; then
-    exec python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/tools/keep_awake.py" --prepare "${@:2}"
+    awake_binary="$HOME/.local/bin/oaclis"
+    [[ -x "$awake_binary" ]] || { echo 'Installare prima Oaclis con bash run.sh.' >&2; exit 1; }
+    exec "$awake_binary" prepare-awake "${@:2}"
 fi
 system=$(uname -s)
 case "$system" in Linux|Darwin) ;; *) echo 'Usare run.ps1 su Windows nativo.' >&2; exit 1;; esac
@@ -26,23 +28,15 @@ if [[ "$wsl" == yes && "$container" == no ]]; then
 elif [[ "$container" == yes ]]; then
     echo '[Nota] In container il blocco standby deve essere gestito sul sistema host.'
 fi
-save_scenario() {
-    [[ "$check_only" != --check ]] || return 0
-    if command -v python3 >/dev/null; then
-        python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/save_settings.py" "$system" "$container" "$wsl"
-    else
-        echo 'Scenario non ancora salvato: serve Python 3.'
-    fi
-}
 missing=(); packages=()
 check() {
     if command -v "$1" >/dev/null; then printf '[OK] %s\n' "$1";
     else printf '[Manca] %s\n' "$1"; missing+=("$1"); [[ -z "$2" ]] || packages+=("$2"); fi
 }
 if [[ "$system" == Linux ]]; then
-    for item in git:git curl:curl python3:python3 ssh:openssh-client ssh-keygen:openssh-client rsync:rsync tmux:tmux cc:build-essential ip:iproute2; do check "${item%%:*}" "${item#*:}"; done
+    for item in git:git curl:curl ssh:openssh-client ssh-keygen:openssh-client rsync:rsync tmux:tmux cc:build-essential ip:iproute2; do check "${item%%:*}" "${item#*:}"; done
 else
-    for item in git:git curl:curl python3:python ssh:openssh ssh-keygen:openssh rsync:rsync tmux:tmux cc:; do check "${item%%:*}" "${item#*:}"; done
+    for item in git:git curl:curl ssh:openssh ssh-keygen:openssh rsync:rsync tmux:tmux cc:; do check "${item%%:*}" "${item#*:}"; done
     if ! xcode-select -p >/dev/null 2>&1; then
         echo '[Manca] Strumenti Apple: xcode-select --install'
         missing+=(apple-tools)
@@ -65,20 +59,20 @@ finish() {
         source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/prepare_codex.sh"
         if ! prepare_codex; then echo 'Preparazione Codex non riuscita; Oaclis può proseguire senza Codex.'; fi
     fi
-    save_scenario
     if [[ "$check_only" == --check ]]; then
         echo 'Prerequisiti Oaclis presenti. Oaclis non è stato compilato o avviato.'
     else
-        if [[ "$wsl" != yes ]] && ! python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/tools/keep_awake.py" --prepare; then
+        bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/install.sh" --unconfigured
+        if [[ "$wsl" != yes ]] && ! "$HOME/.local/bin/oaclis" prepare-awake; then
             echo 'Sempre attivo non preparato; Oaclis viene installato comunque. Riprovare con bash run.sh --prepare-awake.'
         fi
-        bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/install.sh" --unconfigured
+        "$HOME/.local/bin/oaclis" save-scenario "$system" "$container" "$wsl"
         echo 'Oaclis compilato e installato. Cerco il master nella LAN sulla 23232.'
         "$HOME/.local/bin/oaclis" setup
         if [[ "$system" == Linux && "$container" == no ]]; then
-            python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/prepare_service.py"
+            "$HOME/.local/bin/oaclis" prepare-service
             if [[ "$wsl" != yes ]]; then
-                python3 "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/open_ui.py"
+                "$HOME/.local/bin/oaclis" open-ui
             fi
         else
             echo 'Avvio automatico non configurato su macOS/container: avviare Oaclis con la gestione del sistema ospitante.'
@@ -87,7 +81,6 @@ finish() {
 }
 if [[ ${#missing[@]} -eq 0 ]]; then finish; exit 0; fi
 if [[ "$check_only" == --check ]]; then exit 1; fi
-save_scenario
 if [[ ! -t 0 ]]; then echo 'Per installare serve un terminale interattivo. Nessuna modifica eseguita.' >&2; exit 1; fi
 if [[ "$system" == Darwin ]] && { ! command -v cc >/dev/null || ! xcode-select -p >/dev/null 2>&1; }; then
     echo 'Installare prima gli strumenti Apple con: xcode-select --install'

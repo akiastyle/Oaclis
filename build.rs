@@ -1,8 +1,10 @@
-// build.rs v1.3.77
+// build.rs v1.3.83
 use std::{env, fs, path::Path, process::Command};
 use sha2::{Digest, Sha256};
 
 fn collect(path: &Path, root: &Path, versions: &mut Vec<[u64; 3]>, digest: &mut Sha256) {
+    let name = path.file_name().and_then(|name|name.to_str()).unwrap_or("");
+    if name.starts_with("test_") || matches!(name, "tests" | "state_tests.rs" | "path_analysis.py" | "probe_codex.py") { return; }
     println!("cargo:rerun-if-changed={}", path.display());
     if path.is_dir() {
         if path.file_name().is_some_and(|name| name == "__pycache__" || name == "node_modules") { return; }
@@ -44,9 +46,11 @@ fn main() {
     assert_eq!(mean([1, 1, 2].into_iter()), 1);
     let root = env::var("CARGO_MANIFEST_DIR").unwrap();
     let root = Path::new(&root);
+    println!("cargo:rustc-check-cfg=cfg(oaclis_local_tests)");
+    if root.join("src/state_tests.rs").is_file() { println!("cargo:rustc-cfg=oaclis_local_tests"); }
     let mut versions = Vec::new();
     let mut digest = Sha256::new();
-    for name in ["src", "ui", "tools", "scripts", "tests", "run.sh", "run.ps1", "build.rs"] {
+    for name in ["src", "ui", "tools", "scripts", "run.sh", "run.ps1", "build.rs"] {
         collect(&root.join(name), root, &mut versions, &mut digest);
     }
     for name in ["Cargo.toml", "Cargo.lock"] {

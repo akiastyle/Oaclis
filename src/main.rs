@@ -1,4 +1,4 @@
-// main.rs v1.2.162
+// main.rs v1.2.180
 use oaclis::{
     chat::Chat,
     compare,
@@ -16,6 +16,20 @@ use std::path::Path;
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args_os().skip(1).collect();
     match args.as_slice() {
+        [command] if command == "environment-request" => oaclis::environment::forward()?,
+        [command] if command == "prepare-awake" => oaclis::keep_awake::prepare(None)?,
+        [command, option, user] if command == "prepare-awake" && option == "--user" => oaclis::keep_awake::prepare(Some(user.to_str().ok_or("Utente non valido")?))?,
+        [command] if command == "keep-awake-hold" => oaclis::keep_awake::run()?,
+        [command, system, container, wsl] if command == "save-scenario" => {
+            let system = system.to_str().ok_or("Sistema non valido")?;
+            if !["yes", "no"].iter().any(|v| container == v) || !["yes", "no"].iter().any(|v| wsl == v) { return Err("Scenario non valido".into()); }
+            oaclis::bootstrap_settings::configure(system, container == "yes", wsl == "yes")?;
+        }
+        [command] if command == "prepare-service" => oaclis::service_setup::prepare()?,
+        [command] if command == "open-ui" => oaclis::open_ui::open(),
+        [command, path, uid, gid] if command == "prepare-path-root" => {
+            oaclis::path_access::create_privileged(Path::new(path),uid.to_str().ok_or("UID non valido")?.parse()?,gid.to_str().ok_or("GID non valido")?.parse()?)?;
+        }
         [command] if command == "state-request" => {
             let home=env::var_os("HOME").ok_or("HOME non definita")?;
             oaclis::state_transport::forward(Path::new(&home))?;
@@ -148,7 +162,7 @@ fn run() -> Result<(), Box<dyn Error>> {
             println!("{}", mapping.map(Path::new(path))?.display());
         }
         [] => println!(
-            "Oaclis\nsetup (ricerca master e configurazione ruolo)\nserve (UI locale sulla porta 23232)\nprepare CHAT_ID (dimensioni sorgenti dai percorsi salvati)\ninspect CHAT\ncompare-chat ORIGINE DESTINAZIONE\ncompare-file ORIGINE DESTINAZIONE\nmap-path CARTELLA_ORIGINE CARTELLA_DESTINAZIONE PERCORSO\ndevice-set CONFIG ID NOME ALIAS_SSH\ndevice-list CONFIG\nsend-file CONFIG ID ORIGINE DESTINAZIONE\nsync-file CONFIG ID LOCALE REMOTO CHECKPOINT\nsync-chat CONFIG ID LOCALE REMOTO CHECKPOINT\nrule-set REGOLE DEFINIZIONE_JSON\nrule-list REGOLE\nrule-run DISPOSITIVI REGOLE ID STATO"
+            "Oaclis\nprepare-awake [--user UTENTE]\nsave-scenario SISTEMA CONTAINER WSL\nprepare-service\nopen-ui\nsetup (ricerca master e configurazione ruolo)\nserve (UI locale sulla porta 23232)\nprepare CHAT_ID (dimensioni sorgenti dai percorsi salvati)\ninspect CHAT\ncompare-chat ORIGINE DESTINAZIONE\ncompare-file ORIGINE DESTINAZIONE\nmap-path CARTELLA_ORIGINE CARTELLA_DESTINAZIONE PERCORSO\ndevice-set CONFIG ID NOME ALIAS_SSH\ndevice-list CONFIG\nsend-file CONFIG ID ORIGINE DESTINAZIONE\nsync-file CONFIG ID LOCALE REMOTO CHECKPOINT\nsync-chat CONFIG ID LOCALE REMOTO CHECKPOINT\nrule-set REGOLE DEFINIZIONE_JSON\nrule-list REGOLE\nrule-run DISPOSITIVI REGOLE ID STATO"
         ),
         _ => return Err("Comando non valido; eseguire oaclis senza argomenti per l'elenco".into()),
     }

@@ -1,4 +1,4 @@
-// transfer_job.rs v2.26.1534
+// transfer_job.rs v2.26.1535
 //! Executes an authorized transfer; independent of routes and scheduling.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid,rules};
 use serde_json::{Value,json};
@@ -215,6 +215,7 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                             &device,manifest.as_ref().unwrap(),&app_inventory,selected,incoming,
                             v["operation"].as_str().unwrap_or("copy"),
                             &state.join(format!("environment-{}-{}",device.id,chat["id"].as_str().unwrap())),
+                            |target,path| crate::path_access::ensure(target,path,&job),
                             |progress| module_event(&job,module,progress),
                         )?);
                         module_event(&job,module,json!({"event":{"phase":"completed"}}));

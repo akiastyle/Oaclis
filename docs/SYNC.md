@@ -43,7 +43,7 @@ Non vengono cancellati automaticamente backup o originali. Il callback della sin
 
 ## Verifiche e limiti
 
-23 test Rust superati, formattazione e clippy senza avvisi. Prove LAN su dati temporanei nelle due WSL: invio, ritorno, contenuto cambiato con dimensione/mtime identici, backup indipendenti, conflitti senza perdita, checkpoint vincolato ai percorsi, chat aggiornate nelle due direzioni, cronologie divergenti e troncate. Verificato un fallimento rsync simulato, seguito da un nuovo tentativo riuscito. Esiti in [sync-test-results.json](sync-test-results.json), diagnostica [test_sync.py](../tools/test_sync.py). Nessuna modifica alla chat reale o a QR3D durante queste prove.
+23 test Rust superati, formattazione e clippy senza avvisi. Prove LAN su dati temporanei nelle due WSL: invio, ritorno, contenuto cambiato con dimensione/mtime identici, backup indipendenti, conflitti senza perdita, checkpoint vincolato ai percorsi, chat aggiornate nelle due direzioni, cronologie divergenti e troncate. Verificato un fallimento rsync simulato, seguito da un nuovo tentativo riuscito. Esiti in [sync-test-results.json](sync-test-results.json), diagnostica `tools/test_sync.py` (strumento solo locale). Nessuna modifica alla chat reale o a QR3D durante queste prove.
 
 Usare file a riposo e directory controllate dai dispositivi. Il lock coordina Oaclis, ma Codex/editor esterni non lo rispettano: non aggiornare chat aperte. Il controllo hash non costituisce un compare-and-swap del filesystem contro scrittori esterni. Gli aggiornamenti di chat paginate riguardano qui il rollout; invalidazione dei database/cache Codex e ripresa dopo un aggiornamento reale sono ancora da verificare.
 

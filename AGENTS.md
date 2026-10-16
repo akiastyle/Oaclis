@@ -16,7 +16,7 @@
 ## Backend Structure
 - Rust entrypoint: `src/main.rs`; HTTP adapter: `src/web.rs`. Catalog reads live in `src/catalog.rs`, initial/manual inventory detection in `src/initial_inventory.rs`, transfer execution in `src/transfer_job.rs`.
 - Keep chat handling, paths, transfers, rules, preparation, settings, and presentation in small independent modules.
-- Python helpers live in `tools/`; frontend assets live in `ui/`. `ui/app.js` owns shared state, API helpers and startup/polling; `ui/map.js` owns map/links/library, `ui/panels.js` owns contextual panels, and `ui/console.js` owns chat consoles. These classic deferred scripts share controller globals; keep their loading order in `ui/index.html` and their Rust asset routes consistent.
+- Operational application logic is Rust-only in `src/`; no Python helper is required. Project Python files remain read-only inventory evidence. Frontend assets live in `ui/`. `ui/app.js` owns shared state, API helpers and startup/polling; `ui/map.js` owns map/links/library, `ui/panels.js` owns contextual panels, and `ui/console.js` owns chat consoles. These classic deferred scripts share controller globals; keep their loading order in `ui/index.html` and their Rust asset routes consistent.
 - `ui/badge-motion.js` and `ui/badge-motion.css` handle animation only. They do not decide or execute transfers, calculate progress, or access storage.
 - Public HTTP access stays routed through the Rust adapter. Do not expose internal helpers, credentials, or configuration files directly.
 - Prefer existing reliable Linux tools for transport: SSH and rsync. Oaclis owns scheduling; do not add cron jobs or systemd scheduling as a side effect.
@@ -78,7 +78,7 @@
 - Calculate the displayed application version directly from maintained source headers at compilation, without a fixed baseline or offset.
 - X is the arithmetic mean of all included X values; Y is the mean of only positive Y values; Z is the mean of all included Z values, including zeros.
 - Round each mean to the nearest integer, with halves rounded up. Display vX.Y.Z in small absolute-positioned text at the bottom right of the page.
-- build.rs includes versioned source files in src, ui, tools, scripts, tests, and the root bootstrap/build scripts. File Versioning exclusions still apply; documents and binary assets are excluded.
+- build.rs includes versioned source files in src, ui, tools, scripts, tests, and the root bootstrap/build scripts. File Versioning exclusions still apply; documents and binary assets are excluded. Standalone local tests and diagnostic scripts ignored by Git are excluded from both the application version and source fingerprint, so installed devices match the development build.
 - This calculated display does not change Cargo package versions, individual file counters, or asset cache URLs.
 
 ## Presentation Deletion

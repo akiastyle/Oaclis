@@ -1,4 +1,4 @@
-// app.js v3.160.2920
+// app.js v3.160.2922
 "use strict";
 const $ = (s) => document.querySelector(s);
 const token = $('meta[name="oaclis-token"]').content;
@@ -201,6 +201,7 @@ $("#show-hidden").onclick = () => {
 };
 $("#close").onclick = closePanel;
 document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("#path-authorization[open]")) return;
   if (e.key === "Escape" && $("#terminal-choice")) { $("#terminal-choice .popover-close").click(); return; }
   if (e.key === "Escape" && document.activeElement?.closest(".chat-terminal")) { closeChatTerminal(document.activeElement.closest(".chat-terminal")); return; }
   if (e.key === "Escape" && $("#device-settings")) { closeDeviceSettings(); return; }
@@ -337,6 +338,7 @@ async function poll() {
   data.build = next.build;
   data.connections = next.connections;
   data.job = next.job;
+  renderPathAuthorization(next.job?.authorization);
   data.paused = next.paused;
   data.checks_paused = next.checks_paused;
   data.settings_paused = next.settings_paused;

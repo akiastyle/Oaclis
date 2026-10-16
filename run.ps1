@@ -1,4 +1,4 @@
-# run.ps1 v1.6.215
+# run.ps1 v1.6.217
 # Windows checks; an explicitly selected WSL prepares and installs Oaclis.
 param([switch]$Check, [string]$Distro, [switch]$PrepareAwake, [switch]$PrepareNetwork)
 $ErrorActionPreference = 'Stop'
@@ -99,7 +99,7 @@ function Open-OaclisWebApp {
 if ($PrepareAwake) { Initialize-OaclisWindowsAwake; return }
 Write-Host 'Sistema: Windows'
 if (-not $PrepareNetwork) {
-foreach ($name in @('git', 'wsl', 'docker', 'cargo', 'rustc', 'python', 'ssh', 'ssh-keygen', 'rsync')) {
+foreach ($name in @('git', 'wsl', 'docker', 'cargo', 'rustc', 'ssh', 'ssh-keygen', 'rsync')) {
     if (Get-Command $name -ErrorAction SilentlyContinue) { Write-Host "[OK] $name" }
     else { Write-Host "[Manca] $name" }
 }

@@ -1,4 +1,4 @@
-// panels.js v3.130.2305
+// panels.js v3.132.2355
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -585,4 +585,54 @@ async function updateDiscovery(next, first = false) {
     if (!document.querySelector('.context-popover:popover-open')) openDiscovery();
   }
   renderDiscovery();
+}
+
+let completedPathAuthorization = null;
+function renderPathAuthorization(auth) {
+  let panel = document.querySelector('#path-authorization');
+  if (!auth || auth.id === completedPathAuthorization) {
+    if (panel) { panel.querySelector('input').value = ''; panel.close(); panel.remove(); }
+    return;
+  }
+  if (panel?.dataset.request === auth.id) return;
+  if (panel) { panel.close(); panel.remove(); }
+  panel = document.createElement('dialog');
+  panel.id = 'path-authorization'; panel.className = 'context-popover path-authorization'; panel.dataset.request = auth.id;
+  panel.setAttribute('aria-labelledby', 'path-authorization-title');
+  panel.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Annulla autorizzazione"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>' +
+    '<h2 id="path-authorization-title">Prepara cartella</h2><p class="authorization-device"></p><p class="authorization-path"></p>' +
+    '<p>Creare il percorso e assegnare la sola cartella finale all’utente indicato. Le cartelle esistenti mantengono proprietario e permessi.</p>' +
+    '<form autocomplete="off"><label>Password sudo<input name="password" type="password" required autocomplete="off" maxlength="1024" aria-describedby="path-authorization-note"></label>' +
+    '<small id="path-authorization-note">Usata solo per questa operazione, senza salvarla.</small><p class="authorization-error" role="alert"></p>' +
+    '<button class="primary" type="submit">Autorizza e continua</button><button class="authorization-cancel" type="button">Annulla</button></form>';
+  panel.querySelector('.authorization-device').textContent = auth.device + (auth.user ? ' · ' + auth.user : '');
+  panel.querySelector('.authorization-path').textContent = auth.path;
+  let busy = false;
+  const submit = async cancel => {
+    if (busy) return;
+    busy = true;
+    const field = panel.querySelector('input');
+    let password = field.value; field.value = '';
+    panel.querySelector('.authorization-error').textContent = '';
+    panel.querySelectorAll('button,input').forEach(node => node.disabled = true);
+    panel.querySelector('[type="submit"]').textContent = cancel ? 'Annullamento…' : 'Autorizzazione…';
+    try {
+      const pending = api('path/authorize', cancel ? {id:auth.id,cancel:true} : {id:auth.id,password});
+      password = '';
+      await pending;
+      completedPathAuthorization = auth.id; panel.close(); panel.remove();
+    } catch (error) {
+      panel.querySelector('.authorization-error').textContent = error.message;
+    } finally {
+      password = ''; busy = false;
+      if (panel.isConnected) {
+        panel.querySelectorAll('button,input').forEach(node => node.disabled = false);
+        panel.querySelector('[type="submit"]').textContent = 'Autorizza e continua'; field.focus();
+      }
+    }
+  };
+  panel.querySelector('form').onsubmit = event => {event.preventDefault(); submit(false);};
+  panel.querySelector('.authorization-cancel').onclick = panel.querySelector('.popover-close').onclick = () => submit(true);
+  panel.addEventListener('cancel', event => {event.preventDefault(); submit(true);});
+  document.body.append(panel); panel.showModal(); panel.querySelector('input').focus();
 }

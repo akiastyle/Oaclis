@@ -1,11 +1,11 @@
-// environment.rs v1.13.517
+// environment.rs v1.17.584
 //! Chat environment analysis and destination preparation, independent of the UI.
 use crate::{
     devices::{self, Device},
     invalid,
     paths::validate_absolute,
     rules::{self, Operation, Rule},
-    ssh, staging,
+    staging,
     sync::{Direction, Outcome},
     transfer,
 };
@@ -16,11 +16,8 @@ use std::{
     fs,
     io::{self, Read, Write},
     path::{Path, PathBuf},
-    process::Command,
 };
 
-const ANALYZER: &str = include_str!("../tools/environment_analysis.py");
-const SETUP: &str = include_str!("../tools/environment_setup.py");
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -224,47 +221,31 @@ pub fn database(
 ) -> io::Result<Value> {
     crate::state_store::database(config,key,operation,value)
 }
-pub(crate) fn python(device: Option<&Device>, script: &str, args: &[&str]) -> io::Result<Value> {
-    let bytes = if let Some(device) = device {
-        ssh::run(
-            device,
-            &format!(
-                "python3 -c {} {}",
-                ssh::quote(script),
-                args.iter()
-                    .map(|a| ssh::quote(a))
-                    .collect::<Vec<_>>()
-                    .join(" ")
-            ),
-        )?
-    } else {
-        let output = Command::new("python3")
-            .args(["-c", script])
-            .args(args)
-            .output()?;
-        if !output.status.success() {
-            return Err(invalid(
-                String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-            ));
-        }
-        output.stdout
-    };
-    Ok(serde_json::from_slice(&bytes)?)
+pub(crate) fn request(device: Option<&Device>, operation: &str, value: Value) -> io::Result<Value> {
+    let request=json!({"kind":"environment","operation":operation,"value":value});
+    if let Some(device)=device {crate::state_transport::remote(device,&request)} else {native(&request)}
+}
+fn native(request:&Value)->io::Result<Value>{
+    let value=&request["value"];
+    match request["operation"].as_str(){
+        Some("identity")=>crate::environment_setup::identity(),
+        Some("verify")=>{let items:Vec<Fingerprint>=serde_json::from_value(value.clone()).map_err(io::Error::other)?;Ok(json!({"fresh":crate::environment_setup::fresh(&items)?}))},
+        Some("analyze")=>serde_json::to_value(crate::environment_analysis::analyze(Path::new(value["path"].as_str().ok_or_else(||invalid("Archivio richiesto"))?),value["chat_id"].as_str().ok_or_else(||invalid("Chat richiesta"))?)?).map_err(io::Error::other),
+        _=>Err(invalid("Operazione ambiente non valida")),
+    }
+}
+pub fn forward()->io::Result<()>{
+    let mut bytes=Vec::new();io::stdin().take(16*1024*1024+1).read_to_end(&mut bytes)?;
+    if bytes.len()>16*1024*1024{return Err(invalid("Richiesta troppo grande"));}
+    let request:Value=serde_json::from_slice(&bytes)?;
+    serde_json::to_writer(io::stdout(),&native(&request)?)?;Ok(())
 }
 pub fn analyze(device: Option<&Device>, path: &str, chat: &str) -> io::Result<Manifest> {
-    let manifest: Manifest = serde_json::from_value(python(device, ANALYZER, &[path, chat])?)
-        .map_err(io::Error::other)?;
-    manifest.validate()?;
-    Ok(manifest)
+    let manifest:Manifest=serde_json::from_value(request(device,"analyze",json!({"path":path,"chat_id":chat}))?).map_err(io::Error::other)?;
+    manifest.validate()?;Ok(manifest)
 }
 pub fn fresh(device: Option<&Device>, manifest: &Manifest) -> io::Result<bool> {
-    manifest.validate()?;
-    Ok(python(
-        device,
-        SETUP,
-        &["verify", &serde_json::to_string(&manifest.fingerprints)?],
-    )?["fresh"]
-        == true)
+    manifest.validate()?;Ok(request(device,"verify",serde_json::to_value(&manifest.fingerprints)?)?["fresh"]==true)
 }
 fn mapped(path: &Path, from: &Path, to: &Path) -> PathBuf {
     path.strip_prefix(from)
@@ -286,12 +267,13 @@ pub fn execute(
     incoming: bool,
     operation: &str,
     state: &Path,
+    mut prepare_path: impl FnMut(Option<&Device>, &Path) -> io::Result<()>,
     mut notify: impl FnMut(Value),
 ) -> io::Result<Value> {
     manifest.validate()?;
     rules::ensure_local(state)?;
     let target_device = if incoming { None } else { Some(device) };
-    let identity = python(target_device, SETUP, &["identity"])?;
+    let identity = request(target_device,"identity",Value::Null)?;
     let target_home = PathBuf::from(
         identity["home"]
             .as_str()
@@ -338,6 +320,7 @@ pub fn execute(
         }
     }
     for (source, destination) in directories {
+        if scopes.paths { prepare_path(target_device, &destination)?; }
         let (local, remote) = if incoming {
             (destination, source)
         } else {

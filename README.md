@@ -1,6 +1,6 @@
 # Oaclis
 
-Applicazione Rust per gestire copie e sincronizzazioni di chat Codex, cartelle e ambiente tramite SSH e rsync. Git distribuisce il programma; non trasporta le chat.
+Applicazione Rust per gestire copie e sincronizzazioni di chat Codex, cartelle e ambiente tramite SSH e rsync. Git distribuisce il programma; non trasporta le chat. Oaclis non richiede Python per la propria esecuzione: Python puo essere rilevato come requisito dei progetti sincronizzati.
 
 ## Combinazioni di sistema e ambiente
 
@@ -96,7 +96,7 @@ In modalità normale, gli script salvano lo scenario in `settings.json`:
 
 Il file registra anche disponibilità nel PATH e percorsi di Node.js, npm e Codex, senza credenziali. Per l’installazione npm viene usato il metodo indicato nella [documentazione ufficiale Codex](https://learn.chatgpt.com/docs/codex/cli). Il file registra versione del formato, sistema rilevato, sistema ospitante quando noto, ambiente nativo/WSL/container, kernel WSL, eventuale distribuzione WSL e porta di controllo **23232**. Conserva le altre impostazioni già presenti. `--check` e `-Check` restano senza scritture.
 
-`run.sh` salva dopo che Python 3 è disponibile. Da un container il sistema ospitante può essere sconosciuto: viene salvato come `null`, non indovinato. Se noto, dichiararlo prima dell'esecuzione, per esempio:
+`run.sh` salva dopo la compilazione e installazione, tramite il comando Rust `oaclis save-scenario`. Settings, predisposizione del servizio (`prepare-service`) e apertura della webapp (`open-ui`) sono gestiti direttamente dal binario Rust. Da un container il sistema ospitante può essere sconosciuto: viene salvato come `null`, non indovinato. Se noto, dichiararlo prima dell'esecuzione, per esempio:
 
 ```bash
 OACLIS_HOST_OS=windows bash run.sh
@@ -186,7 +186,7 @@ Sostituire `Ubuntu` con il nome mostrato dall’elenco se diverso. Per usare roo
 
 ```bash
 sudo apt update
-sudo apt install -y git curl ca-certificates build-essential python3 openssh-client openssh-server rsync tmux
+sudo apt install -y git curl ca-certificates build-essential openssh-client openssh-server rsync tmux
 ```
 
 Verificare Rust prima di installarlo:
@@ -245,6 +245,8 @@ Avviare SSH (passaggio 4 sotto), poi Oaclis **su entrambi i dispositivi**:
 Aprire `http://localhost:23232` su ciascuno e premere **+** nella toolbar: il pannello cerca gli altri Oaclis. Se il pannello rileva che la rete WSL NAT richiede preparazione, premere **Prepara collegamento** e accettare la richiesta amministrativa Windows su ciascun computer. Vengono configurati soltanto gli inoltri SSH `2222 → 22`, controllo `23232 → 23232` e le regole firewall Oaclis TCP/UDP limitate alla sottorete locale. Il ponte di discovery Windows parte con Oaclis e termina quando l’app non risponde più; non si aggiungono servizi o attività pianificate.
 
 Quando compare l’altro dispositivo, confrontare il codice mostrato nelle due UI e premere **Il codice coincide · Accetta su entrambe**. Una sola accettazione lascia il collegamento in attesa. Dopo la seconda, Oaclis autorizza le chiavi pubbliche dedicate, salva l’identità host SSH e aggiunge il dispositivo alla mappa; il controllo SSH della mappa verifica poi l’accesso operativo. Le chiavi private restano sul dispositivo che le ha generate. Non vengono copiati chat, file o credenziali durante l’abbinamento.
+
+Pairing e configurazione SSH sono gestiti dal binario Rust, usando OpenSSH per chiavi e firme. I file `pairing.json`, `pairing_ed25519`, `ssh_settings.json`, `ssh_config` e `known_hosts` mantengono formato e posizione; le installazioni esistenti non richiedono nuove chiavi o approvazioni.
 
 Gli annunci LAN sono firmati con Ed25519 e scadono; il codice confrontato lega le due identità. Nome e IP rilevati prima della conferma non sono da soli prova dell’identità. L’autorizzazione resta salvata dopo il riavvio. **Rifiuta** nasconde il dispositivo, recuperabile con **Mostra dispositivi rifiutati**. Eliminando un dispositivo abbinato dalla mappa si revoca la pubblica aggiunta da Oaclis, senza toccare altre chiavi o chat.
 
@@ -442,7 +444,7 @@ ssh-add ~/.ssh/id_ed25519_oaclis
 Verificare accesso non interattivo e strumenti remoti:
 
 ```bash
-ssh -o BatchMode=yes -o ConnectTimeout=5 -i ~/.ssh/id_ed25519_oaclis -p 2222 kim@192.168.1.167 'hostname; command -v rsync; command -v python3'
+ssh -o BatchMode=yes -o ConnectTimeout=5 -i ~/.ssh/id_ed25519_oaclis -p 2222 kim@192.168.1.167 'hostname; command -v rsync; command -v oaclis'
 ```
 
 Per usare root sostituire `kim` con `root` e autorizzare la pubblica in `/root/.ssh/authorized_keys` dalla console root della destinazione. Non basta essere root sull’origine. Per operazioni in entrambe le direzioni, ripetere questi passaggi invertendo origine e destinazione: ciascuna macchina mantiene la propria chiave privata. Se anche l’altra macchina è WSL NAT, configurare anche il suo inoltro SSH.
@@ -573,12 +575,20 @@ Il confronto risiede in `src/link_flow.rs`; `src/automation.rs` lo pianifica;
 
 - `src/web.rs`: route HTTP, autenticazione locale e asset dell'interfaccia.
 - `src/catalog.rs`: lettura dei cataloghi locali e remoti.
+- `src/pairing.rs`: identita, annunci firmati e autorizzazioni reciproche in Rust.
+- `src/ssh_settings.rs`: configurazione degli alias SSH e conservazione degli host esistenti.
+- `src/terminal.rs`: console Codex locale e remota in Rust, con sessioni tmux persistenti.
 - `src/initial_inventory.rs`: rilevamento iniziale e refresh manuale.
+- `src/environment_analysis.rs`: lettura delle evidenze e selezione isolata dei percorsi.
+- `src/dependency_inventory.rs`: inventario da sorgenti e metadati delle dipendenze installate.
+- `src/environment_setup.rs`: identita del destinatario e verifica delle impronte dei file.
 - `src/transfer_job.rs`: esecuzione dei trasferimenti autorizzati.
 - `ui/app.js`: stato condiviso, API, impostazioni generali, avvio e polling.
 - `ui/map.js`: dispositivi, collegamenti, badge e lista delle chat.
 - `ui/panels.js`: pannelli contestuali, personalizzazione e dettagli dei moduli.
 - `ui/console.js`: scelta del dispositivo e console delle chat.
+
+La console remota usa il ricevitore Rust sul canale SSH gia autorizzato. Chiudere il pannello non termina Codex o la sessione tmux; riaprire la stessa chat sullo stesso dispositivo riutilizza la sessione. Non vengono eseguiti helper Python per la console.
 
 I moduli frontend usano gli script differiti già previsti dall'applicazione, senza
 bundler o nuove dipendenze. Le funzioni condividono lo stato del controller:
@@ -587,7 +597,7 @@ registri gli eventi e avvii il polling. Il caricamento è dichiarato in `index.h
 
 ### Comandi sulla card del dispositivo
 
-Accanto alla matita, Riavvia riavvia soltanto Oaclis e chiede conferma. Attendere la conclusione dei trasferimenti e delle analisi prima di riavviare. I comandi remoti passano dall’accesso SSH già configurato.
+Accanto alla matita, Riavvia riavvia soltanto Oaclis e chiede conferma. Attendere la conclusione dei trasferimenti e delle analisi prima di riavviare. I comandi remoti passano dall’accesso SSH già configurato e dal ricevitore Rust, senza script Python.
 
 Sempre attivo impedisce lo standby mentre Oaclis è aperto e conserva la scelta al riavvio: su Linux usa `systemd-inhibit`, su macOS `caffeinate`, in WSL una richiesta di alimentazione Windows. Non installa servizi. Nei container non può bloccare lo standby dell’host; se il sistema non concede il blocco mostra l’errore e non lo dichiara attivo. La sospensione esplicita dell’utente resta dipendente dalle regole del sistema operativo.
 
@@ -600,7 +610,7 @@ Su Linux, l’utente che esegue Oaclis deve essere autorizzato a inibire lo stan
 
 ### Preparare Sempre attivo
 
-La preparazione non attiva il blocco: dopo il setup si usa il pulsante Sempre attivo della card Oaclis. Non occorre reinstallare l'app.
+La preparazione non attiva il blocco: dopo il setup si usa il pulsante Sempre attivo della card Oaclis. Il comando `oaclis prepare-awake` e la gestione del blocco sono in Rust; `run.sh --prepare-awake` richiama il binario gia installato. Non occorre reinstallare l'app.
 
 Su Linux, dal proprio utente nella repository:
 
@@ -608,7 +618,7 @@ Su Linux, dal proprio utente nella repository:
 bash run.sh --prepare-awake
 ```
 
-La prima volta sudo puo chiedere la password: viene installata soltanto una regola polkit per l'utente corrente e le due azioni logind di inibizione sleep/idle. Oaclis continua a girare senza root. Non vengono modificati i timeout di sospensione, creati servizi o timer.
+La prima volta sudo puo chiedere la password: viene installata soltanto una regola polkit per l'utente corrente e le due azioni logind di inibizione sleep/idle. Se si prepara il supporto da una shell root, indicare esplicitamente l'utente con `bash run.sh --prepare-awake --user kimrusso`, sostituendo il nome corretto. Oaclis continua a girare senza root. Non vengono modificati i timeout di sospensione, creati servizi o timer.
 
 Su Windows con WSL, dalla repository in PowerShell:
 
@@ -628,3 +638,10 @@ L'importazione iniziale legge il precedente `appearance.sqlite` senza modificarl
 Catalogo, confronto delle chat e scambio delle impostazioni fra device sono nativi Rust. SSH conserva alias, identita' e autorizzazioni esistenti; il comando interno `state-request` inoltra i messaggi all'app gia' avviata tramite un socket locale accessibile allo stesso utente. Non viene avviato un worker Python. Gli script Python di analisi, installazione e gestione del sistema restano indipendenti da questo flusso.
 
 Ogni file viene sostituito atomicamente. Un salvataggio che coinvolge piu' tabelle usa un registro temporaneo `.state-commit.json`, recuperato all'avvio e rimosso a completamento, per evitare modifiche parziali dopo un'interruzione. `shared-settings.json`, i file dei device e le posizioni conservano il loro ruolo e formato esistenti.
+
+
+## File di sviluppo locali
+
+I file di test separati (`tests/`, `src/state_tests.rs`, `tools/test_*`, `scripts/test_*`) e gli strumenti diagnostici `tools/path_analysis.py` e `tools/probe_codex.py` restano soltanto sul computer di sviluppo e sono esclusi da Git. Non servono per compilare o installare Oaclis. I test integrati nei sorgenti Rust restano disponibili con `cargo test`, ma non vengono inclusi nelle build release. La versione applicativa e l’impronta della build escludono i test locali e i due strumenti diagnostici, per dare lo stesso risultato sui client.
+
+L'analisi dei percorsi e l'inventario sono implementati in Rust. Il codice Python dei progetti viene analizzato come testo tramite un parser, senza importarlo o eseguirlo; le versioni delle librerie si ricavano dai metadati installati. I programmi riconosciuti possono essere interrogati con il proprio comando di versione. La selezione dei percorsi usa Codex effimero, con strumenti disabilitati e risultati limitati alle evidenze osservate. Il trasferimento delle App conserva il comportamento corrente: salva la definizione sul destinatario; non avvia automaticamente i vecchi installer.

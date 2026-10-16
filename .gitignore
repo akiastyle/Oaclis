@@ -4,3 +4,21 @@ __pycache__/
 /.impeccable/
 /docs/*results.json
 /docs/chat-copy-*.json
+
+# Test e diagnostica conservati solo sul computer di sviluppo
+/tests/
+/src/state_tests.rs
+/tools/test_*
+/scripts/test_*
+/tools/path_analysis.py
+/tools/probe_codex.py
+
+# Artefatti locali dei controlli
+*.py[cod]
+/.pytest_cache/
+/.coverage
+/htmlcov/
+/coverage/
+/playwright-report/
+/test-results/
+/*.log

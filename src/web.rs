@@ -1,4 +1,4 @@
-// web.rs v2.25.1596
+// web.rs v2.26.1628
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use std::{
     fs,
     io::{self, Read},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::{Arc, Mutex},
     thread,
 };
@@ -103,18 +103,6 @@ fn body(request: &mut Request) -> io::Result<Value> {
     }
     serde_json::from_slice(&data).map_err(|error| invalid(error.to_string()))
 }
-fn ssh_settings(home: &Path, config: &Path, operation: &str, value: &Value) -> io::Result<Value> {
-    use std::io::Write;
-    use std::process::{Command, Stdio};
-    let mut child = Command::new("python3").args(["-c", include_str!("../tools/ssh_settings.py")])
-        .arg(home).arg(config).arg(operation).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
-    child.stdin.take().unwrap().write_all(&serde_json::to_vec(value)?)?;
-    let output = child.wait_with_output()?;
-    let result: Value = serde_json::from_slice(&output.stdout).map_err(io::Error::other)?;
-    if !output.status.success() { return Err(invalid(result["error"].as_str().unwrap_or("Configurazione SSH non riuscita"))); }
-    Ok(result)
-}
-
 fn serve_requests(server: &Server, handler: impl Fn(Request) + Sync) {
     thread::scope(|scope| {
         for _ in 0..4 {
@@ -166,7 +154,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     let connections = Arc::new(Mutex::new(json!({})));
     let analyses = Arc::new(Mutex::new(std::collections::HashSet::<String>::new()));
     let runtime=Arc::new(Mutex::new(crate::device_runtime::Runtime::new(&config)));
-    crate::state_transport::start(config.clone(),codex.clone(),runtime.clone())?;
+    crate::state_transport::start(config.clone(),codex.clone(),runtime.clone(),job.clone(),analyses.clone(),role.clone())?;
     if !settings_paused { crate::shared_settings::start(home.clone()); }
     if !checks_paused {
         crate::initial_inventory::start(codex.clone(), config.clone(), analyses.clone());
@@ -266,22 +254,16 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     crate::terminal::request(device.as_ref(), &v)
                 }
                 (&Method::Get, "/api/state") => Ok(
-                    json!({"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":ssh_settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
+                    json!({"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":crate::ssh_settings::settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
                 ),
                 (&Method::Post, "/api/device/control") => {
                     let value = body(&mut request)?;
                     let id = value["device_id"].as_str().ok_or_else(||invalid("Dispositivo richiesto"))?;
                     let action = value["action"].as_str().ok_or_else(||invalid("Comando richiesto"))?;
                     if id != "master" { return crate::device_runtime::remote(&config,id,action); }
-                    if matches!(action, "restart" | "update") && (job.lock().unwrap()["status"] == "running" || !analyses.lock().unwrap().is_empty()) {
-                        return Err(invalid("Attendi il completamento delle operazioni in corso prima di riavviare"));
-                    }
-                    if action == "update" {
-                        if role != "client" { return Err(invalid("Aggiornare il master dalla sua installazione locale")); }
-                        return runtime.lock().unwrap().start_update(value["revision"].as_str().unwrap_or(""), job.clone());
-                    }
-                    runtime.lock().unwrap().action(action)
+                    crate::device_runtime::control(&runtime,&job,&analyses,&role,action,value["revision"].as_str().unwrap_or(""))
                 }
+                (&Method::Post, "/api/path/authorize") => crate::path_access::authorize(body(&mut request)?),
                 (&Method::Get, "/api/status") => {
                     let snapshot = environment::database(&config,"","status-read",None)?;
                     Ok(json!({"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
@@ -349,7 +331,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         let mut rs = rules::load(config.join("rules.json"))?;
                         rs.retain(|r| r.device_id != id);
                         ds.retain(|d| d.id != id);
-                        ssh_settings(&home, &config, "delete", &json!({"id":id,"ssh_alias":device.ssh_alias}))?;
+                        crate::ssh_settings::settings(&home, &config, "delete", &json!({"id":id,"ssh_alias":device.ssh_alias}))?;
                         rules::save(config.join("rules.json"), &rs)?;
                         devices::save(config.join("devices.json"), &ds)?;
                         environment::database(&config, id, "device-forget", None)
@@ -464,7 +446,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     let mut ds = devices::load(config.join("devices.json"))?;
                     devices::upsert(&mut ds, d.clone())?;
                     if let Some(settings) = settings {
-                        ssh_settings(&home, &config, "save", &json!({"id":d.id,"ssh_alias":d.ssh_alias,"settings":settings}))?;
+                        crate::ssh_settings::settings(&home, &config, "save", &json!({"id":d.id,"ssh_alias":d.ssh_alias,"settings":settings}))?;
                     }
                     devices::save(config.join("devices.json"), &ds)?;
                     if let Some(value) = appearance {

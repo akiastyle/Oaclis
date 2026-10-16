@@ -1,4 +1,4 @@
-// peers.rs v1.15.409
+// peers.rs v1.15.420
 //! Signed LAN discovery; pairing requires an explicit approval on both devices.
 use crate::invalid;
 use serde_json::{Value, json};
@@ -21,16 +21,9 @@ pub(crate) fn local_address(ip: std::net::IpAddr) -> bool {
 }
 
 pub(crate) fn helper(home: &Path, operation: &str, value: &Value) -> io::Result<Value> {
-    let mut child = Command::new("python3").args(["-c", include_str!("../tools/pairing.py")])
-        .arg(home).arg(home.join(".config/oaclis")).arg(operation)
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
-    child.stdin.take().unwrap().write_all(&serde_json::to_vec(&json!({"value":value,"ssh_source":include_str!("../tools/ssh_settings.py")}))?)?;
-    let output = child.wait_with_output()?;
-    let result: Value = serde_json::from_slice(&output.stdout).map_err(io::Error::other)?;
-    if !output.status.success() { return Err(invalid(result["error"].as_str().unwrap_or("Collegamento non riuscito"))); }
-    Ok(result)
+    crate::pairing::request(home,operation,value)
 }
-fn powershell(script: &str) -> Command {
+pub(crate) fn powershell(script: &str) -> Command {
     // SSH sessions do not inherit the Windows PATH from an interactive WSL shell.
     let executable = Path::new("/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe");
     let mut command = Command::new(if executable.exists() { executable.as_os_str() } else { std::ffi::OsStr::new("powershell.exe") });

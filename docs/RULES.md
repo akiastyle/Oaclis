@@ -50,7 +50,7 @@ I conflitti non impediscono l'aggiornamento degli altri file indipendenti, ma im
 
 ## Verifiche e limiti
 
-23 test Rust superati, formattazione e clippy senza avvisi. La diagnostica [test_rules.py](../tools/test_rules.py) ha verificato sulle due WSL: regole salvate senza esecuzione, cartelle annidate, nomi con metacaratteri/newline, inclusioni/esclusioni, nuovi file nelle due direzioni, conflitti preservati, modalità monodirezionale e copia, modifica delle regole mantenendo le altre e cancellazioni non propagate. Risultati in [rules-test-results.json](rules-test-results.json).
+23 test Rust superati, formattazione e clippy senza avvisi. La diagnostica `tools/test_rules.py` (strumento solo locale) ha verificato sulle due WSL: regole salvate senza esecuzione, cartelle annidate, nomi con metacaratteri/newline, inclusioni/esclusioni, nuovi file nelle due direzioni, conflitti preservati, modalità monodirezionale e copia, modifica delle regole mantenendo le altre e cancellazioni non propagate. Risultati in [rules-test-results.json](rules-test-results.json).
 
 Usare progetti a riposo e una sola operazione per coppia. Le copie sono sequenziali e possono richiedere tempo su molti file; non c'è ancora batching o parallelismo. L'enumerazione remota legge i nomi anche nelle sottocartelle escluse, senza trasferirne il contenuto. Permangono i limiti contro scrittori esterni e disconnessioni descritti in [SYNC.md](SYNC.md).
 

@@ -17,7 +17,7 @@ cargo build --locked
 python3 tools/test_ssh.py oaclis-wsl-2
 ```
 
-[test_ssh.py](../tools/test_ssh.py) invia la CLI Rust compilata e dati dimostrativi in una directory remota creata con mktemp. Verifica:
+`tools/test_ssh.py` (strumento solo locale) invia la CLI Rust compilata e dati dimostrativi in una directory remota creata con mktemp. Verifica:
 
 - Copie chat inizialmente identiche.
 - Rilevamento di nuovi record come SourceAhead.

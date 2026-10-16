@@ -10,5 +10,10 @@ serde_json = { version = "1", features = ["arbitrary_precision"] }
 sha2 = "0.11"
 tiny_http = "0.12"
 
+regex = "1"
+toml = "0.8"
+rustpython-parser = { version = "0.4", default-features = false, features = ["num-bigint"] }
+rustpython-ast = { version = "0.4", default-features = false, features = ["num-bigint", "visitor"] }
+
 [build-dependencies]
 sha2 = "0.11"
