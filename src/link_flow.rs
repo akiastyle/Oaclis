@@ -1,4 +1,4 @@
-// link_flow.rs v1.19.312
+// link_flow.rs v1.21.386
 //! Link lifecycle: compare immutable proofs, persist intent, never transfer from a poll.
 use crate::{devices::Device, environment, invalid, catalog};
 use serde_json::{Value, json};
@@ -71,6 +71,23 @@ fn module_signature(chat: Option<&Value>, module: &str) -> Option<Value> {
     Some(json!(items))
 }
 
+fn remember_delivery(config: &Path, link: &Value, flow: &mut Value) -> io::Result<()> {
+    let transfers = environment::database(config,"","transfer-list",None)?;
+    let storage = key(link)?;
+    let Some(record) = transfers.as_object().and_then(|all|all.values().find(|record|
+        record["link_key"]==storage && record["generation"]==flow["generation"] && record["status"]=="completed")) else {return Ok(());};
+    let side = if record["source_device_id"]==link["source"] {"source"}
+        else if record["source_device_id"]==link["target"] {"target"} else {return Ok(());};
+    let other = if side=="source" {"target"} else {"source"};
+    let modules = if record["modules"].is_object() {record["modules"].clone()} else {flow["modules"].clone()};
+    for name in ["paths","apps"] {
+        if record["scopes"][name]!=true || record["module_progress"][name]["progress"].as_f64()!=Some(1.0)
+            || record["results"][name].is_null() || !modules[name][side].is_array() {continue;}
+        flow["delivered"][name]=json!({"source":side,"signature":modules[name][side],"target_before":modules[name][other]});
+    }
+    Ok(())
+}
+
 fn match_modules(link: &Value, flow: &mut Value, source: Option<&Value>, target: Option<&Value>, chat_phase: &str, newer: Option<&str>) {
     let winner=newer.or_else(||flow["newer"].as_str()).unwrap_or("source").to_owned();
     let selected=if winner=="target" {target} else {source};
@@ -82,7 +99,12 @@ fn match_modules(link: &Value, flow: &mut Value, source: Option<&Value>, target:
         let winner_ready=if winner=="target" {b.is_some()} else {a.is_some()};
         let available=if name=="chat" {selected.is_some()} else {winner_ready};
         let empty=if winner=="target" {b.as_ref()} else {a.as_ref()}.is_some_and(|v|v==&json!([]));
-        let different=enabled && !empty && a!=b;
+        let receipt=&flow["delivered"][name];
+        let (selected_signature,other_signature)=if winner=="target" {(&b,&a)} else {(&a,&b)};
+        let delivered=name!="chat" && receipt["source"]==winner
+            && selected_signature.as_ref().is_some_and(|signature|signature==&receipt["signature"])
+            && other_signature.as_ref().is_some_and(|signature|signature==&receipt["target_before"] || signature==&receipt["signature"]);
+        let different=enabled && !empty && a!=b && !delivered;
         if enabled && !available {waiting=true;}
         changed|=different;
         modules[name]=json!({"enabled":enabled,"changed":different,"ready":available,"source":a,"target":b});
@@ -104,6 +126,7 @@ pub(crate) fn inspect(config: &Path, codex: &Path, device: &Device, link: &Value
     let stamp = |chat: &Option<Value>| chat.as_ref().map(|chat|json!([chat["path"],chat["bytes"],chat["modified_ns"]])).unwrap_or(Value::Null);
     let signatures = json!({"source":stamp(&source),"target":stamp(&target)});
     let mut flow = link["flow"].clone();
+    if !flow["delivered"].is_object() {remember_delivery(config,link,&mut flow)?;}
     if flow["signatures"] == signatures && flow["comparison"].is_string() {
         let phase=flow["comparison"].as_str().unwrap().to_owned();
         match_modules(link,&mut flow,source.as_ref(),target.as_ref(),&phase,None);
@@ -154,6 +177,7 @@ pub(crate) fn finish(config: &Path, key: &str, generation: &Value, success: bool
         let mut flow=link["flow"].clone();
         flow["requested"]=json!(false);
         flow["phase"]=json!(if success {if link["operation"]=="sync" {"aligned"} else {"transferred"}} else {"failed"});
+        if success {remember_delivery(config,link,&mut flow)?;}
         if success {flow["initialized"]=json!(true);flow["common"]=flow["proofs"][flow["newer"].as_str().unwrap_or("source")]["sha256"].clone();flow["signatures"]=Value::Null;}
         flow["error"]=if success {Value::Null} else {json!(error)};
         save(config,link,flow)?;
@@ -223,6 +247,54 @@ mod tests {
         assert_eq!(missing["phase"],"waiting_inventory");
         assert!(!should_transfer(&link,&missing,true));
     }
+    #[test]
+    fn completed_delivery_survives_matching_without_claiming_apps_are_installed() {
+        let root=std::env::temp_dir().join(format!("oaclis-delivery-{}-{}",std::process::id(),SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&root).unwrap();
+        let source=json!({"sync_data":{
+            "paths":{"status":"ready","items":[{"path":"/var/www/project","sha256":"files-v1"}]},
+            "apps":{"status":"ready","requirements":[{"kind":"command","name":"node","version":"24"}]}}});
+        let target=json!({"sync_data":{"paths":{"status":"ready","items":[]},"apps":{"status":"ready","requirements":[]}}});
+        let mut flow=json!({"generation":"one","proofs":{"source":{"sha256":"same-chat"},"target":{"sha256":"same-chat"}},"newer":"source"});
+        let mut link=json!({"entry":{"id":"chat","name":"Chat"},"source":"master","target":"peer","operation":"sync","scopes":{"chat":true,"paths":true,"apps":true}});
+        match_modules(&link,&mut flow,Some(&source),Some(&target),"aligned",None);
+        assert_eq!(flow["phase"],"ready");
+        link["flow"]=flow.clone();
+        let storage=key(&link).unwrap();
+        let mut record=json!({"link_key":storage,"generation":"one","source_device_id":"master","status":"completed",
+            "scopes":{"paths":true,"apps":true},"module_progress":{"paths":{"progress":1.0},"apps":{"progress":1.0}},"results":{"paths":[],"apps":[]}});
+        // Recover the already completed transfer written by the previous build.
+        environment::database(&root,"master:chat","transfer-save",Some(&record)).unwrap();
+        remember_delivery(&root,&link,&mut flow).unwrap();
+        match_modules(&link,&mut flow,Some(&source),Some(&target),"aligned",None);
+        assert_eq!(flow["phase"],"aligned");
+        assert_eq!(flow["modules"]["paths"]["changed"],false);
+        assert_eq!(flow["modules"]["apps"]["target"],json!([]));
+        assert!(flow["delivered"]["apps"].get("installed").is_none());
+        let mut changed=source.clone();changed["sync_data"]["paths"]["items"][0]["sha256"]=json!("files-v2");
+        match_modules(&link,&mut flow,Some(&changed),Some(&target),"aligned",None);
+        assert_eq!(flow["phase"],"ready");
+        assert_eq!(flow["modules"]["paths"]["changed"],true);
+        let mut edited=target.clone();edited["sync_data"]["paths"]["items"]=json!([{"path":"/var/www/project","sha256":"remote-edit"}]);
+        match_modules(&link,&mut flow,Some(&source),Some(&edited),"aligned",None);
+        assert_eq!(flow["modules"]["paths"]["changed"],true);
+        let mut stale=link["flow"].clone();stale["generation"]=json!("new-link");
+        remember_delivery(&root,&link,&mut stale).unwrap();assert!(stale["delivered"].is_null());
+        record["status"]=json!("failed");environment::database(&root,"master:chat","transfer-save",Some(&record)).unwrap();
+        let mut failed=link["flow"].clone();remember_delivery(&root,&link,&mut failed).unwrap();assert!(failed["delivered"].is_null());
+        // Future transfers bind their receipt to the captured input, not a later inventory.
+        record["status"]=json!("completed");record["modules"]=link["flow"]["modules"].clone();
+        environment::database(&root,"master:chat","transfer-save",Some(&record)).unwrap();
+        let mut fresh=flow.clone();fresh["delivered"]=Value::Null;
+        remember_delivery(&root,&link,&mut fresh).unwrap();
+        match_modules(&link,&mut fresh,Some(&changed),Some(&target),"aligned",None);
+        assert_eq!(fresh["modules"]["paths"]["changed"],true);
+        link["flow"]=fresh.clone();environment::database(&root,&storage,"links-save",Some(&link)).unwrap();
+        let saved=environment::database(&root,"","links-get",None).unwrap();
+        assert_eq!(saved[0]["flow"]["delivered"],fresh["delivered"]);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
     #[test]
     fn every_transfer_requires_play_and_a_difference() {
         let link=json!({"operation":"sync"});

@@ -1,4 +1,4 @@
-// transfer_job.rs v2.28.1600
+// transfer_job.rs v2.28.1601
 //! Executes an authorized transfer; independent of routes and scheduling.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid,rules};
 use serde_json::{Value,json};
@@ -177,6 +177,7 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
         "title":chat.as_ref().map(|c|c["name"].clone()).unwrap_or_else(||json!(rule.as_ref().unwrap().name)),
         "source":if incoming {device.name.as_str()}else{"Questo dispositivo"},
         "destination":if incoming {"Questo dispositivo"}else{device.name.as_str()}});
+    pending["modules"] = v["modules"].clone();
     pending["module_progress"] = json!({
         "chat":{"changed":scopes.chat,"progress":0.0},
         "paths":{"changed":scopes.paths && manifest.as_ref().is_some_and(|m|!m.paths.is_empty()),"progress":0.0},
