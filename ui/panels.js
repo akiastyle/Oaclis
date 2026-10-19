@@ -1,4 +1,4 @@
-// panels.js v3.133.2395
+// panels.js v3.133.2397
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -568,7 +568,7 @@ function renderDiscovery() {
       (peer.connected ? '<p>Collegamento autorizzato</p>' : '<p>Confronta questo codice sui due dispositivi.</p><strong class="pairing-code">' + esc(peer.code) + '</strong>' +
         (peer.accepted ? '<p>' + (peer.remote_accepted ? 'Autorizzato. Preparazione SSH in corso.' : 'In attesa della conferma sull’altro dispositivo.') + '</p>' : '<button type="button" class="primary discovery-accept" data-peer="' + esc(peer.id) + '">Il codice coincide · Accetta</button>') +
         (peer.ssh_ready === false ? '<small>SSH da attivare sul dispositivo.</small>' : '') +
-        '<button type="button" class="discovery-reject" data-peer="' + esc(peer.id) + '">Rifiuta</button>') + '</section>').join('') : '<p>Ricerca di Oaclis sulla porta 23232…</p>');
+        '<button type="button" class="discovery-reject" data-peer="' + esc(peer.id) + '">Rifiuta</button>') + '</section>').join('') : '<p>Ricerca dispositivi…</p>');
   if (content.dataset.view === html) return;
   content.innerHTML = html; content.dataset.view = html;
   content.querySelector('.discovery-network')?.addEventListener('click', guard(async () => {
