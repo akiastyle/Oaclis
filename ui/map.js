@@ -1,4 +1,4 @@
-// map.js v3.116.2553
+// map.js v3.116.2564
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -711,13 +711,10 @@ function renderMobileLinks() {
     let path = [...svg.children].find(p => p.dataset.id === device.id);
     if (!path) { path = document.createElementNS(svg.namespaceURI, 'path'); path.dataset.id = device.id; svg.append(path); }
     const from = masterNode.getBoundingClientRect(), to = node.getBoundingClientRect();
-    const [a,b] = [[from,to],[to,from]].map(([r,t]) => {
-      const x = r.left + r.width / 2, y = r.top + r.height / 2;
-      const dx = t.left + t.width / 2 - x, dy = t.top + t.height / 2 - y;
-      const scale = Math.min(r.width / 2 / (Math.abs(dx) || 1e-9), r.height / 2 / (Math.abs(dy) || 1e-9)) + 2 / (Math.hypot(dx,dy) || 1);
-      return {x:x + dx * scale - base.left, y:y + dy * scale - base.top};
-    });
-    path.setAttribute('d', `M${a.x} ${a.y}L${b.x} ${b.y}`);
+    const a = {x:from.left - base.left - 2, y:from.top + from.height / 2 - base.top};
+    const b = {x:to.left - base.left - 2, y:to.top + to.height / 2 - base.top};
+    const reach = Math.max(45, Math.min(150, Math.hypot(b.x - a.x, b.y - a.y) * 0.35));
+    path.setAttribute('d', `M${a.x} ${a.y}C${a.x - reach} ${a.y} ${b.x - reach} ${b.y} ${b.x} ${b.y}`);
     path.dataset.active = String(device.active === true);
   }
   for (const path of [...svg.children]) if (!keep.has(path.dataset.id)) path.remove();
