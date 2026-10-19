@@ -1,4 +1,4 @@
-// shared_settings.rs v1.12.500
+// shared_settings.rs v1.12.511
 //! Native settings replication over existing, mutually approved SSH connections.
 use crate::{
     invalid, shared_records as records,
@@ -188,7 +188,7 @@ pub(crate) fn exchange(config: &Path, packet: Option<&Value>) -> io::Result<Valu
     state_store::change_with_files(config, |state, files| {
         let devices: Vec<Value> =
             serde_json::from_value(read_json(&config.join("devices.json"), json!([]))?)?;
-        let positions = positions(config)?;
+        let saved_positions = positions(config)?;
         let link_positions = read_positions(config, "link-positions.json")?;
 
         let mut mapping = state_store::mapping(config, &state.shared)?;
@@ -203,7 +203,7 @@ pub(crate) fn exchange(config: &Path, packet: Option<&Value>) -> io::Result<Valu
             state,
             &mapping,
             &devices,
-            &positions,
+            &saved_positions,
             &link_positions,
             &local_name,
         );
@@ -241,8 +241,13 @@ pub(crate) fn exchange(config: &Path, packet: Option<&Value>) -> io::Result<Valu
             }
         }
         records::validate(&values)?;
-        let (devices, positions, link_positions) =
+        let (devices, mut positions, link_positions) =
             records::apply(state, &values, &mut mapping, &devices, &id)?;
+        for (key, point) in saved_positions.as_object().into_iter().flatten() {
+            if key.strip_prefix("mobile-").is_some_and(|id| id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit())) {
+                positions[key] = point.clone();
+            }
+        }
         state.shared = json!({"records":values,"mapping":mapping,"baseline":{}});
         state.shared["baseline"] = records::snapshot(
             state,

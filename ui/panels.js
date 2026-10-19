@@ -1,4 +1,4 @@
-// panels.js v3.136.2484
+// panels.js v3.137.2504
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -688,7 +688,8 @@ function renderMobileApproval(panel, device) {
     content.querySelectorAll('button').forEach(b => b.disabled = true);
     content.querySelector('.mobile-status').textContent = accept ? 'Autorizzazione…' : 'Rifiuto…';
     try {
-      await api('mobile/approve', { id: device.id, accept });
+      const result = await api('mobile/approve', { id: device.id, accept });
+      if (Array.isArray(result.devices)) { data.mobile_devices = result.devices; renderMap(true); }
       if (panel.isConnected) content.innerHTML = '<h3>' + esc(device.name) + '</h3><p>' + (accept ? 'Telefono autorizzato.' : 'Richiesta rifiutata.') + '</p>';
     } catch (_) {
       if (panel.isConnected) {
@@ -738,4 +739,21 @@ async function openMobileInvite() {
   } catch (_) {
     if (panel.isConnected) content.innerHTML = '<p>Collegamento non disponibile. Chiudi e riprova.</p>';
   }
+}
+
+
+async function removeMobile(device) {
+  if (removingPresentation || !window.confirm('Eliminare “' + device.name + '”?\n\nL’accesso del telefono verrà revocato e sarà rimosso dalla mappa. Per accedere nuovamente servirà un nuovo abbinamento.')) return;
+  removingPresentation = true;
+  const previous = data.mobile_devices;
+  data.mobile_devices = (previous || []).filter(d => d.id !== device.id);
+  renderMap();
+  try {
+    const result = await api('mobile/delete', { id: device.id });
+    data.mobile_devices = result.devices;
+    delete positions[device.id]; savePositions();
+  } catch (_) {
+    data.mobile_devices = previous;
+    notice('Eliminazione non riuscita. Riprova.');
+  } finally { removingPresentation = false; renderMap(); }
 }

@@ -1,4 +1,4 @@
-// web.rs v2.26.1642
+// web.rs v2.26.1653
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -161,6 +161,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     }
     crate::automation::start(codex.clone(), config.clone(), job.clone(), connections.clone(), peers.clone(), !paused);
     println!("Oaclis UI: http://localhost:23232");
+    let mobile = crate::mobile::start(config.clone(), role == "master");
     let configuration_edits = Mutex::new(());
     serve_requests(&server, |mut request| {
         if request.method() == &Method::Get && request.url() == "/peer/hello" {
@@ -251,7 +252,11 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 }
                 (&Method::Post, "/api/mobile/approve") => {
                     if role != "master" { return Err(invalid("Conferma disponibile dal master")); }
-                    crate::mobile::approve(&config, &body(&mut request)?)
+                    crate::mobile::approve(&config, &body(&mut request)?, &mobile)
+                }
+                (&Method::Post, "/api/mobile/delete") => {
+                    if role != "master" { return Err(invalid("Comando disponibile dal master")); }
+                    crate::mobile::remove(&config, &body(&mut request)?, &mobile)
                 }
                 (&Method::Get, "/api/peers") => Ok(crate::peers::snapshot(&peers)),
                 (&Method::Post, "/api/peers/approve") => crate::peers::approve(&peers, &home, &body(&mut request)?),
@@ -267,7 +272,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     crate::terminal::request(device.as_ref(), &v)
                 }
                 (&Method::Get, "/api/state") => Ok(
-                    json!({"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":crate::ssh_settings::settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
+                    json!({"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"ssh_settings":crate::ssh_settings::settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
                 ),
                 (&Method::Post, "/api/device/control") => {
                     let value = body(&mut request)?;
@@ -280,7 +285,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Get, "/api/log") => Ok(crate::state_transport::logs()),
                 (&Method::Get, "/api/status") => {
                     let snapshot = environment::database(&config,"","status-read",None)?;
-                    Ok(json!({"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
+                    Ok(json!({"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
                         "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":snapshot["links"],"chat_settings":snapshot["preferences"],"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}))
                 }
                 (&Method::Post, "/api/link-position") => {

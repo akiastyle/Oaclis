@@ -1,4 +1,4 @@
-// map.js v3.115.2490
+// map.js v3.116.2553
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -27,6 +27,7 @@ function updateBadgeMotion(marker, connection) {
 
 function renderLink(force = false) {
   if (drawingMap) return;
+  renderMobileLinks();
   if (document.querySelector('.link-badge[data-dragging="true"]')) return;
   if (!force && document.querySelector(".link-badge:hover, .link-badge:focus-within")) return;
   const layers = new Map([...document.querySelectorAll(".chat-link")].map(node => [node.dataset.renderKey, node]));
@@ -397,14 +398,16 @@ function renderMap(animate = false) {
   $("#nodes").querySelectorAll(".map-node").forEach(node => node.remove());
   $("#nodes").style.height = mapLayout().canvasHeight + "px";
   devices().forEach((device, index) => {
+    const mobile = device.kind === 'mobile';
     const node = document.createElement("div");
+    node.dataset.kind = mobile ? 'mobile' : 'computer';
     node.className = "map-node";
     node.dataset.id = device.id;
     node.tabIndex = 0;
-    node.setAttribute("role", "button");
+    node.setAttribute("role", mobile ? "group" : "button");
     node.innerHTML =
-      '<span class="device-symbol">' + iconBody(data.appearance?.["device:" + device.id]?.icon ?? "desktop", device.name) +
-      (device.id !== "master" && data.ssh_settings?.[device.id]?.in_lan !== true ? '<span class="remote-badge" role="img" aria-label="Probabilmente remoto" title="Probabilmente remoto"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></span>' : '') + '</span>' +
+      '<span class="device-symbol">' + iconBody(mobile ? "mobile" : data.appearance?.["device:" + device.id]?.icon ?? "desktop", device.name) +
+      (!mobile && device.id !== "master" && data.ssh_settings?.[device.id]?.in_lan !== true ? '<span class="remote-badge" role="img" aria-label="Probabilmente remoto" title="Probabilmente remoto"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></span>' : '') + '</span>' +
       '<span class="node-name">'  +
       esc(device.name) +
       '</span><i class="status-dot" aria-hidden="true"></i>';
@@ -418,6 +421,7 @@ function renderMap(animate = false) {
     actions.className = "device-actions";
     actions.setAttribute("aria-label", "Comandi " + device.name);
     node.append(actions);
+    if (!mobile) {
     const customize = document.createElement("button");
     customize.className = "node-color icon-button";
     customize.setAttribute("aria-label", "Modifica " + device.name);
@@ -487,9 +491,17 @@ function renderMap(animate = false) {
       });
       actions.append(version);
     }
+    } else {
+      const remove = document.createElement('button');
+      remove.className = 'node-color icon-button'; remove.type = 'button';
+      remove.title = 'Elimina telefono'; remove.setAttribute('aria-label', 'Elimina ' + device.name);
+      remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>';
+      remove.onclick = guard(async event => { event.stopPropagation(); await removeMobile(device); });
+      actions.append(remove);
+    }
     $("#nodes").append(node);
     place(node, previous[device.id] || positions[device.id] || defaultPosition(index));
-    {
+    if (!mobile) {
       for (const [operation, label] of [
         ["sync", "Sincronizzazione bidirezionale"],
         ["send", "Invia a questo dispositivo"],
@@ -579,11 +591,11 @@ function renderMap(animate = false) {
       delete node.dataset.dragging;
     };
     node.onclick = guard(async () => {
-      if (!moved) await openDevice(device.id);
+      if (!mobile && !moved) await openDevice(device.id);
     });
     node.onkeydown = guard(async (e) => {
       if (e.target !== node) return;
-      if (["Enter", " "].includes(e.key)) {
+      if (!mobile && ["Enter", " "].includes(e.key)) {
         e.preventDefault();
         await openDevice(device.id);
       }
@@ -620,14 +632,15 @@ function renderConnections() {
   renderLink();
   document.querySelectorAll(".map-node").forEach((node) => {
     const id = node.dataset.id;
-    const state =
+    const mobile = data.mobile_devices?.find(d => d.id === id);
+    const state = mobile ? mobile.active ? 'online' : 'offline' :
       id === "master" ? "online" : data.connections[id] || "unknown";
     node.className =
       "map-node " +
       state +
       (id === sourceId ? " selected" : "") +
       (id !== "master" || data.appearance?.["device:" + id]?.color ? " colored-device" : "");
-    const label = {
+    const label = mobile ? mobile.active ? 'Attivo' : 'Non attivo' : {
       online: "raggiungibile",
       offline: "non raggiungibile",
       checking: "verifica in corso",
@@ -661,7 +674,7 @@ function renderConnections() {
       deviceName(id) +
         ", " +
         label +
-        ". Invio per le chat, frecce per spostare.",
+        (mobile ? ". Frecce per spostare." : ". Invio per le chat, frecce per spostare."),
     );
   });
 }
@@ -676,4 +689,36 @@ async function selectChat(entry, targetId, operation = "copy") {
       renderLink(true);
     });
   } catch (error) { notice("Associazione non salvata: " + error.message); }
+}
+
+
+function renderMobileLinks() {
+  let svg = document.querySelector('#mobile-links');
+  const phones = data.mobile_devices || [];
+  const masterNode = [...document.querySelectorAll('.map-node')].find(n => n.dataset.id === 'master');
+  if (!phones.length || !masterNode) { svg?.remove(); return; }
+  if (!svg) {
+    svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.id = 'mobile-links'; svg.setAttribute('aria-hidden', 'true');
+    $('#nodes').prepend(svg);
+  }
+  const base = $('#nodes').getBoundingClientRect();
+  const keep = new Set();
+  for (const device of phones) {
+    const node = [...document.querySelectorAll('.map-node')].find(n => n.dataset.id === device.id);
+    if (!node) continue;
+    keep.add(device.id);
+    let path = [...svg.children].find(p => p.dataset.id === device.id);
+    if (!path) { path = document.createElementNS(svg.namespaceURI, 'path'); path.dataset.id = device.id; svg.append(path); }
+    const from = masterNode.getBoundingClientRect(), to = node.getBoundingClientRect();
+    const [a,b] = [[from,to],[to,from]].map(([r,t]) => {
+      const x = r.left + r.width / 2, y = r.top + r.height / 2;
+      const dx = t.left + t.width / 2 - x, dy = t.top + t.height / 2 - y;
+      const scale = Math.min(r.width / 2 / (Math.abs(dx) || 1e-9), r.height / 2 / (Math.abs(dy) || 1e-9)) + 2 / (Math.hypot(dx,dy) || 1);
+      return {x:x + dx * scale - base.left, y:y + dy * scale - base.top};
+    });
+    path.setAttribute('d', `M${a.x} ${a.y}L${b.x} ${b.y}`);
+    path.dataset.active = String(device.active === true);
+  }
+  for (const path of [...svg.children]) if (!keep.has(path.dataset.id)) path.remove();
 }

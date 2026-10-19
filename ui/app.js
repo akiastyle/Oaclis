@@ -1,4 +1,4 @@
-// app.js v3.160.2924
+// app.js v3.161.2934
 "use strict";
 const $ = (s) => document.querySelector(s);
 const token = $('meta[name="oaclis-token"]').content;
@@ -44,7 +44,7 @@ function saveLinkChange(action) {
 let removingPresentation = false;
 let drawingMap = false;
 const master = { id: "master", name: "Questo dispositivo" };
-const devices = () => [{ ...master, name: data.appearance?.["device:master"]?.label || master.name }, ...data.devices];
+const devices = () => [{ ...master, name: data.appearance?.["device:master"]?.label || master.name }, ...data.devices, ...(data.mobile_devices || [])];
 const deviceName = (id) => devices().find((d) => d.id === id)?.name || id;
 document.documentElement.dataset.theme =
   localStorage.getItem("oaclis-theme") ||
@@ -211,6 +211,7 @@ document.addEventListener("keydown", (e) => {
 });
 $("#back").onclick = showLibrary;
 async function openDevice(id) {
+  if (devices().find(d => d.id === id)?.kind === 'mobile') return;
   sourceId = id;
   $("#panel-device").textContent = deviceName(id);
   $("#search").value = "";
@@ -255,6 +256,7 @@ const appearance = (entry) => {
 };
 const chatLabel = (entry) => appearance(entry).label || entry.name;
 const icons = {
+  mobile: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/>',
   chat: '<path d="M4 4h16v12H9l-5 4z"/>',
   code: '<path d="m8 6-6 6 6 6m8-12 6 6-6 6m-2-16-4 20"/>',
   folder: '<path d="M3 6h7l2 3h9v11H3z"/>',
@@ -334,6 +336,12 @@ async function poll() {
     const previous = data.device_runtime[id];
     if (previous?.update?.status === "running" && runtime.update?.status === "failed") { console.error("Oaclis update:", runtime.update.error); notice("Aggiornamento non riuscito"); }
     if (runtime.available === false || previous?.available === false || !previous?.observed_at || !runtime.observed_at || runtime.observed_at >= previous.observed_at) data.device_runtime[id] = runtime;
+  }
+  if (Array.isArray(next.mobile_devices) && !removingPresentation && !drag && !document.querySelector('.map-node[data-dragging="true"]')) {
+    const roster = list => JSON.stringify((list || []).map(({id, name}) => [id, name]));
+    const changed = roster(data.mobile_devices) !== roster(next.mobile_devices);
+    data.mobile_devices = next.mobile_devices;
+    if (changed) renderMap(true);
   }
   data.build = next.build;
   data.connections = next.connections;

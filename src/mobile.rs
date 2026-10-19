@@ -1,10 +1,10 @@
-// mobile.rs v1.8.116
+// mobile.rs v1.14.180
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::{io::{self, Write}, path::Path, process::{Command, Stdio}};
+use std::{io::{self, Write}, path::{Path, PathBuf}, process::{Command, Stdio}, sync::{Arc, Mutex}, thread, time::Duration};
 
 const ENDPOINT: &str = "https://www.krprojects.it/oaclis-auth-test/index.php";
 const INVITE_PREFIX: &str = "https://www.krprojects.it/oaclis-auth-test/index.php#pair=";
@@ -57,31 +57,70 @@ pub(crate) fn invite(config: &Path) -> io::Result<Value> {
 }
 
 
-fn pending_devices(reply: &Value) -> io::Result<Value> {
+fn listed_devices(reply: &Value, status: &str) -> io::Result<Value> {
     let devices = reply["devices"].as_array().ok_or_else(|| invalid("Richieste mobile non disponibili"))?;
     let mut pending = Vec::new();
-    for device in devices.iter().filter(|d| d["status"] == "pending") {
+    for device in devices.iter().filter(|d| d["status"] == status) {
         let id = device["id"].as_str().unwrap_or("");
         let name = device["name"].as_str().unwrap_or("");
         if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) || name.is_empty() || name.chars().count() > 60 || name.chars().any(char::is_control) {
             return Err(invalid("Richiesta mobile non valida"));
         }
-        pending.push(json!({"id":id,"name":name}));
+        pending.push(if status == "approved" { json!({"id":format!("mobile-{id}"),"name":name,"kind":"mobile","active":device["active"] == true}) } else { json!({"id":id,"name":name}) });
     }
     Ok(json!({"devices":pending}))
 }
 
 pub(crate) fn pending(config: &Path) -> io::Result<Value> {
-    pending_devices(&request(config, json!({"action":"admin-list"}))?)
+    listed_devices(&request(config, json!({"action":"admin-list"}))?, "pending")
 }
 
-pub(crate) fn approve(config: &Path, value: &Value) -> io::Result<Value> {
+pub(crate) fn approve(config: &Path, value: &Value, registry: &Registry) -> io::Result<Value> {
+    let _exchange = registry.exchange.lock().unwrap();
     let id = value["id"].as_str().unwrap_or("");
     let accept = value["accept"].as_bool().ok_or_else(|| invalid("Conferma mobile richiesta"))?;
     if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) { return Err(invalid("Telefono non valido")); }
     let reply = request(config, json!({"action":if accept {"approve"} else {"revoke"},"id":id}))?;
     if reply["ok"] != true { return Err(io::Error::other("Conferma non riuscita. Riprova.")); }
-    Ok(json!({"ok":true}))
+    if accept {
+        if let Ok(reply) = request(config, json!({"action":"admin-list"})).and_then(|r| listed_devices(&r, "approved")) {
+            *registry.devices.lock().unwrap() = reply["devices"].as_array().unwrap().clone();
+        }
+    } else {
+        registry.devices.lock().unwrap().retain(|d| d["id"] != format!("mobile-{id}"));
+    }
+    Ok(json!({"ok":true,"devices":registry.snapshot()}))
+}
+
+pub(crate) struct Registry {
+    devices: Mutex<Vec<Value>>,
+    exchange: Mutex<()>,
+}
+impl Registry {
+    pub(crate) fn snapshot(&self) -> Vec<Value> { self.devices.lock().unwrap().clone() }
+}
+
+pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
+    let registry = Arc::new(Registry { devices: Mutex::new(Vec::new()), exchange: Mutex::new(()) });
+    if enabled && config.join("mobile-relay.json").is_file() {
+        let worker = registry.clone();
+        thread::spawn(move || loop {
+            {
+                let _exchange = worker.exchange.lock().unwrap();
+                match request(&config, json!({"action":"admin-list"})).and_then(|r| listed_devices(&r, "approved")) {
+                    Ok(reply) => *worker.devices.lock().unwrap() = reply["devices"].as_array().unwrap().clone(),
+                    Err(_) => { for device in worker.devices.lock().unwrap().iter_mut() { device["active"] = json!(false); } }
+                }
+            }
+            thread::sleep(Duration::from_secs(10));
+        });
+    }
+    registry
+}
+
+pub(crate) fn remove(config: &Path, value: &Value, registry: &Registry) -> io::Result<Value> {
+    let id = value["id"].as_str().and_then(|s| s.strip_prefix("mobile-")).ok_or_else(|| invalid("Telefono non valido"))?;
+    approve(config, &json!({"id":id,"accept":false}), registry)
 }
 
 #[cfg(test)]
@@ -90,9 +129,14 @@ mod tests {
     #[test]
     fn pending_filters_public_fields_and_rejects_invalid_identity() {
         let input = json!({"devices":[{"id":"a".repeat(64),"name":"Telefono","status":"pending","key":"private"},{"id":"b".repeat(64),"name":"Altro","status":"approved"}]});
-        assert_eq!(pending_devices(&input).unwrap(), json!({"devices":[{"id":"a".repeat(64),"name":"Telefono"}]}));
-        assert!(pending_devices(&json!({"devices":[{"id":"bad","name":"Telefono","status":"pending"}]})).is_err());
-        assert!(pending_devices(&json!({})).is_err());
+        assert_eq!(listed_devices(&input, "pending").unwrap(), json!({"devices":[{"id":"a".repeat(64),"name":"Telefono"}]}));
+        assert!(listed_devices(&json!({"devices":[{"id":"bad","name":"Telefono","status":"pending"}]}), "pending").is_err());
+        assert!(listed_devices(&json!({}), "pending").is_err());
+    }
+    #[test]
+    fn approved_roster_contains_only_public_mobile_fields() {
+        let input = json!({"devices":[{"id":"c".repeat(64),"name":"Telefono","status":"approved","active":true,"key":"secret"},{"id":"d".repeat(64),"name":"Revocato","status":"revoked"}]});
+        assert_eq!(listed_devices(&input,"approved").unwrap(),json!({"devices":[{"id":format!("mobile-{}","c".repeat(64)),"name":"Telefono","kind":"mobile","active":true}]}));
     }
     #[test]
     fn qr_accepts_only_the_fixed_relay_and_random_code() {
