@@ -1,4 +1,4 @@
-/* style.css v2.0.1325 */
+/* style.css v2.0.1327 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1242,3 +1242,5 @@ select {
 .mobile-qr svg { display: block; width: 100%; height: auto; stroke: none; }
 .mobile-invite-content { text-align: center; }
 .mobile-invite-content small { color: var(--muted); font-size: var(--font-small); }
+
+.context-popover .discovery-manual { display: flex; align-items: center; justify-content: center; gap: var(--space-8); }

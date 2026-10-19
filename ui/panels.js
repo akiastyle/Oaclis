@@ -1,4 +1,4 @@
-// panels.js v3.134.2429
+// panels.js v3.134.2431
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -549,7 +549,7 @@ function openDiscovery() {
     panel = document.createElement("div"); panel.id = "discovery-popover"; panel.opener = $("#add-device");
     panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", "Collega dispositivo");
-    panel.innerHTML = '<button class="icon-button popover-close" type="button" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Collega dispositivo</h2><div class="discovery-content" aria-live="polite"></div><button class="discovery-manual" type="button">Aggiungi manualmente</button><button class="discovery-manual discovery-mobile" type="button">Aggiungi mobile</button>';
+    panel.innerHTML = '<button class="icon-button popover-close" type="button" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Collega dispositivo</h2><div class="discovery-content" aria-live="polite"></div><button class="primary discovery-manual" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 21h8m-4-5v5"/></svg><span>Aggiungi manualmente</span></button><button class="primary discovery-manual discovery-mobile" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg><span>Aggiungi mobile</span></button>';
     document.body.append(panel); panel.showPopover();
     panel.querySelector('.popover-close').onclick = () => panel.remove();
     panel.querySelector('.discovery-manual').onclick = () => { panel.remove(); editDevice(); };
