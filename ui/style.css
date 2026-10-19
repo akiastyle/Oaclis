@@ -1,4 +1,4 @@
-/* style.css v2.0.1332 */
+/* style.css v2.0.1343 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1249,3 +1249,14 @@ select {
 #mobile-links path { fill: none; stroke: var(--muted); stroke-dasharray: 5 5; }
 #mobile-links path[data-active="true"] { stroke: var(--status-online); stroke-dasharray: none; }
 .map-node[data-kind="mobile"].offline .status-dot { background: var(--muted); border-color: var(--muted); }
+
+.mobile-chat-editor > p { margin: var(--space-8) 0; color: var(--muted); }
+.mobile-chat-editor .search { margin: var(--space-12) 0; }
+.mobile-chat-options { max-height: min(320px, 45dvh); overflow: auto; scrollbar-width: thin; scrollbar-color: var(--muted) transparent; }
+.mobile-chat-option { display: flex; align-items: center; gap: var(--space-12); padding: var(--space-8) 0; cursor: pointer; font-size: var(--font-small); }
+.mobile-chat-option input { width: var(--size-20); height: var(--size-20); margin: 0; flex-shrink: 0; accent-color: var(--scope-active); }
+.mobile-chat-option span { min-width: 0; overflow-wrap: anywhere; }
+
+#mobile-links > path { transition: stroke var(--duration-ui) var(--ease-ui); }
+#mobile-links marker path { fill: var(--muted); stroke: none; stroke-dasharray: none; }
+#mobile-links marker[data-active="true"] path { fill: var(--status-online); }

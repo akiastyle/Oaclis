@@ -1,4 +1,4 @@
-// app.js v1.13.47
+// app.js v1.15.69
 'use strict';
 const app=document.getElementById('app');
 window.addEventListener('hashchange',()=>{if(location.hash)location.reload();});
@@ -39,10 +39,28 @@ async function registerView(){
  show('<h1>Abbina questo telefono</h1><p>Creerai una passkey e un codice casuale per questa installazione. Poi la richiesta dovrà essere approvata dal PC.</p><label for="name">Nome del telefono</label><input id="name" maxlength="60" value="Il mio telefono" autocomplete="off"><button id="register">Crea passkey e richiedi accesso</button>');
  document.getElementById('register').onclick=e=>run(e.target,async()=>{const data=await api('register-options',{invite,name:document.getElementById('name').value});const c=await navigator.credentials.create(options(data));await api('register',credential(c));invite='';sessionStorage.removeItem('oaclis-test-invite');await deviceView();});
 }
-async function protectedView(){const x=await api('protected');show('<h1>Accesso autorizzato</h1><p id="identity"></p><p>Codice dell’installazione e passkey verificati dal server. Nessun dato Oaclis è collegato a questa prova.</p><button id="lock" class="secondary">Blocca accesso</button>');document.getElementById('identity').textContent=x.name;document.getElementById('lock').onclick=e=>run(e.target,async()=>{clearInterval(timer);await api('logout');await deviceView();});timer=setInterval(()=>api('protected').catch(()=>{clearInterval(timer);app.hidden=true;app.replaceChildren();}),5000);}
+function renderAuthorizedChats(chats){
+ const list=document.getElementById('authorized-chats');
+ if(!list)return;
+ const signature=JSON.stringify(chats);
+ if(list.dataset.signature===signature)return;
+ list.dataset.signature=signature;list.replaceChildren();
+ if(!chats.length){const p=document.createElement('p');p.textContent='Nessuna chat autorizzata dal master.';list.append(p);return;}
+ const ul=document.createElement('ul');
+ for(const chat of chats){const li=document.createElement('li');li.textContent=chat.name;ul.append(li);}
+ list.append(ul);
+}
+async function protectedView(){
+ const x=await api('protected');
+ show('<h1>Chat autorizzate</h1><div id="authorized-chats" aria-live="polite"></div><button id="lock" class="secondary">Blocca accesso</button>');
+ renderAuthorizedChats(x.chats||[]);
+ document.getElementById('lock').onclick=e=>run(e.target,async()=>{clearTimeout(timer);await api('logout');await deviceView();});
+ const refresh=async()=>{try{const data=await api('protected');if(!document.getElementById('authorized-chats'))return;renderAuthorizedChats(data.chats||[]);timer=setTimeout(refresh,5000);}catch{clearTimeout(timer);app.hidden=true;app.replaceChildren();}};
+ timer=setTimeout(refresh,5000);
+}
 async function deviceView(){
  const x=await api('status');
  if(x.status==='pending'){show('<h1>Richiesta inviata</h1><p>La passkey è pronta. Approva questo telefono dalla pagina sul PC.</p>');timer=setInterval(async()=>{try{const s=await api('status');if(s.status==='approved'){clearInterval(timer);await deviceView();}}catch{clearInterval(timer);app.hidden=true;app.replaceChildren();}},3000);return;}
- show('<h1>Accedi alla prova</h1><p>Conferma con la passkey del telefono per aprire l’area riservata.</p><button id="login">Accedi con passkey</button>');document.getElementById('login').onclick=e=>run(e.target,async()=>{const data=await api('login-options');const c=await navigator.credentials.get(options(data));await api('login',credential(c));await protectedView();});
+ show('<h1>Accedi a Oaclis</h1><p>Conferma con la passkey del telefono per aprire l’area riservata.</p><button id="login">Accedi con passkey</button>');document.getElementById('login').onclick=e=>run(e.target,async()=>{const data=await api('login-options');const c=await navigator.credentials.get(options(data));await api('login',credential(c));await protectedView();});
 }
 (async()=>{try{if(admin)await adminView();else if(invite)await registerView();else if(code)await deviceView();}catch(e){if(admin||invite){show('<h1>Prova accesso</h1>');message(e.message,true);}else{app.hidden=true;app.replaceChildren();}}})();

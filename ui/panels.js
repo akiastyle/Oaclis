@@ -1,4 +1,4 @@
-// panels.js v3.137.2504
+// panels.js v3.138.2538
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -745,6 +745,7 @@ async function openMobileInvite() {
 async function removeMobile(device) {
   if (removingPresentation || !window.confirm('Eliminare “' + device.name + '”?\n\nL’accesso del telefono verrà revocato e sarà rimosso dalla mappa. Per accedere nuovamente servirà un nuovo abbinamento.')) return;
   removingPresentation = true;
+  document.querySelectorAll('.mobile-chat-editor').forEach(panel => { if (panel.dataset.objectId === device.id) panel.remove(); });
   const previous = data.mobile_devices;
   data.mobile_devices = (previous || []).filter(d => d.id !== device.id);
   renderMap();
@@ -756,4 +757,37 @@ async function removeMobile(device) {
     data.mobile_devices = previous;
     notice('Eliminazione non riuscita. Riprova.');
   } finally { removingPresentation = false; renderMap(); }
+}
+
+
+async function openMobileChats(device, anchor) {
+  const existing = [...document.querySelectorAll('.mobile-chat-editor')].find(p => p.dataset.objectId === device.id);
+  if (existing) { existing.querySelector('input')?.focus(); return; }
+  const panel = document.createElement('div');
+  panel.className = 'mobile-chat-editor'; panel.dataset.objectId = device.id; panel.opener = anchor;
+  panel.setAttribute('popover', 'manual'); panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', 'Chat per ' + device.name);
+  panel.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Chat autorizzate</h2><p>' + esc(device.name) + '</p><div class="mobile-chat-content"><p>Caricamento chat…</p></div>';
+  document.body.append(panel); panel.showPopover(); positionContext(panel, anchor); bindPanelDrag(panel, true);
+  panel.querySelector('.popover-close').onclick = () => panel.remove();
+  panel.querySelector('h2').focus({preventScroll:true});
+  const content = panel.querySelector('.mobile-chat-content');
+  try {
+    const result = await api('mobile/chats', {id:device.id});
+    if (!panel.isConnected) return;
+    const selected = new Set(result.selected || []);
+    const chats = [...result.chats].sort((a,b) => a.name.localeCompare(b.name));
+    content.innerHTML = '<form><label class="search"><input type="search" aria-label="Cerca chat" placeholder="Cerca chat"></label><div class="mobile-chat-options">' + (chats.length ? chats.map(chat => '<label class="mobile-chat-option"><input type="checkbox" value="' + esc(chat.id) + '" ' + (selected.has(chat.id) ? 'checked' : '') + '><span>' + esc(chat.name) + '</span></label>').join('') : '<p>Nessuna chat disponibile.</p>') + '</div><p class="mobile-chat-status" role="status"></p><button type="submit" class="primary">Salva</button></form>';
+    const search = content.querySelector('input[type="search"]');
+    search.oninput = () => { const term = search.value.trim().toLocaleLowerCase(); content.querySelectorAll('.mobile-chat-option').forEach(row => row.hidden = !row.textContent.toLocaleLowerCase().includes(term)); };
+    content.querySelector('form').onsubmit = async event => {
+      event.preventDefault(); const button = content.querySelector('button[type="submit"]'); button.disabled = true;
+      try {
+        await api('mobile/chats', {id:device.id,chats:[...content.querySelectorAll('input[type="checkbox"]:checked')].map(input=>input.value)});
+        panel.remove(); notice('Chat autorizzate aggiornate');
+      } catch (_) { if (panel.isConnected) content.querySelector('.mobile-chat-status').textContent = 'Salvataggio non riuscito. Riprova.'; }
+      finally { button.disabled = false; }
+    };
+    positionContext(panel, anchor);
+    if (panel.contains(document.activeElement)) search.focus({preventScroll:true});
+  } catch (_) { if (panel.isConnected) content.innerHTML = '<p>Chat non disponibili. Chiudi e riprova.</p>'; }
 }

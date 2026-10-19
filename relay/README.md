@@ -20,3 +20,11 @@ Lo stato non prova che il telefono sia acceso o connesso a Internet con l'app ch
 Le letture della UI usano la memoria; le comunicazioni con l'hosting avvengono fuori
 dai lock dello snapshot. Un errore di rete conserva le card ma le indica non attive.
 Eliminare una card revoca l'accesso; per ricollegarsi serve un nuovo abbinamento.
+
+La card del telefono apre la selezione delle chat. Nessuna e' autorizzata di default.
+Il master riusa catalogo locale, collegamenti gia' salvati e nomi personalizzati;
+non avvia ricerche SSH o nuove analisi per aprire la selezione. La scelta e' salvata
+nel record del singolo telefono sul relay. Solo ID e titoli selezionati sono inviati.
+La pagina mobile riceve solo le proprie chat dopo la verifica di codice, passkey,
+sessione e abbinamento approvato; non puo' leggere o modificare le scelte di altri
+telefoni. La lista si aggiorna ogni cinque secondi, senza trasferire archivi o console.

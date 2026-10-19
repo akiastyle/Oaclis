@@ -1,5 +1,5 @@
 <?php
-// index.php v1.4.149
+// index.php v1.4.170
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -11,7 +11,7 @@ header('Permissions-Policy: publickey-credentials-create=(self), publickey-crede
 if (($_SERVER['HTTP_HOST'] ?? '') !== 'www.krprojects.it') { http_response_code(404); exit; }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
-    if (($_SERVER['HTTP_ORIGIN'] ?? '') !== ORIGIN || !str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') || (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 20000) { http_response_code(403); exit; }
+    if (($_SERVER['HTTP_ORIGIN'] ?? '') !== ORIGIN || !str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') || (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 131072) { http_response_code(403); exit; }
     umask(0077);
     session_name('OaclisAuthTest');
     session_save_path(PRIVATE_DIR . '/sessions');
@@ -58,6 +58,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'admin-list':
             if (!$isAdmin) respond([],403);
             $result['devices']=array_values(array_map(function($id,$r){return ['id'=>$id,'name'=>$r['name'],'status'=>$r['status'],'created'=>$r['created'],'lastAccess'=>$r['lastAccess']??null,'active'=>$r['status']==='approved' && ($r['lastSeen']??0)>=time()-30];},array_keys($state['devices']),$state['devices']));
+            break;
+        case 'chat-access': case 'set-chat-access':
+            if (!$isAdmin) respond([],403);
+            $target=$input['id']??'';
+            if (!is_string($target) || ($state['devices'][$target]['status']??'')!=='approved') respond([],403);
+            if ($action==='chat-access') { $result=['chats'=>$state['devices'][$target]['chats']??[]]; break; }
+            $chats=$input['chats']??null;
+            if (!is_array($chats) || !array_is_list($chats) || count($chats)>500) throw new RuntimeException();
+            $allowed=[];
+            foreach ($chats as $chat) {
+                if (!is_array($chat) || !is_string($chat['id']??null) || !preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,159}$/D',$chat['id']) || !is_string($chat['name']??null) || trim($chat['name'])==='' || mb_strlen($chat['name'])>320 || preg_match('/[\x00-\x1f\x7f]/u',$chat['name']) || isset($allowed[$chat['id']])) throw new RuntimeException();
+                $allowed[$chat['id']]=['id'=>$chat['id'],'name'=>$chat['name']];
+            }
+            $state['devices'][$target]['chats']=array_values($allowed);
+            $result=['ok'=>true];
             break;
         case 'invite':
             if (!$isAdmin) respond([],403);
@@ -121,7 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'protected':
             if (!$record || $record['status']!=='approved' || ($_SESSION['auth']['device']??'')!==$deviceId || ($_SESSION['auth']['until']??0)<time()) respond([],403);
             if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
-            $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c')];
+            $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c'),'chats'=>$record['chats']??[]];
             break;
         case 'logout':
             if ($record && ($_SESSION['auth']['device']??'')===$deviceId) $state['devices'][$deviceId]['lastSeen']=0;
@@ -137,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ftruncate($db,strlen($encoded)); fflush($db);
         }
         flock($db,LOCK_UN); fclose($db);
-        echo json_encode($result,JSON_THROW_ON_ERROR);
+        echo json_encode($result,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
     } catch (Throwable $e) { error_log('Oaclis auth test: '.$e->getMessage()); http_response_code(400); echo '{"error":"Verifica non riuscita. Riprova."}'; }
     exit;
 }

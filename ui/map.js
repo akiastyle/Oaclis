@@ -1,4 +1,4 @@
-// map.js v3.116.2564
+// map.js v3.116.2587
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -591,13 +591,13 @@ function renderMap(animate = false) {
       delete node.dataset.dragging;
     };
     node.onclick = guard(async () => {
-      if (!mobile && !moved) await openDevice(device.id);
+      if (!moved) { if (mobile) await openMobileChats(device, node); else await openDevice(device.id); }
     });
     node.onkeydown = guard(async (e) => {
       if (e.target !== node) return;
-      if (!mobile && ["Enter", " "].includes(e.key)) {
+      if (["Enter", " "].includes(e.key)) {
         e.preventDefault();
-        await openDevice(device.id);
+        if (mobile) await openMobileChats(device, node); else await openDevice(device.id);
       }
       const offsets = {
         ArrowLeft: [-10, 0],
@@ -674,7 +674,7 @@ function renderConnections() {
       deviceName(id) +
         ", " +
         label +
-        (mobile ? ". Frecce per spostare." : ". Invio per le chat, frecce per spostare."),
+        (mobile ? ". Invio per scegliere le chat, frecce per spostare." : ". Invio per le chat, frecce per spostare."),
     );
   });
 }
@@ -700,6 +700,7 @@ function renderMobileLinks() {
   if (!svg) {
     svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.id = 'mobile-links'; svg.setAttribute('aria-hidden', 'true');
+    svg.innerHTML = '<defs></defs>';
     $('#nodes').prepend(svg);
   }
   const base = $('#nodes').getBoundingClientRect();
@@ -708,14 +709,22 @@ function renderMobileLinks() {
     const node = [...document.querySelectorAll('.map-node')].find(n => n.dataset.id === device.id);
     if (!node) continue;
     keep.add(device.id);
-    let path = [...svg.children].find(p => p.dataset.id === device.id);
-    if (!path) { path = document.createElementNS(svg.namespaceURI, 'path'); path.dataset.id = device.id; svg.append(path); }
+    let path = [...svg.querySelectorAll(':scope > path')].find(p => p.dataset.id === device.id);
+    if (!path) {
+      path = document.createElementNS(svg.namespaceURI, 'path'); path.dataset.id = device.id;
+      const marker = document.createElementNS(svg.namespaceURI, 'marker'); marker.dataset.id = device.id;
+      marker.id = 'mobile-arrow-' + device.id; marker.setAttribute('viewBox','0 0 10 10'); marker.setAttribute('refX','9'); marker.setAttribute('refY','5');
+      marker.setAttribute('markerWidth','10'); marker.setAttribute('markerHeight','10'); marker.setAttribute('markerUnits','userSpaceOnUse'); marker.setAttribute('orient','auto');
+      marker.innerHTML = '<path d="M1 1L9 5L1 9Z"/>'; svg.querySelector('defs').append(marker);
+      path.setAttribute('marker-end','url(#' + marker.id + ')'); svg.append(path);
+    }
     const from = masterNode.getBoundingClientRect(), to = node.getBoundingClientRect();
     const a = {x:from.left - base.left - 2, y:from.top + from.height / 2 - base.top};
     const b = {x:to.left - base.left - 2, y:to.top + to.height / 2 - base.top};
     const reach = Math.max(45, Math.min(150, Math.hypot(b.x - a.x, b.y - a.y) * 0.35));
     path.setAttribute('d', `M${a.x} ${a.y}C${a.x - reach} ${a.y} ${b.x - reach} ${b.y} ${b.x} ${b.y}`);
     path.dataset.active = String(device.active === true);
+    [...svg.querySelector('defs').children].find(m => m.dataset.id === device.id).dataset.active = path.dataset.active;
   }
-  for (const path of [...svg.children]) if (!keep.has(path.dataset.id)) path.remove();
+  for (const item of [...svg.querySelectorAll(':scope > path, defs > marker')]) if (!keep.has(item.dataset.id)) item.remove();
 }

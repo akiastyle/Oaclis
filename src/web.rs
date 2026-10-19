@@ -1,4 +1,4 @@
-// web.rs v2.26.1653
+// web.rs v2.26.1657
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -257,6 +257,10 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Post, "/api/mobile/delete") => {
                     if role != "master" { return Err(invalid("Comando disponibile dal master")); }
                     crate::mobile::remove(&config, &body(&mut request)?, &mobile)
+                }
+                (&Method::Post, "/api/mobile/chats") => {
+                    if role != "master" { return Err(invalid("Comando disponibile dal master")); }
+                    crate::mobile::chat_access(&config, &codex, &body(&mut request)?, &mobile)
                 }
                 (&Method::Get, "/api/peers") => Ok(crate::peers::snapshot(&peers)),
                 (&Method::Post, "/api/peers/approve") => crate::peers::approve(&peers, &home, &body(&mut request)?),

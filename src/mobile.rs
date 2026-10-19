@@ -1,4 +1,4 @@
-// mobile.rs v1.14.180
+// mobile.rs v1.17.243
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -30,13 +30,14 @@ fn request(config: &Path, payload: Value) -> io::Result<Value> {
     if settings.admin_key.len() != 64 || !settings.admin_key.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(invalid("Collegamento mobile da configurare"));
     }
+    if serde_json::to_vec(&payload)?.len() > 131072 { return Err(invalid("Selezione troppo ampia")); }
     let action = payload["action"].as_str().unwrap_or("");
     crate::state_transport::log(format!("SEND mobile-relay {action}"));
     // Feed the credential over stdin: it must never appear in process arguments.
     let data = serde_json::to_string(&serde_json::to_string(&payload)?)?;
     let input = format!("url = \"{ENDPOINT}\"\nheader = \"Origin: https://www.krprojects.it\"\nheader = \"Content-Type: application/json\"\nheader = \"X-Admin-Key: {}\"\ndata = {data}\n", settings.admin_key);
     let mut child = Command::new("curl")
-        .args(["--silent", "--fail", "--proto", "=https", "--connect-timeout", "3", "--max-time", "10", "--max-filesize", "16384", "--config", "-"])
+        .args(["--silent", "--fail", "--proto", "=https", "--connect-timeout", "3", "--max-time", "10", "--max-filesize", "131072", "--config", "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
     let sent = child.stdin.take().unwrap().write_all(input.as_bytes());
     if sent.is_err() { let _ = child.kill(); let _ = child.wait(); return Err(io::Error::other("Invito non disponibile. Riprova.")); }
@@ -123,6 +124,46 @@ pub(crate) fn remove(config: &Path, value: &Value, registry: &Registry) -> io::R
     approve(config, &json!({"id":id,"accept":false}), registry)
 }
 
+fn chat_choices(config: &Path, codex: &Path, existing: &Value) -> io::Result<std::collections::BTreeMap<String, Value>> {
+    let state = crate::state_store::snapshot(config)?;
+    let mut choices = std::collections::BTreeMap::new();
+    let mut entries = existing.as_array().cloned().unwrap_or_default();
+    entries.extend(state.links.values().filter_map(|link| link.get("entry").cloned()));
+    entries.extend(crate::catalog::local_at(codex, config)?);
+    for entry in entries {
+        let id = entry["id"].as_str().unwrap_or("");
+        if !crate::devices::identifier(id) || id.len() > 160 { continue; }
+        let label = state.appearance.get(&format!("chat:{id}"))
+            .and_then(|r| r.value["label"].as_str()).filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| entry["name"].as_str().unwrap_or("Senza titolo"));
+        choices.insert(id.into(), json!({"id":id,"name":label.chars().filter(|c| !c.is_control()).take(320).collect::<String>()}));
+    }
+    Ok(choices)
+}
+
+pub(crate) fn chat_access(config: &Path, codex: &Path, value: &Value, registry: &Registry) -> io::Result<Value> {
+    let id = value["id"].as_str().and_then(|s| s.strip_prefix("mobile-")).ok_or_else(|| invalid("Telefono non valido"))?;
+    if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) { return Err(invalid("Telefono non valido")); }
+    let _exchange = registry.exchange.lock().unwrap();
+    let saved = request(config, json!({"action":"chat-access","id":id}))?;
+    let choices = chat_choices(config, codex, &saved["chats"])?;
+    if let Some(selected) = value.get("chats") {
+        let selected = selected.as_array().filter(|a| a.len() <= 500).ok_or_else(|| invalid("Selezione chat non valida"))?;
+        let mut ids = std::collections::BTreeSet::new();
+        let mut chats = Vec::new();
+        for item in selected {
+            let chat_id = item.as_str().ok_or_else(|| invalid("Chat non valida"))?;
+            let chat = choices.get(chat_id).ok_or_else(|| invalid("Chat non disponibile"))?;
+            if !ids.insert(chat_id) { return Err(invalid("Chat duplicata")); }
+            chats.push(chat.clone());
+        }
+        let reply = request(config, json!({"action":"set-chat-access","id":id,"chats":chats}))?;
+        if reply["ok"] != true { return Err(io::Error::other("Salvataggio non riuscito. Riprova.")); }
+        return Ok(json!({"ok":true}));
+    }
+    Ok(json!({"chats":choices.into_values().collect::<Vec<_>>(),"selected":saved["chats"].as_array().into_iter().flatten().filter_map(|c|c["id"].as_str()).collect::<Vec<_>>()}))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,6 +178,26 @@ mod tests {
     fn approved_roster_contains_only_public_mobile_fields() {
         let input = json!({"devices":[{"id":"c".repeat(64),"name":"Telefono","status":"approved","active":true,"key":"secret"},{"id":"d".repeat(64),"name":"Revocato","status":"revoked"}]});
         assert_eq!(listed_devices(&input,"approved").unwrap(),json!({"devices":[{"id":format!("mobile-{}","c".repeat(64)),"name":"Telefono","kind":"mobile","active":true}]}));
+    }
+    #[test]
+    fn choices_reuse_saved_chats_links_and_local_titles_without_paths() {
+        let root = std::env::temp_dir().join(format!("oaclis-mobile-choices-{}", std::process::id()));
+        std::fs::create_dir_all(root.join("sessions")).unwrap();
+        std::fs::write(root.join("pairing_ed25519.pub"), "ssh-ed25519 mobile-fixture").unwrap();
+        let id = "019dc528-3e98-7943-bc6b-fb1a2738d7db";
+        std::fs::write(root.join("sessions").join(format!("rollout-{id}.jsonl")), "").unwrap();
+        std::fs::write(root.join("session_index.jsonl"), json!({"id":id,"thread_name":"Originale"}).to_string()).unwrap();
+        crate::state_store::change(&root, |state| {
+            state.appearance.entry(format!("chat:{id}")).or_default().value = json!({"label":"Rinominata"});
+            state.links.insert("remote".into(),json!({"entry":{"id":"remote-chat","name":"Remota"}}));
+            Ok(())
+        }).unwrap();
+        let choices = chat_choices(&root, &root, &json!([{"id":"saved-chat","name":"Salvata"}])).unwrap();
+        assert_eq!(choices[id]["name"],"Rinominata");
+        assert_eq!(choices["remote-chat"]["name"],"Remota");
+        assert_eq!(choices["saved-chat"]["name"],"Salvata");
+        assert!(choices.values().all(|v|v.as_object().unwrap().len()==2));
+        std::fs::remove_dir_all(&root).unwrap();
     }
     #[test]
     fn qr_accepts_only_the_fixed_relay_and_random_code() {
