@@ -1,4 +1,4 @@
-// panels.js v3.134.2426
+// panels.js v3.134.2429
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -553,7 +553,7 @@ function openDiscovery() {
     document.body.append(panel); panel.showPopover();
     panel.querySelector('.popover-close').onclick = () => panel.remove();
     panel.querySelector('.discovery-manual').onclick = () => { panel.remove(); editDevice(); };
-    panel.querySelector('.discovery-mobile').hidden = data.role !== 'master';
+    panel.querySelector('.discovery-mobile').hidden = data.role === 'client';
     panel.querySelector('.discovery-mobile').onclick = () => { panel.remove(); openMobileInvite(); };
   }
   renderDiscovery(); positionContext(panel, $("#add-device"));
@@ -561,6 +561,7 @@ function openDiscovery() {
 
 function renderDiscovery() {
   const panel = $("#discovery-popover"); if (!panel) return;
+  panel.querySelector('.discovery-mobile').hidden = data.role === 'client';
   const content = panel.querySelector('.discovery-content');
   const html = (discovery.setup_needed || discovery.network?.status === 'pending' ? '<button type="button" class="discovery-network" ' + (discovery.network?.status === 'pending' ? 'disabled' : '') + '>Prepara collegamento</button><small>' + (discovery.network?.status === 'pending' ? 'Attendi la conferma di Windows…' : 'La rete virtuale richiede un inoltro. Windows chiederà la conferma amministrativa.') + '</small>' : '') +
     (discovery.network?.error ? '<p class="discovery-error">' + esc(discovery.network.error) + '</p>' : '') +
