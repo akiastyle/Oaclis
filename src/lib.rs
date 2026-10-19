@@ -1,4 +1,4 @@
-// lib.rs v1.3.87
+// lib.rs v1.3.89
 pub mod state_store;
 mod state_migration;
 mod shared_records;
@@ -84,3 +84,5 @@ mod environment_analysis;
 mod dependency_inventory;
 
 mod app_install;
+
+mod mobile;

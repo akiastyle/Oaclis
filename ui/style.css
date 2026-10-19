@@ -1,4 +1,4 @@
-/* style.css v2.0.1318 */
+/* style.css v2.0.1323 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1237,3 +1237,8 @@ select {
 .chat-terminal.resizable-panel .terminal-screen,
 #orchestrator-log.resizable-panel pre { flex: 1; min-height: 0; height: auto; max-height: none; }
 .chat-terminal.resizable-panel textarea { resize: none; }
+
+.mobile-qr { width: min(288px, 100%); margin: var(--space-16) auto; background: #fff; }
+.mobile-qr svg { display: block; width: 100%; height: auto; }
+.mobile-invite-content { text-align: center; }
+.mobile-invite-content small { color: var(--muted); font-size: var(--font-small); }
