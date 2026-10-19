@@ -1,5 +1,5 @@
 <?php
-// index.php v1.4.222
+// index.php v1.4.224
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -132,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $state['devices'][$deviceId]['lastAccess']=gmdate('c');
             $state['devices'][$deviceId]['lastSeen']=time();
             session_regenerate_id(true);
-            $_SESSION['auth']=['device'=>$deviceId,'until'=>time()+300];
+            $_SESSION['auth']=['device'=>$deviceId,'until'=>time()+1800];
             $result=['ok'=>true];
             break;
         case 'console': case 'console-result':
