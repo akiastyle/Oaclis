@@ -1,4 +1,4 @@
-// map.js v3.116.2587
+// map.js v3.116.2593
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -492,6 +492,12 @@ function renderMap(animate = false) {
       actions.append(version);
     }
     } else {
+      const access = document.createElement('button');
+      access.className = 'node-color icon-button'; access.type = 'button';
+      access.title = 'QR accesso'; access.setAttribute('aria-label', 'QR accesso · ' + device.name);
+      access.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h2v2h-2zm4 0h2v6h-6v-2"/></svg>';
+      access.onclick = event => { event.stopPropagation(); openMobileAccess(access); };
+      actions.append(access);
       const remove = document.createElement('button');
       remove.className = 'node-color icon-button'; remove.type = 'button';
       remove.title = 'Elimina telefono'; remove.setAttribute('aria-label', 'Elimina ' + device.name);

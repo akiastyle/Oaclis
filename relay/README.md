@@ -1,6 +1,6 @@
 # Relay mobile
 
-Sorgenti della pagina gia' pubblicata su https://www.krprojects.it/oaclis-auth-test/index.php.
+Sorgenti della pagina gia' pubblicata su https://www.krprojects.it/oaclis/.
 Questo componente PHP gira sull'hosting; Oaclis continua a funzionare in Rust.
 
 I tre file pubblici sono index.php, app.js e style.css. La libreria lbuchs/WebAuthn v2.2.0
@@ -28,3 +28,6 @@ nel record del singolo telefono sul relay. Solo ID e titoli selezionati sono inv
 La pagina mobile riceve solo le proprie chat dopo la verifica di codice, passkey,
 sessione e abbinamento approvato; non puo' leggere o modificare le scelte di altri
 telefoni. La lista si aggiorna ogni cinque secondi, senza trasferire archivi o console.
+
+Abbinamento e passkey: /oaclis/auth. La card apre il QR del solo indirizzo di accesso.
+.htaccess instrada auth; legacy.php mantiene compatibili i vecchi link ed endpoint.

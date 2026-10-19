@@ -1,0 +1,4 @@
+DirectoryIndex index.php
+Options -Indexes
+RewriteEngine On
+RewriteRule ^auth/?$ index.php [L]

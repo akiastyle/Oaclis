@@ -1,8 +1,10 @@
-// app.js v1.15.69
+// app.js v1.15.79
 'use strict';
 const app=document.getElementById('app');
 window.addEventListener('hashchange',()=>{if(location.hash)location.reload();});
 const fragment=new URLSearchParams(location.hash.slice(1));
+const authPage=location.pathname.replace(/\/$/,'')==='/oaclis/auth';
+if(location.hash&&!authPage)location.replace('/oaclis/auth'+location.hash);
 let admin=fragment.get('admin')||sessionStorage.getItem('oaclis-test-admin')||'';
 let invite=fragment.get('pair')||sessionStorage.getItem('oaclis-test-invite')||'';
 let code=localStorage.getItem('oaclis-test-code')||'';
@@ -14,7 +16,7 @@ let timer;
 function show(html){app.innerHTML=html;app.hidden=false;}
 function message(text,error=false){let p=document.getElementById('message');if(!p){p=document.createElement('p');p.id='message';p.setAttribute('role','status');app.append(p);}p.className=error?'error':'status';p.textContent=text;}
 async function api(action,body={}){
- const r=await fetch('./index.php',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':admin,'X-Device-Code':code},body:JSON.stringify({action,...body}),cache:'no-store'});
+ const r=await fetch('/oaclis/auth',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':admin,'X-Device-Code':code},body:JSON.stringify({action,...body}),cache:'no-store'});
  if(!r.ok){if(r.status===403)throw new Error('Accesso non autorizzato.');throw new Error('Verifica non riuscita. Riprova.');}
  return r.json();
 }
@@ -54,13 +56,13 @@ async function protectedView(){
  const x=await api('protected');
  show('<h1>Chat autorizzate</h1><div id="authorized-chats" aria-live="polite"></div><button id="lock" class="secondary">Blocca accesso</button>');
  renderAuthorizedChats(x.chats||[]);
- document.getElementById('lock').onclick=e=>run(e.target,async()=>{clearTimeout(timer);await api('logout');await deviceView();});
+ document.getElementById('lock').onclick=e=>run(e.target,async()=>{clearTimeout(timer);await api('logout');location.replace('/oaclis/auth');});
  const refresh=async()=>{try{const data=await api('protected');if(!document.getElementById('authorized-chats'))return;renderAuthorizedChats(data.chats||[]);timer=setTimeout(refresh,5000);}catch{clearTimeout(timer);app.hidden=true;app.replaceChildren();}};
  timer=setTimeout(refresh,5000);
 }
 async function deviceView(){
  const x=await api('status');
  if(x.status==='pending'){show('<h1>Richiesta inviata</h1><p>La passkey è pronta. Approva questo telefono dalla pagina sul PC.</p>');timer=setInterval(async()=>{try{const s=await api('status');if(s.status==='approved'){clearInterval(timer);await deviceView();}}catch{clearInterval(timer);app.hidden=true;app.replaceChildren();}},3000);return;}
- show('<h1>Accedi a Oaclis</h1><p>Conferma con la passkey del telefono per aprire l’area riservata.</p><button id="login">Accedi con passkey</button>');document.getElementById('login').onclick=e=>run(e.target,async()=>{const data=await api('login-options');const c=await navigator.credentials.get(options(data));await api('login',credential(c));await protectedView();});
+ show('<h1>Accedi a Oaclis</h1><p>Conferma con la passkey del telefono per aprire l’area riservata.</p><button id="login">Accedi con passkey</button>');document.getElementById('login').onclick=e=>run(e.target,async()=>{const data=await api('login-options');const c=await navigator.credentials.get(options(data));await api('login',credential(c));location.replace('/oaclis/');});
 }
-(async()=>{try{if(admin)await adminView();else if(invite)await registerView();else if(code)await deviceView();}catch(e){if(admin||invite){show('<h1>Prova accesso</h1>');message(e.message,true);}else{app.hidden=true;app.replaceChildren();}}})();
+(async()=>{try{if(admin)await adminView();else if(invite)await registerView();else if(code){if(authPage)await deviceView();else try{await protectedView();}catch{location.replace('/oaclis/auth');}}}catch(e){if(admin||invite){show('<h1>Prova accesso</h1>');message(e.message,true);}else{app.hidden=true;app.replaceChildren();}}})();

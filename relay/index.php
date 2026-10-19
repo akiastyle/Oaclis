@@ -1,5 +1,5 @@
 <?php
-// index.php v1.4.170
+// index.php v1.4.178
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -16,7 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     session_name('OaclisAuthTest');
     session_save_path(PRIVATE_DIR . '/sessions');
     ini_set('session.use_strict_mode', '1');
-    session_set_cookie_params(['lifetime'=>0, 'path'=>'/oaclis-auth-test/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
+    session_set_cookie_params(['lifetime'=>0, 'path'=>'/oaclis/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
     session_start();
     $config = require PRIVATE_DIR . '/config.php';
     spl_autoload_register(function ($class) {
@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $state=$raw===''?['invitations'=>[], 'devices'=>[]]:json_decode($raw,true,64,JSON_THROW_ON_ERROR);
         $record=$state['devices'][$deviceId]??null;
         $result=[];
-        $web=new \lbuchs\WebAuthn\WebAuthn('Oaclis · prova accesso','www.krprojects.it',['none'],true);
+        $web=new \lbuchs\WebAuthn\WebAuthn('Oaclis','www.krprojects.it',['none'],true);
         switch ($action) {
         case 'admin-list':
             if (!$isAdmin) respond([],403);
@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (count($state['invitations'])>=20) throw new RuntimeException();
             $token=bin2hex(random_bytes(32));
             $state['invitations'][hash('sha256',$token)]=['until'=>time()+600];
-            $result=['url'=>ORIGIN.'/oaclis-auth-test/index.php#pair='.$token];
+            $result=['url'=>ORIGIN.'/oaclis/auth#pair='.$token];
             break;
         case 'approve': case 'revoke':
             if (!$isAdmin) respond([],403);
@@ -159,5 +159,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD']!=='GET') {http_response_code(405);exit;}
 ?>
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Oaclis · Prova accesso</title><link rel="stylesheet" href="style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><link rel="stylesheet" href="/oaclis/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/oaclis/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
 <body><main id="app" hidden aria-live="polite"></main></body></html>

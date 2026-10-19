@@ -1,4 +1,4 @@
-// panels.js v3.138.2538
+// panels.js v3.139.2552
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -790,4 +790,18 @@ async function openMobileChats(device, anchor) {
     positionContext(panel, anchor);
     if (panel.contains(document.activeElement)) search.focus({preventScroll:true});
   } catch (_) { if (panel.isConnected) content.innerHTML = '<p>Chat non disponibili. Chiudi e riprova.</p>'; }
+}
+
+
+async function openMobileAccess(anchor) {
+  document.querySelector('#mobile-access-qr')?.remove();
+  const panel = document.createElement('div'); panel.id = 'mobile-access-qr'; panel.opener = anchor;
+  panel.setAttribute('popover','manual'); panel.setAttribute('role','dialog'); panel.setAttribute('aria-label','QR accesso');
+  panel.innerHTML = '<button type="button" class="icon-button popover-close" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Apri Oaclis</h2><div class="mobile-access-content" aria-live="polite">Preparazione QR…</div>';
+  document.body.append(panel); panel.showPopover(); positionContext(panel,anchor); bindPanelDrag(panel,true);
+  panel.querySelector('.popover-close').onclick = () => panel.remove();
+  try {
+    const result = await api('mobile/qr');
+    if (panel.isConnected) { panel.querySelector('.mobile-access-content').innerHTML = '<div class="mobile-qr" role="img" aria-label="QR accesso Oaclis">' + result.qr_svg + '</div>'; positionContext(panel,anchor); }
+  } catch (_) { if (panel.isConnected) panel.querySelector('.mobile-access-content').textContent = 'QR non disponibile. Chiudi e riprova.'; }
 }

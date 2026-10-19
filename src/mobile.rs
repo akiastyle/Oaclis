@@ -1,4 +1,4 @@
-// mobile.rs v1.17.243
+// mobile.rs v1.18.256
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -6,8 +6,9 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{io::{self, Write}, path::{Path, PathBuf}, process::{Command, Stdio}, sync::{Arc, Mutex}, thread, time::Duration};
 
-const ENDPOINT: &str = "https://www.krprojects.it/oaclis-auth-test/index.php";
-const INVITE_PREFIX: &str = "https://www.krprojects.it/oaclis-auth-test/index.php#pair=";
+const ENDPOINT: &str = "https://www.krprojects.it/oaclis/auth";
+const ACCESS_URL: &str = "https://www.krprojects.it/oaclis/";
+const INVITE_PREFIX: &str = "https://www.krprojects.it/oaclis/auth#pair=";
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -49,6 +50,11 @@ fn request(config: &Path, payload: Value) -> io::Result<Value> {
     let reply: Value = serde_json::from_slice(&output.stdout).map_err(|_| io::Error::other("Invito non disponibile. Riprova."))?;
     crate::state_transport::log(format!("RECV mobile-relay {action} OK"));
     Ok(reply)
+}
+
+pub(crate) fn access_qr() -> io::Result<Value> {
+    let svg = QrCode::new(ACCESS_URL).map_err(io::Error::other)?.render::<svg::Color>().min_dimensions(288,288).build();
+    Ok(json!({"qr_svg":svg}))
 }
 
 pub(crate) fn invite(config: &Path) -> io::Result<Value> {
@@ -205,6 +211,9 @@ mod tests {
         let qr = invitation_qr(&url).unwrap();
         assert!(qr.contains("<svg"));
         assert!(!qr.contains(&url));
+        let access = access_qr().unwrap();
+        assert!(access["qr_svg"].as_str().unwrap().contains("<svg"));
+        assert!(!access["qr_svg"].as_str().unwrap().contains("#pair="));
         for invalid in ["https://example.com/#pair=abc".to_string(), format!("{INVITE_PREFIX}short"), format!("{INVITE_PREFIX}{}", "g".repeat(64)), format!("{url}&admin=anything")] {
             assert!(invitation_qr(&invalid).is_err());
         }
