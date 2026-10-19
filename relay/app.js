@@ -1,4 +1,4 @@
-// app.js v1.18.108
+// app.js v1.18.110
 'use strict';
 const app=document.getElementById('app');
 window.addEventListener('hashchange',()=>{if(location.hash)location.reload();});
@@ -54,7 +54,7 @@ function renderAuthorizedChats(chats){
 }
 async function openConsole(chat){
  clearTimeout(timer);
- show('<button id="back" class="secondary">← Chat autorizzate</button><h1 id="console-title"></h1><pre id="console-screen" tabindex="0" aria-label="Console">Connessione…</pre><form id="console-input"><textarea aria-label="Messaggio" maxlength="8000" rows="2" placeholder="Scrivi un messaggio" disabled></textarea><button disabled>Invia</button></form><div id="console-keys"></div>');
+ show('<button id="back" class="secondary">← Chat autorizzate</button><h1 id="console-title"></h1><pre id="console-screen" tabindex="0" aria-label="Console">Connessione…</pre><form id="console-input"><textarea aria-label="Messaggio" maxlength="8000" rows="2" placeholder="Scrivi un messaggio" disabled></textarea><button disabled aria-label="Invia messaggio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></form><div id="console-keys"></div>');
  document.getElementById('console-title').textContent=chat.name;
  const screen=document.getElementById('console-screen'),form=document.getElementById('console-input'),text=form.querySelector('textarea');
  let busy=false,closed=false;
