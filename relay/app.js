@@ -1,4 +1,4 @@
-// app.js v1.18.110
+// app.js v1.20.134
 'use strict';
 const app=document.getElementById('app');
 window.addEventListener('hashchange',()=>{if(location.hash)location.reload();});
@@ -12,8 +12,19 @@ history.replaceState(null,'',location.pathname);
 if(admin)sessionStorage.setItem('oaclis-test-admin',admin);
 if(fragment.get('pair')&&fragment.get('pair')!==sessionStorage.getItem('oaclis-test-invite')){code='';localStorage.removeItem('oaclis-test-code');}
 if(invite)sessionStorage.setItem('oaclis-test-invite',invite);
-let timer;
-function show(html){app.innerHTML=html;app.hidden=false;}
+let timer,screenWakeLock=null,wakePending=false;
+async function keepConsoleAwake(){
+ if(wakePending||screenWakeLock||document.visibilityState!=='visible'||!document.getElementById('console-screen')||!navigator.wakeLock)return;
+ wakePending=true;
+ try{
+  const lock=await navigator.wakeLock.request('screen');
+  if(!document.getElementById('console-screen')){await lock.release();return;}
+  screenWakeLock=lock;
+  lock.addEventListener('release',()=>{if(screenWakeLock===lock)screenWakeLock=null;});
+ }catch{}finally{wakePending=false;}
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')keepConsoleAwake();});
+function show(html){app.innerHTML=html;app.hidden=false;if(screenWakeLock&&!document.getElementById('console-screen')){screenWakeLock.release().catch(()=>{});screenWakeLock=null;}}
 function message(text,error=false){let p=document.getElementById('message');if(!p){p=document.createElement('p');p.id='message';p.setAttribute('role','status');app.append(p);}p.className=error?'error':'status';p.textContent=text;}
 async function api(action,body={}){
  const r=await fetch('/oaclis/auth',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':admin,'X-Device-Code':code},body:JSON.stringify({action,...body}),cache:'no-store'});
@@ -56,9 +67,10 @@ async function openConsole(chat){
  clearTimeout(timer);
  show('<button id="back" class="secondary">← Chat autorizzate</button><h1 id="console-title"></h1><pre id="console-screen" tabindex="0" aria-label="Console">Connessione…</pre><form id="console-input"><textarea aria-label="Messaggio" maxlength="8000" rows="2" placeholder="Scrivi un messaggio" disabled></textarea><button disabled aria-label="Invia messaggio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></form><div id="console-keys"></div>');
  document.getElementById('console-title').textContent=chat.name;
+ keepConsoleAwake();
  const screen=document.getElementById('console-screen'),form=document.getElementById('console-input'),text=form.querySelector('textarea');
  let busy=false,closed=false;
- document.getElementById('back').onclick=()=>{closed=true;clearTimeout(timer);protectedView().catch(()=>location.replace('/oaclis/auth'));};
+ document.getElementById('back').onclick=()=>{closed=true;document.removeEventListener('visibilitychange',resume);clearTimeout(timer);protectedView().catch(()=>location.replace('/oaclis/auth'));};
  const send=async(operation,body={})=>{
   if(busy||closed)return false;busy=true;
   try{
@@ -71,13 +83,15 @@ async function openConsole(chat){
    form.querySelectorAll('textarea,button').forEach(element=>element.disabled=false);return true;
   }catch(e){if(!closed)screen.textContent=e.message;return false;}finally{busy=false;}
  };
- const poll=async()=>{if(closed)return;if(await send('read'))timer=setTimeout(poll,1500);};
+ const poll=async()=>{if(closed)return;if(document.hidden||busy){timer=setTimeout(poll,1500);return;}if(await send('read')){clearTimeout(timer);timer=setTimeout(poll,1500);}};
+ const resume=()=>{if(document.visibilityState==='visible'&&!closed){clearTimeout(timer);poll();}};
+ document.addEventListener('visibilitychange',resume);
  form.onsubmit=async event=>{event.preventDefault();if(busy)return;clearTimeout(timer);if(await send('input',{text:text.value,key:'Enter'}))text.value='';if(!closed)timer=setTimeout(poll,1500);};
  text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
  for(const [key,label] of [['Enter','↵'],['Escape','Esc'],['Tab','Tab'],['Up','↑'],['Down','↓'],['C-c','Ctrl+C']]){
   const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{if(busy)return;clearTimeout(timer);await send('input',{key});if(!closed)timer=setTimeout(poll,1500);};document.getElementById('console-keys').append(button);
  }
- if(await send('open'))timer=setTimeout(poll,1500);
+ if(await send('open')){clearTimeout(timer);timer=setTimeout(poll,1500);}
 }
 async function protectedView(){
  const x=await api('protected');

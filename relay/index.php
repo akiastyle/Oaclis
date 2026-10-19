@@ -1,5 +1,5 @@
 <?php
-// index.php v1.4.224
+// index.php v1.4.226
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -7,7 +7,7 @@ header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
 header("Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
-header('Permissions-Policy: publickey-credentials-create=(self), publickey-credentials-get=(self)');
+header('Permissions-Policy: publickey-credentials-create=(self), publickey-credentials-get=(self), screen-wake-lock=(self)');
 if (($_SERVER['HTTP_HOST'] ?? '') !== 'www.krprojects.it') { http_response_code(404); exit; }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
