@@ -1,5 +1,5 @@
 <?php
-// index.php v1.4.220
+// index.php v1.4.222
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -199,5 +199,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD']!=='GET') {http_response_code(405);exit;}
 ?>
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><link rel="stylesheet" href="/oaclis/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/oaclis/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><link rel="stylesheet" href="/oaclis/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/oaclis/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
 <body><main id="app" hidden aria-live="polite"></main></body></html>
