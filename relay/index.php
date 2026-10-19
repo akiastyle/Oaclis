@@ -1,5 +1,5 @@
 <?php
-// index.php v1.4.228
+// index.php v1.4.229
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -16,6 +16,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     session_name('OaclisAuthTest');
     session_save_path(PRIVATE_DIR . '/sessions');
     ini_set('session.use_strict_mode', '1');
+    ini_set('session.gc_maxlifetime', '7200');
     session_set_cookie_params(['lifetime'=>0, 'path'=>'/oaclis/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
     session_start();
     $config = require PRIVATE_DIR . '/config.php';
