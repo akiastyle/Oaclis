@@ -37,3 +37,7 @@ con scadenza breve e un comando in attesa per telefono; Rust riusa terminal/tmux
 Il master riceve un comando alla volta, senza aprire porte pubbliche. Le risposte
 restano isolate per telefono e chat; revoca, logout e rimozione del permesso bloccano
 l'accesso. Il relay conserva solo l'ultima schermata, non l'archivio della chat.
+
+L'installazione mobile usa manifest.webmanifest, le icone PNG e sw.js nel solo scope
+/oaclis/. Il service worker usa esclusivamente la rete: nessuna cache di chat,
+risposte della console, autorizzazioni o credenziali.

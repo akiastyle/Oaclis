@@ -1,5 +1,6 @@
-// app.js v1.20.134
+// app.js v1.20.135
 'use strict';
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/oaclis/sw.js',{scope:'/oaclis/'}).catch(()=>{});
 const app=document.getElementById('app');
 window.addEventListener('hashchange',()=>{if(location.hash)location.reload();});
 const fragment=new URLSearchParams(location.hash.slice(1));
