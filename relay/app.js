@@ -1,4 +1,4 @@
-// app.js v1.20.135
+// app.js v1.21.141
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/oaclis/sw.js',{scope:'/oaclis/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -66,12 +66,14 @@ function renderAuthorizedChats(chats){
 }
 async function openConsole(chat){
  clearTimeout(timer);
- show('<button id="back" class="secondary">← Chat autorizzate</button><h1 id="console-title"></h1><pre id="console-screen" tabindex="0" aria-label="Console">Connessione…</pre><form id="console-input"><textarea aria-label="Messaggio" maxlength="8000" rows="2" placeholder="Scrivi un messaggio" disabled></textarea><button disabled aria-label="Invia messaggio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></form><div id="console-keys"></div>');
+ show('<h1 id="console-title"></h1><pre id="console-screen" tabindex="0" aria-label="Console">Connessione…</pre><form id="console-input"><textarea aria-label="Messaggio" maxlength="8000" rows="2" placeholder="Scrivi un messaggio" disabled></textarea><button disabled aria-label="Invia messaggio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></form><div id="console-keys"><button id="back" class="secondary" type="button" aria-label="Chat autorizzate" title="Chat autorizzate">&lt;</button></div>');
  document.getElementById('console-title').textContent=chat.name;
  keepConsoleAwake();
+ const fitConsole=()=>document.documentElement.style.setProperty('--console-height',(window.visualViewport?.height??innerHeight)+'px');
+ fitConsole();window.visualViewport?.addEventListener('resize',fitConsole);window.addEventListener('resize',fitConsole);
  const screen=document.getElementById('console-screen'),form=document.getElementById('console-input'),text=form.querySelector('textarea');
  let busy=false,closed=false;
- document.getElementById('back').onclick=()=>{closed=true;document.removeEventListener('visibilitychange',resume);clearTimeout(timer);protectedView().catch(()=>location.replace('/oaclis/auth'));};
+ document.getElementById('back').onclick=()=>{closed=true;window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.documentElement.style.removeProperty('--console-height');document.removeEventListener('visibilitychange',resume);clearTimeout(timer);protectedView().catch(()=>location.replace('/oaclis/auth'));};
  const send=async(operation,body={})=>{
   if(busy||closed)return false;busy=true;
   try{
