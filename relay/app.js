@@ -1,4 +1,4 @@
-// app.js v1.21.141
+// app.js v1.22.148
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/oaclis/sw.js',{scope:'/oaclis/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -107,6 +107,11 @@ async function protectedView(){
 async function deviceView(){
  const x=await api('status');
  if(x.status==='pending'){show('<h1>Richiesta inviata</h1><p>La passkey è pronta. Approva questo telefono dalla pagina sul PC.</p>');timer=setInterval(async()=>{try{const s=await api('status');if(s.status==='approved'){clearInterval(timer);await deviceView();}}catch{clearInterval(timer);app.hidden=true;app.replaceChildren();}},3000);return;}
- show('<h1>Accedi a Oaclis</h1><p>Conferma con la passkey del telefono per aprire l’area riservata.</p><button id="login">Accedi con passkey</button>');document.getElementById('login').onclick=e=>run(e.target,async()=>{const data=await api('login-options');const c=await navigator.credentials.get(options(data));await api('login',credential(c));location.replace('/oaclis/');});
+ const login=async()=>{
+  show('');
+  try{const data=await api('login-options');const c=await navigator.credentials.get(options(data));await api('login',credential(c));location.replace('/oaclis/');}
+  catch(e){show('<button id="login">Riprova con passkey</button>');message(e.name==='NotAllowedError'?'Accesso annullato.':e.message,true);document.getElementById('login').onclick=()=>login();}
+ };
+ await login();
 }
 (async()=>{try{if(admin)await adminView();else if(invite)await registerView();else if(code){if(authPage)await deviceView();else try{await protectedView();}catch{location.replace('/oaclis/auth');}}}catch(e){if(admin||invite){show('<h1>Prova accesso</h1>');message(e.message,true);}else{app.hidden=true;app.replaceChildren();}}})();
