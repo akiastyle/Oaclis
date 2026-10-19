@@ -1,4 +1,4 @@
-// mobile.rs v1.18.256
+// mobile.rs v1.18.273
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -110,6 +110,23 @@ impl Registry {
 pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
     let registry = Arc::new(Registry { devices: Mutex::new(Vec::new()), exchange: Mutex::new(()) });
     if enabled && config.join("mobile-relay.json").is_file() {
+        let console_config = config.clone();
+        thread::spawn(move || {
+            let mut results = Vec::<Value>::new();
+            loop {
+                if let Ok(reply) = request(&console_config, json!({"action":"console-exchange","results":results})) {
+                    results.clear();
+                    for command in reply["commands"].as_array().into_iter().flatten() {
+                        let result = crate::terminal::request(None, &command["value"]);
+                        let mut answer = json!({"device":command["device"],"id":command["id"]});
+                        match result { Ok(value) => answer["screen"] = json!(value["screen"].as_str().unwrap_or("").chars().rev().take(14000).collect::<String>().chars().rev().collect::<String>()), Err(_) => answer["error"] = json!(true) }
+                        results.push(answer);
+                    }
+                    if !results.is_empty() { continue; }
+                }
+                thread::sleep(Duration::from_secs(2));
+            }
+        });
         let worker = registry.clone();
         thread::spawn(move || loop {
             {

@@ -1,5 +1,5 @@
 <?php
-// index.php v1.4.178
+// index.php v1.4.220
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -72,6 +72,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $allowed[$chat['id']]=['id'=>$chat['id'],'name'=>$chat['name']];
             }
             $state['devices'][$target]['chats']=array_values($allowed);
+            if (isset($state['devices'][$target]['console']) && !isset($allowed[$state['devices'][$target]['console']['chat_id']])) unset($state['devices'][$target]['console']);
             $result=['ok'=>true];
             break;
         case 'invite':
@@ -89,6 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action==='approve' && $state['devices'][$id]['status']!=='pending') throw new RuntimeException();
             $state['devices'][$id]['status']=$action==='approve'?'approved':'revoked';
             if ($action==='revoke') $state['devices'][$id]['lastSeen']=0;
+            if ($action==='revoke') unset($state['devices'][$id]['console']);
             $result=['ok'=>true];
             break;
         case 'register-options':
@@ -133,6 +135,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['auth']=['device'=>$deviceId,'until'=>time()+300];
             $result=['ok'=>true];
             break;
+        case 'console': case 'console-result':
+            if (!$record || $record['status']!=='approved' || ($_SESSION['auth']['device']??'')!==$deviceId || ($_SESSION['auth']['until']??0)<time()) respond([],403);
+            if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
+            $chat=$input['chat_id']??'';
+            if (!is_string($chat) || !in_array($chat,array_column($record['chats']??[],'id'),true)) respond([],403);
+            if ($action==='console-result') {
+                $job=$state['devices'][$deviceId]['console']??[];
+                if (($job['id']??'')!==($input['request_id']??'') || ($job['chat_id']??'')!==$chat) respond([],403);
+                $result=isset($job['result'])?$job['result']:['pending'=>true];
+                break;
+            }
+            $operation=$input['operation']??''; $text=$input['text']??''; $key=$input['key']??'';
+            if (!in_array($operation,['open','read','input'],true) || !is_string($text) || mb_strlen($text)>8000 || str_contains($text,"\0") || !in_array($key,['','Enter','Escape','Tab','Up','Down','Left','Right','BSpace','C-c'],true)) throw new RuntimeException();
+            $previous=$record['console']??[];
+            if (($previous['until']??0)>time() && !isset($previous['result'])) respond(['error'=>'Attendi il completamento della richiesta.'],409);
+            $id=bin2hex(random_bytes(16));
+            $state['devices'][$deviceId]['console']=['id'=>$id,'chat_id'=>$chat,'until'=>min(time()+20,$_SESSION['auth']['until']),'value'=>['chat_id'=>$chat,'action'=>$operation,'text'=>$text,'key'=>$key]];
+            $result=['request_id'=>$id];
+            break;
+        case 'console-exchange':
+            if (!$isAdmin) respond([],403);
+            foreach (($input['results']??[]) as $answer) {
+                $target=$answer['device']??''; $job=$state['devices'][$target]['console']??[];
+                if (($job['id']??'')!==($answer['id']??null) || ($job['until']??0)<time() || ($state['devices'][$target]['status']??'')!=='approved' || !in_array($job['chat_id'],array_column($state['devices'][$target]['chats']??[],'id'),true)) continue;
+                $screen=$answer['screen']??null;
+                $state['devices'][$target]['console']['result']=is_string($screen)&&strlen($screen)<=60000?['screen'=>$screen]:['error'=>'Console non disponibile. Riprova.'];
+            }
+            $result=['commands'=>[]];
+            foreach ($state['devices'] as $id=>$phone) {
+                $job=$phone['console']??[];
+                if ($phone['status']==='approved' && ($job['until']??0)>=time() && !isset($job['result']) && in_array($job['chat_id'],array_column($phone['chats']??[],'id'),true)) {
+                    if (!empty($job['claimed'])) continue;
+                    $state['devices'][$id]['console']['claimed']=true;
+                    $result['commands'][]=['device'=>$id,'id'=>$job['id'],'value'=>$job['value']];
+                    break;
+                }
+            }
+            break;
         case 'protected':
             if (!$record || $record['status']!=='approved' || ($_SESSION['auth']['device']??'')!==$deviceId || ($_SESSION['auth']['until']??0)<time()) respond([],403);
             if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
@@ -140,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
         case 'logout':
             if ($record && ($_SESSION['auth']['device']??'')===$deviceId) $state['devices'][$deviceId]['lastSeen']=0;
-            unset($_SESSION['auth'],$_SESSION['challenge']);
+            unset($_SESSION['auth'],$_SESSION['challenge'],$state['devices'][$deviceId]['console']);
             $result=['ok'=>true];
             break;
         default: respond([],404);

@@ -31,3 +31,9 @@ telefoni. La lista si aggiorna ogni cinque secondi, senza trasferire archivi o c
 
 Abbinamento e passkey: /oaclis/auth. La card apre il QR del solo indirizzo di accesso.
 .htaccess instrada auth; legacy.php mantiene compatibili i vecchi link ed endpoint.
+
+Una chat autorizzata apre la console del master. Il relay accoda soltanto open/read/input
+con scadenza breve e un comando in attesa per telefono; Rust riusa terminal/tmux.
+Il master riceve un comando alla volta, senza aprire porte pubbliche. Le risposte
+restano isolate per telefono e chat; revoca, logout e rimozione del permesso bloccano
+l'accesso. Il relay conserva solo l'ultima schermata, non l'archivio della chat.

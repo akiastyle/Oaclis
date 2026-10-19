@@ -1,4 +1,4 @@
-// app.js v1.15.79
+// app.js v1.18.108
 'use strict';
 const app=document.getElementById('app');
 window.addEventListener('hashchange',()=>{if(location.hash)location.reload();});
@@ -49,8 +49,35 @@ function renderAuthorizedChats(chats){
  list.dataset.signature=signature;list.replaceChildren();
  if(!chats.length){const p=document.createElement('p');p.textContent='Nessuna chat autorizzata dal master.';list.append(p);return;}
  const ul=document.createElement('ul');
- for(const chat of chats){const li=document.createElement('li');li.textContent=chat.name;ul.append(li);}
+ for(const chat of chats){const li=document.createElement('li');const button=document.createElement('button');button.className='secondary';button.textContent=chat.name;button.onclick=()=>openConsole(chat);li.append(button);ul.append(li);}
  list.append(ul);
+}
+async function openConsole(chat){
+ clearTimeout(timer);
+ show('<button id="back" class="secondary">← Chat autorizzate</button><h1 id="console-title"></h1><pre id="console-screen" tabindex="0" aria-label="Console">Connessione…</pre><form id="console-input"><textarea aria-label="Messaggio" maxlength="8000" rows="2" placeholder="Scrivi un messaggio" disabled></textarea><button disabled>Invia</button></form><div id="console-keys"></div>');
+ document.getElementById('console-title').textContent=chat.name;
+ const screen=document.getElementById('console-screen'),form=document.getElementById('console-input'),text=form.querySelector('textarea');
+ let busy=false,closed=false;
+ document.getElementById('back').onclick=()=>{closed=true;clearTimeout(timer);protectedView().catch(()=>location.replace('/oaclis/auth'));};
+ const send=async(operation,body={})=>{
+  if(busy||closed)return false;busy=true;
+  try{
+   const request=await api('console',{chat_id:chat.id,operation,...body});
+   const deadline=Date.now()+23000;let result;
+   do{await new Promise(resolve=>setTimeout(resolve,700));if(closed)return false;result=await api('console-result',{chat_id:chat.id,request_id:request.request_id});}while(result.pending&&Date.now()<deadline);
+   if(result.pending)throw new Error('Il master non risponde. Riapri la console.');
+   if(result.error)throw new Error(result.error);
+   screen.textContent=result.screen;screen.scrollTop=screen.scrollHeight;
+   form.querySelectorAll('textarea,button').forEach(element=>element.disabled=false);return true;
+  }catch(e){if(!closed)screen.textContent=e.message;return false;}finally{busy=false;}
+ };
+ const poll=async()=>{if(closed)return;if(await send('read'))timer=setTimeout(poll,1500);};
+ form.onsubmit=async event=>{event.preventDefault();if(busy)return;clearTimeout(timer);if(await send('input',{text:text.value,key:'Enter'}))text.value='';if(!closed)timer=setTimeout(poll,1500);};
+ text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
+ for(const [key,label] of [['Enter','↵'],['Escape','Esc'],['Tab','Tab'],['Up','↑'],['Down','↓'],['C-c','Ctrl+C']]){
+  const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{if(busy)return;clearTimeout(timer);await send('input',{key});if(!closed)timer=setTimeout(poll,1500);};document.getElementById('console-keys').append(button);
+ }
+ if(await send('open'))timer=setTimeout(poll,1500);
 }
 async function protectedView(){
  const x=await api('protected');
