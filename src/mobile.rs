@@ -1,4 +1,4 @@
-// mobile.rs v1.3.64
+// mobile.rs v1.8.116
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -24,15 +24,17 @@ fn invitation_qr(url: &str) -> io::Result<String> {
         .render::<svg::Color>().min_dimensions(288, 288).build())
 }
 
-pub(crate) fn invite(config: &Path) -> io::Result<Value> {
+fn request(config: &Path, payload: Value) -> io::Result<Value> {
     let settings: Settings = serde_json::from_reader(crate::open_regular(&config.join("mobile-relay.json"))?.0)
         .map_err(|_| invalid("Collegamento mobile da configurare"))?;
     if settings.admin_key.len() != 64 || !settings.admin_key.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(invalid("Collegamento mobile da configurare"));
     }
-    crate::state_transport::log("SEND mobile-relay invite".into());
+    let action = payload["action"].as_str().unwrap_or("");
+    crate::state_transport::log(format!("SEND mobile-relay {action}"));
     // Feed the credential over stdin: it must never appear in process arguments.
-    let input = format!("url = \"{ENDPOINT}\"\nheader = \"Origin: https://www.krprojects.it\"\nheader = \"Content-Type: application/json\"\nheader = \"X-Admin-Key: {}\"\ndata = \"{{\\\"action\\\":\\\"invite\\\"}}\"\n", settings.admin_key);
+    let data = serde_json::to_string(&serde_json::to_string(&payload)?)?;
+    let input = format!("url = \"{ENDPOINT}\"\nheader = \"Origin: https://www.krprojects.it\"\nheader = \"Content-Type: application/json\"\nheader = \"X-Admin-Key: {}\"\ndata = {data}\n", settings.admin_key);
     let mut child = Command::new("curl")
         .args(["--silent", "--fail", "--proto", "=https", "--connect-timeout", "3", "--max-time", "10", "--max-filesize", "16384", "--config", "-"])
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
@@ -40,18 +42,58 @@ pub(crate) fn invite(config: &Path) -> io::Result<Value> {
     if sent.is_err() { let _ = child.kill(); let _ = child.wait(); return Err(io::Error::other("Invito non disponibile. Riprova.")); }
     let output = child.wait_with_output()?;
     if !output.status.success() {
-        crate::state_transport::log(format!("RECV mobile-relay invite failed {}", output.status));
+        crate::state_transport::log(format!("RECV mobile-relay {action} failed {}", output.status));
         return Err(io::Error::other("Invito non disponibile. Riprova."));
     }
     let reply: Value = serde_json::from_slice(&output.stdout).map_err(|_| io::Error::other("Invito non disponibile. Riprova."))?;
+    crate::state_transport::log(format!("RECV mobile-relay {action} OK"));
+    Ok(reply)
+}
+
+pub(crate) fn invite(config: &Path) -> io::Result<Value> {
+    let reply = request(config, json!({"action":"invite"}))?;
     let qr = invitation_qr(reply["url"].as_str().unwrap_or(""))?;
-    crate::state_transport::log("RECV mobile-relay invite OK".into());
     Ok(json!({"qr_svg":qr,"expires_in":600}))
+}
+
+
+fn pending_devices(reply: &Value) -> io::Result<Value> {
+    let devices = reply["devices"].as_array().ok_or_else(|| invalid("Richieste mobile non disponibili"))?;
+    let mut pending = Vec::new();
+    for device in devices.iter().filter(|d| d["status"] == "pending") {
+        let id = device["id"].as_str().unwrap_or("");
+        let name = device["name"].as_str().unwrap_or("");
+        if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) || name.is_empty() || name.chars().count() > 60 || name.chars().any(char::is_control) {
+            return Err(invalid("Richiesta mobile non valida"));
+        }
+        pending.push(json!({"id":id,"name":name}));
+    }
+    Ok(json!({"devices":pending}))
+}
+
+pub(crate) fn pending(config: &Path) -> io::Result<Value> {
+    pending_devices(&request(config, json!({"action":"admin-list"}))?)
+}
+
+pub(crate) fn approve(config: &Path, value: &Value) -> io::Result<Value> {
+    let id = value["id"].as_str().unwrap_or("");
+    let accept = value["accept"].as_bool().ok_or_else(|| invalid("Conferma mobile richiesta"))?;
+    if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) { return Err(invalid("Telefono non valido")); }
+    let reply = request(config, json!({"action":if accept {"approve"} else {"revoke"},"id":id}))?;
+    if reply["ok"] != true { return Err(io::Error::other("Conferma non riuscita. Riprova.")); }
+    Ok(json!({"ok":true}))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn pending_filters_public_fields_and_rejects_invalid_identity() {
+        let input = json!({"devices":[{"id":"a".repeat(64),"name":"Telefono","status":"pending","key":"private"},{"id":"b".repeat(64),"name":"Altro","status":"approved"}]});
+        assert_eq!(pending_devices(&input).unwrap(), json!({"devices":[{"id":"a".repeat(64),"name":"Telefono"}]}));
+        assert!(pending_devices(&json!({"devices":[{"id":"bad","name":"Telefono","status":"pending"}]})).is_err());
+        assert!(pending_devices(&json!({})).is_err());
+    }
     #[test]
     fn qr_accepts_only_the_fixed_relay_and_random_code() {
         let url = format!("{INVITE_PREFIX}{}", "a".repeat(64));

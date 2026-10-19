@@ -1,4 +1,4 @@
-// panels.js v3.134.2431
+// panels.js v3.136.2484
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -679,24 +679,63 @@ logPanel.querySelector(".popover-close").onclick = () => {
 setInterval(refreshOrchestratorLog, 1000);
 
 
+function renderMobileApproval(panel, device) {
+  const content = panel.querySelector('.mobile-invite-content');
+  content.innerHTML = '<h3>' + esc(device.name) + '</h3><p>Abbinamento completato. Autorizzare questo telefono?</p><button class="primary" type="button" data-accept="true">Autorizza</button><button class="delete-presentation" type="button" data-accept="false">Rifiuta</button><p class="mobile-status" role="status"></p>';
+  positionContext(panel, panel.opener);
+  for (const button of content.querySelectorAll('[data-accept]')) button.onclick = async () => {
+    const accept = button.dataset.accept === 'true';
+    content.querySelectorAll('button').forEach(b => b.disabled = true);
+    content.querySelector('.mobile-status').textContent = accept ? 'Autorizzazione…' : 'Rifiuto…';
+    try {
+      await api('mobile/approve', { id: device.id, accept });
+      if (panel.isConnected) content.innerHTML = '<h3>' + esc(device.name) + '</h3><p>' + (accept ? 'Telefono autorizzato.' : 'Richiesta rifiutata.') + '</p>';
+    } catch (_) {
+      if (panel.isConnected) {
+        content.querySelector('.mobile-status').textContent = 'Conferma non riuscita. Riprova.';
+        content.querySelectorAll('button').forEach(b => b.disabled = false);
+      }
+    }
+  };
+}
+
 async function openMobileInvite() {
-  document.querySelector('#mobile-invite')?.remove();
+  document.querySelector('#mobile-invite .popover-close')?.click();
   const panel = document.createElement('div');
   panel.id = 'mobile-invite'; panel.opener = $('#add-device');
   panel.setAttribute('popover', 'manual'); panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-label', 'Aggiungi mobile');
-  panel.innerHTML = '<button class="icon-button popover-close" type="button" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Aggiungi mobile</h2><div class="mobile-invite-content" aria-live="polite"><p>Preparazione QR…</p></div>';
+  panel.innerHTML = '<button class="icon-button popover-close" type="button" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Aggiungi mobile</h2><div class="mobile-invite-content" aria-live="polite"><p>Preparazione…</p></div>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, panel.opener); bindPanelDrag(panel);
-  let expiry;
-  panel.querySelector('.popover-close').onclick = () => { clearTimeout(expiry); panel.remove(); };
+  let expiry, timer, expiresAt;
+  panel.querySelector('.popover-close').onclick = () => { clearTimeout(expiry); clearTimeout(timer); panel.remove(); };
   const content = panel.querySelector('.mobile-invite-content');
+  const poll = async () => {
+    if (!panel.isConnected) return;
+    try {
+      const pending = await api('mobile/pending');
+      if (!panel.isConnected) return;
+      if (pending.devices.length) { clearTimeout(expiry); renderMobileApproval(panel, pending.devices[0]); return; }
+      content.querySelector('.mobile-status').textContent = '';
+    } catch (_) {
+      if (!panel.isConnected) return;
+      const status = content.querySelector('.mobile-status');
+      if (status) status.textContent = 'Collegamento momentaneamente non disponibile.';
+    }
+    if (panel.isConnected && Date.now() < expiresAt) timer = setTimeout(poll, 3000);
+  };
   try {
+    const pending = await api('mobile/pending');
+    if (!panel.isConnected) return;
+    if (pending.devices.length) { renderMobileApproval(panel, pending.devices[0]); return; }
     const result = await api('mobile/invite', {});
     if (!panel.isConnected) return;
-    content.innerHTML = '<div class="mobile-qr" role="img" aria-label="QR di abbinamento telefono">' + result.qr_svg + '</div><p>Inquadra con il telefono.</p><small>Valido 10 minuti · un solo abbinamento</small>';
+    content.innerHTML = '<div class="mobile-qr" role="img" aria-label="QR di abbinamento telefono">' + result.qr_svg + '</div><p>Inquadra con il telefono.</p><small>Valido 10 minuti · un solo abbinamento</small><p class="mobile-status" role="status"></p>';
     positionContext(panel, panel.opener);
-    expiry = setTimeout(() => { if (panel.isConnected) content.innerHTML = '<p>QR scaduto. Chiudi e riapri per generarne uno nuovo.</p>'; }, result.expires_in * 1000);
+    expiresAt = Date.now() + result.expires_in * 1000;
+    expiry = setTimeout(() => { clearTimeout(timer); if (panel.isConnected) content.innerHTML = '<p>QR scaduto. Chiudi e riapri per generarne uno nuovo.</p>'; }, result.expires_in * 1000);
+    timer = setTimeout(poll, 3000);
   } catch (_) {
-    if (panel.isConnected) content.innerHTML = '<p>QR non disponibile. Chiudi e riprova.</p>';
+    if (panel.isConnected) content.innerHTML = '<p>Collegamento non disponibile. Chiudi e riprova.</p>';
   }
 }

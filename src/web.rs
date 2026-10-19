@@ -1,4 +1,4 @@
-// web.rs v2.26.1634
+// web.rs v2.26.1642
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -244,6 +244,14 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Post, "/api/mobile/invite") => {
                     if role != "master" { return Err(invalid("Invito disponibile dal master")); }
                     crate::mobile::invite(&config)
+                }
+                (&Method::Get, "/api/mobile/pending") => {
+                    if role != "master" { return Err(invalid("Conferma disponibile dal master")); }
+                    crate::mobile::pending(&config)
+                }
+                (&Method::Post, "/api/mobile/approve") => {
+                    if role != "master" { return Err(invalid("Conferma disponibile dal master")); }
+                    crate::mobile::approve(&config, &body(&mut request)?)
                 }
                 (&Method::Get, "/api/peers") => Ok(crate::peers::snapshot(&peers)),
                 (&Method::Post, "/api/peers/approve") => crate::peers::approve(&peers, &home, &body(&mut request)?),
