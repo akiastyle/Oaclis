@@ -1,4 +1,4 @@
-// web.rs v2.26.1668
+// web.rs v2.26.1671
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -133,6 +133,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
         Err(error) => return Err(error),
     };
     if !matches!(role.as_str(), "master" | "client") { return Err(invalid("Ruolo Oaclis non valido")); }
+    let brand_icon = if role == "master" { "oaclis-crown.svg" } else { "oaclis-particles.png" };
     let mut random = [0u8; 32];
     fs::File::open("/dev/urandom")?.read_exact(&mut random)?;
     let token: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
@@ -202,7 +203,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 "/assets/oaclis-crown.svg" => Some((include_str!("../ui/assets/oaclis-crown.svg").into(), "image/svg+xml")),
                 "/assets/oaclis-whale.svg" => Some((include_str!("../ui/assets/oaclis-whale.svg").into(), "image/svg+xml")),
                 "/" => Some((
-                    include_str!("../ui/index.html").replace("__TOKEN__", &token).replace("__APP_VERSION__", env!("OACLIS_APP_VERSION")),
+                    include_str!("../ui/index.html").replace("__TOKEN__", &token).replace("__BRAND_ICON__", brand_icon).replace("__APP_VERSION__", env!("OACLIS_APP_VERSION")),
                     "text/html; charset=utf-8",
                 )),
                 "/style.css" => Some((

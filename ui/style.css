@@ -1,4 +1,4 @@
-/* style.css v2.0.1343 */
+/* style.css v2.0.1345 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1059,7 +1059,7 @@ select {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
 
-.brand { display: inline-flex; align-items: center; gap: var(--space-8); }
+.brand { display: inline-flex; align-items: center; gap: var(--space-2); }
 .brand-logo { width: var(--size-32); height: var(--size-32); object-fit: contain; flex-shrink: 0; }
 
 @font-face {
