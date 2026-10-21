@@ -1,13 +1,13 @@
-// state_migration.rs v1.11.288
+// state_migration.rs v1.11.310
 //! Read the former Oaclis SQLite archive once; never modify or delete its source.
 use crate::state_store::{Presentation, State, read_json};
 use rusqlite::{Connection, OpenFlags};
 use serde_json::json;
-use std::{collections::BTreeSet, io, path::Path};
+use std::{collections::BTreeSet, io, path::Path, sync::Arc};
 
 pub(crate) fn load(config: &Path) -> io::Result<State> {
     let mut state = State::default();
-    state.shared = read_json(&config.join("shared-settings.json"), state.shared.clone())?;
+    state.shared = Arc::new(read_json(&config.join("shared-settings.json"), state.shared.as_ref().clone())?);
     let path = config.join("appearance.sqlite");
     match crate::open_regular(&path) {
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -16,12 +16,12 @@ pub(crate) fn load(config: &Path) -> io::Result<State> {
                 .into_iter()
                 .flatten()
             {
-                state.appearance.insert(
+                Arc::make_mut(&mut state.appearance).insert(
                     key.clone(),
-                    Presentation {
+                    Arc::new(Presentation {
                         value: value.clone(),
                         ..Default::default()
-                    },
+                    }),
                 );
             }
             return Ok(state);
@@ -113,13 +113,13 @@ pub(crate) fn load(config: &Path) -> io::Result<State> {
             .map_err(io::Error::other)?;
         for row in rows {
             let (key, value, hidden, sync) = row.map_err(io::Error::other)?;
-            state.appearance.insert(
+            Arc::make_mut(&mut state.appearance).insert(
                 key,
-                Presentation {
+                Arc::new(Presentation {
                     value: serde_json::from_str(&value)?,
                     hidden,
                     sync: serde_json::from_str(&sync)?,
-                },
+                }),
             );
         }
     }
@@ -141,7 +141,7 @@ pub(crate) fn load(config: &Path) -> io::Result<State> {
             .map_err(io::Error::other)?
         {
             let (key, value) = row.map_err(io::Error::other)?;
-            target.insert(key, serde_json::from_str(&value)?);
+            Arc::make_mut(target).insert(key, serde_json::from_str(&value)?);
         }
     }
     // Legacy schemas are refused rather than silently dropping fields during conversion.
@@ -158,8 +158,8 @@ pub(crate) fn load(config: &Path) -> io::Result<State> {
             "Schema SQLite precedente: completare la migrazione con la versione precedente prima della conversione JSON",
         ));
     }
-    for record in state.appearance.values_mut() {
-        record.sync.as_object_mut().map(|v| v.remove("removed"));
+    for record in Arc::make_mut(&mut state.appearance).values_mut() {
+        Arc::make_mut(record).sync.as_object_mut().map(|v| v.remove("removed"));
     }
     Ok(state)
 }

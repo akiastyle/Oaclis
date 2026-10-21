@@ -1,5 +1,6 @@
-// shared_records.rs v1.19.853
+// shared_records.rs v1.19.870
 //! Shared settings retain the existing clocks, stable identities and ownership boundaries.
+use std::sync::Arc;
 use crate::{
     invalid,
     state_store::{MODULES, State, chat_record, scopes, set_scopes, strip_entries},
@@ -224,7 +225,7 @@ pub(crate) fn snapshot(
         }
         out[key] = json!({"name":name,"appearance":appearance});
     }
-    for (key, record) in &state.appearance {
+    for (key, record) in state.appearance.iter() {
         let Some(chat) = key.strip_prefix("chat:") else {
             continue;
         };
@@ -324,7 +325,7 @@ pub(crate) fn apply(
                 };
                 if value.is_null() {
                     devices.remove(alias);
-                    state.appearance.remove(&format!("device:{alias}"));
+                    Arc::make_mut(&mut state.appearance).remove(&format!("device:{alias}"));
                     continue;
                 }
                 let mut appearance = json!({"icon":"desktop","color":""});
@@ -332,11 +333,7 @@ pub(crate) fn apply(
                     appearance[k] = v.clone();
                 }
                 appearance["label"] = value["name"].clone();
-                state
-                    .appearance
-                    .entry(format!("device:{alias}"))
-                    .or_default()
-                    .value = appearance;
+                Arc::make_mut(Arc::make_mut(&mut state.appearance).entry(format!("device:{alias}")).or_default()).value = appearance;
                 if alias != "master" {
                     let device = devices.entry(alias.clone()).or_insert(
                         json!({"id":alias,"ssh_alias":format!("oaclis-unconfigured-{alias}")}),
@@ -350,7 +347,7 @@ pub(crate) fn apply(
                     for (k, v) in value.as_object().unwrap() {
                         appearance[k] = v.clone();
                     }
-                    state.appearance.entry(key.clone()).or_default().value = appearance;
+                    Arc::make_mut(Arc::make_mut(&mut state.appearance).entry(key.clone()).or_default()).value = appearance;
                 }
             }
             "preference" => {
@@ -415,7 +412,7 @@ pub(crate) fn apply(
                             .is_some_and(|r| r["value"].is_null())
                     })
                 {
-                    state.links.remove(&local_key);
+                    Arc::make_mut(&mut state.links).remove(&local_key);
                     continue;
                 }
                 let mut adapted = value.clone();
@@ -435,7 +432,7 @@ pub(crate) fn apply(
                 {
                     adapted["scopes"] = scopes.clone();
                 }
-                state.links.insert(local_key, adapted);
+                Arc::make_mut(&mut state.links).insert(local_key, adapted);
             }
             "position" => {
                 if !value.is_null() {

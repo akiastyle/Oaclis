@@ -1,4 +1,4 @@
-// state_store.rs v2.36.1174
+// state_store.rs v2.36.1272
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,7 @@ use std::{
 };
 
 pub(crate) const MODULES: [&str; 3] = ["chat", "paths", "apps"];
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct Presentation {
     pub value: Value,
     pub hidden: bool,
@@ -30,16 +30,16 @@ impl Default for Presentation {
         }
     }
 }
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct State {
     pub schema: u32,
-    pub appearance: BTreeMap<String, Presentation>,
-    pub analysis: BTreeMap<String, Value>,
-    pub links: BTreeMap<String, Value>,
-    pub transfers: BTreeMap<String, Value>,
+    pub appearance: Arc<BTreeMap<String, Arc<Presentation>>>,
+    pub analysis: Arc<BTreeMap<String, Value>>,
+    pub links: Arc<BTreeMap<String, Value>>,
+    pub transfers: Arc<BTreeMap<String, Value>>,
     #[serde(default)]
-    pub shared: Value,
+    pub shared: Arc<Value>,
 }
 impl Default for State {
     fn default() -> Self {
@@ -49,7 +49,7 @@ impl Default for State {
             analysis: Default::default(),
             links: Default::default(),
             transfers: Default::default(),
-            shared: json!({"records":{},"baseline":{},"mapping":{}}),
+            shared: Arc::new(json!({"records":{},"baseline":{},"mapping":{}})),
         }
     }
 }
@@ -143,10 +143,10 @@ fn read_tables(config: &Path) -> io::Result<State> {
         analysis: serde_json::from_value(read_json(&config.join("analysis.json"), json!({}))?)?,
         links: serde_json::from_value(read_json(&config.join("chat_links.json"), json!({}))?)?,
         transfers: serde_json::from_value(read_json(&config.join("transfers.json"), json!({}))?)?,
-        shared: read_json(
+        shared: Arc::new(read_json(
             &config.join("shared-settings.json"),
             json!({"records":{},"baseline":{},"mapping":{}}),
-        )?,
+        )?),
     })
 }
 fn external(config: &Path) -> bool {
@@ -260,33 +260,35 @@ fn persist(
     force: bool,
     related: Value,
 ) -> io::Result<()> {
-    let old = [
-        serde_json::to_value(&before.appearance)?,
-        serde_json::to_value(&before.analysis)?,
-        serde_json::to_value(&before.links)?,
-        serde_json::to_value(&before.transfers)?,
-        before.shared.clone(),
-    ];
-    let next = [
-        serde_json::to_value(&after.appearance)?,
-        serde_json::to_value(&after.analysis)?,
-        serde_json::to_value(&after.links)?,
-        serde_json::to_value(&after.transfers)?,
-        after.shared.clone(),
+    let changed = [
+        ("appearance.json", force || before.appearance != after.appearance),
+        ("analysis.json", force || before.analysis != after.analysis),
+        ("chat_links.json", force || before.links != after.links),
+        ("transfers.json", force || before.transfers != after.transfers),
+        ("shared-settings.json", force || before.shared != after.shared),
     ];
     let mut files = json!({});
-    for (index, name) in [
-        "appearance.json",
-        "analysis.json",
-        "chat_links.json",
-        "transfers.json",
-        "shared-settings.json",
-    ]
-    .iter()
-    .enumerate()
-    {
-        if force || old[index] != next[index] {
-            files[*name] = next[index].clone();
+    // The common single-table write serializes directly from the memory snapshot.
+    if related.as_object().unwrap().is_empty() && changed.iter().filter(|(_, dirty)| *dirty).count() == 1 {
+        let name = changed.iter().find(|(_, dirty)| *dirty).unwrap().0;
+        let path = config.join(name);
+        return match name {
+            "appearance.json" => staging::save_json(&path, &after.appearance),
+            "analysis.json" => staging::save_json(&path, &after.analysis),
+            "chat_links.json" => staging::save_json(&path, &after.links),
+            "transfers.json" => staging::save_json(&path, &after.transfers),
+            _ => staging::save_json(&path, &after.shared),
+        };
+    }
+    for (name, dirty) in changed {
+        if dirty {
+            files[name] = match name {
+                "appearance.json" => serde_json::to_value(&after.appearance)?,
+                "analysis.json" => serde_json::to_value(&after.analysis)?,
+                "chat_links.json" => serde_json::to_value(&after.links)?,
+                "transfers.json" => serde_json::to_value(&after.transfers)?,
+                _ => serde_json::to_value(&after.shared)?,
+            };
         }
     }
     for (name, value) in related.as_object().unwrap() {
@@ -378,7 +380,7 @@ fn measurements(config: &Path, state: &State) -> io::Result<(Value, Value)> {
         .collect();
     let mut inventories = json!({});
     let mut preparations = json!({});
-    for (key, record) in &state.appearance {
+    for (key, record) in state.appearance.iter() {
         let Some(chat) = key.strip_prefix("chat:") else {
             continue;
         };
@@ -424,7 +426,7 @@ fn read_operation(config: &Path, state: &State, key: &str, operation: &str) -> i
             result["scopes"] = state
                 .appearance
                 .get(&format!("chat:{chat}"))
-                .map(scopes)
+                .map(|record| scopes(record))
                 .unwrap_or(json!({"chat":true,"paths":true,"apps":true}));
             Ok(result)
         }
@@ -464,7 +466,7 @@ pub(crate) fn strip_entries(value: &mut Value) {
     }
 }
 pub(crate) fn chat_record<'a>(state: &'a mut State, chat: &str) -> &'a mut Presentation {
-    state.appearance.entry(format!("chat:{chat}")).or_default()
+    Arc::make_mut(Arc::make_mut(&mut state.appearance).entry(format!("chat:{chat}")).or_default())
 }
 pub(crate) fn set_scopes(record: &mut Presentation, value: &Value) -> io::Result<()> {
     if !value.as_object().is_some_and(|v| {
@@ -494,7 +496,7 @@ fn write_operation(
                 .as_object()
                 .ok_or_else(|| invalid("Personalizzazioni non valide"))?;
             for (key, value) in entries {
-                state.appearance.entry(key.clone()).or_default().value = value.clone();
+                Arc::make_mut(Arc::make_mut(&mut state.appearance).entry(key.clone()).or_default()).value = value.clone();
             }
             Ok(Value::Null)
         }
@@ -522,7 +524,7 @@ fn write_operation(
         "analysis-save" | "analysis-scopes" => {
             let chat = key.split_once(':').map(|(_, v)| v).unwrap_or(key);
             if operation == "analysis-save" {
-                state.analysis.insert(key.into(), value.clone());
+                Arc::make_mut(&mut state.analysis).insert(key.into(), value.clone());
                 let record = chat_record(state, chat);
                 for name in MODULES {
                     record.sync[name]
@@ -538,7 +540,7 @@ fn write_operation(
             read_operation(config, state, key, "analysis-get")
         }
         "transfer-save" => {
-            state.transfers.insert(key.into(), value.clone());
+            Arc::make_mut(&mut state.transfers).insert(key.into(), value.clone());
             Ok(json!(state.transfers))
         }
         "links-save" => {
@@ -567,11 +569,11 @@ fn write_operation(
             if link["flow"].is_object() {
                 link["transfer_pending"] = json!(link["flow"]["initialized"] != true);
             }
-            state.links.insert(key.into(), link);
+            Arc::make_mut(&mut state.links).insert(key.into(), link);
             read_operation(config, state, key, "links-get")
         }
         "links-flow" => {
-            if let Some(link) = state.links.get_mut(key) {
+            if let Some(link) = Arc::make_mut(&mut state.links).get_mut(key) {
                 if link["flow"]["generation"] == value["generation"] {
                     link["flow"] = value.clone();
                     link["transfer_pending"] = json!(value["initialized"] != true);
@@ -580,7 +582,7 @@ fn write_operation(
             read_operation(config, state, key, "links-get")
         }
         "links-delete" => {
-            state.links.remove(key);
+            Arc::make_mut(&mut state.links).remove(key);
             read_operation(config, state, key, "links-get")
         }
         "chat-visibility" | "chat-hide" | "chat-scopes" | "device-forget" => {
@@ -599,7 +601,7 @@ fn write_operation(
                     };
                 }
             }
-            state.links.retain(|_, link| {
+            Arc::make_mut(&mut state.links).retain(|_, link| {
                 let matched = if operation == "device-forget" {
                     link["source"] == key || link["target"] == key
                 } else {
@@ -611,10 +613,8 @@ fn write_operation(
                 !matched || !matches!(operation, "device-forget" | "chat-hide")
             });
             if operation == "device-forget" {
-                state.appearance.remove(&format!("device:{key}"));
-                state
-                    .analysis
-                    .retain(|k, _| k.split_once(':').is_none_or(|(source, _)| source != key));
+                Arc::make_mut(&mut state.appearance).remove(&format!("device:{key}"));
+                Arc::make_mut(&mut state.analysis).retain(|k, _| k.split_once(':').is_none_or(|(source, _)| source != key));
             }
             read_operation(config, state, key, "preferences-get")
         }

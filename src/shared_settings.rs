@@ -1,4 +1,4 @@
-// shared_settings.rs v1.12.511
+// shared_settings.rs v1.12.518
 //! Native settings replication over existing, mutually approved SSH connections.
 use crate::{
     invalid, shared_records as records,
@@ -9,7 +9,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     io,
     path::{Path, PathBuf},
-    sync::mpsc,
+    sync::{mpsc, Arc},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -248,8 +248,8 @@ pub(crate) fn exchange(config: &Path, packet: Option<&Value>) -> io::Result<Valu
                 positions[key] = point.clone();
             }
         }
-        state.shared = json!({"records":values,"mapping":mapping,"baseline":{}});
-        state.shared["baseline"] = records::snapshot(
+        state.shared = Arc::new(json!({"records":values,"mapping":mapping,"baseline":{}}));
+        let baseline = records::snapshot(
             state,
             &mapping,
             &devices,
@@ -257,6 +257,7 @@ pub(crate) fn exchange(config: &Path, packet: Option<&Value>) -> io::Result<Valu
             &link_positions,
             &local_name,
         );
+        Arc::make_mut(&mut state.shared)["baseline"] = baseline;
         files["devices.json"] = json!(devices);
         files["positions.json"] = positions;
         files["link-positions.json"] = link_positions;

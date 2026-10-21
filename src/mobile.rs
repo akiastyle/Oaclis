@@ -1,4 +1,4 @@
-// mobile.rs v1.18.273
+// mobile.rs v1.18.277
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -211,8 +211,8 @@ mod tests {
         std::fs::write(root.join("sessions").join(format!("rollout-{id}.jsonl")), "").unwrap();
         std::fs::write(root.join("session_index.jsonl"), json!({"id":id,"thread_name":"Originale"}).to_string()).unwrap();
         crate::state_store::change(&root, |state| {
-            state.appearance.entry(format!("chat:{id}")).or_default().value = json!({"label":"Rinominata"});
-            state.links.insert("remote".into(),json!({"entry":{"id":"remote-chat","name":"Remota"}}));
+            crate::state_store::chat_record(state, id).value = json!({"label":"Rinominata"});
+            Arc::make_mut(&mut state.links).insert("remote".into(),json!({"entry":{"id":"remote-chat","name":"Remota"}}));
             Ok(())
         }).unwrap();
         let choices = chat_choices(&root, &root, &json!([{"id":"saved-chat","name":"Salvata"}])).unwrap();

@@ -1,4 +1,4 @@
-// staging.rs v1.3.59
+// staging.rs v1.3.67
 use crate::{invalid, paths::validate_absolute};
 use std::fs::{self, File, OpenOptions};
 use std::io;
@@ -52,8 +52,12 @@ pub(crate) fn save_json(path: &Path, value: &impl serde::Serialize) -> io::Resul
     }
     let parent = path.parent().ok_or_else(|| invalid("Cartella mancante"))?;
     let mut staged = StagedFile::new(parent)?;
-    serde_json::to_writer_pretty(&mut staged.file, value)?;
-    staged.file.write_all(b"\n")?;
+    {
+        let mut writer = io::BufWriter::new(&mut staged.file);
+        serde_json::to_writer_pretty(&mut writer, value)?;
+        writer.write_all(b"\n")?;
+        writer.flush()?;
+    }
     staged.file.sync_all()?;
     fs::rename(&staged.path, path)?;
     File::open(parent)?.sync_all()
