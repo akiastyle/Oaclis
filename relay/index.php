@@ -1,5 +1,5 @@
 <?php
-// index.php v1.4.233
+// index.php v1.4.253
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -144,6 +144,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action==='console-result') {
                 $job=$state['devices'][$deviceId]['console']??[];
                 if (($job['id']??'')!==($input['request_id']??'') || ($job['chat_id']??'')!==$chat) respond([],403);
+                // Wait without holding the session or state lock: the master must publish the result.
+                $authUntil=$_SESSION['auth']['until'];
+                session_write_close();
+                $deadline=microtime(true)+2;
+                while (!isset($job['result']) && microtime(true)<$deadline) {
+                    flock($db,LOCK_UN);
+                    usleep(100000);
+                    if (!flock($db,LOCK_EX)) throw new RuntimeException();
+                    rewind($db); $raw=stream_get_contents($db);
+                    $state=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
+                    $record=$state['devices'][$deviceId]??null;
+                    $job=$record['console']??[];
+                    if (!$record || $record['status']!=='approved' || $authUntil<time() ||
+                        !in_array($chat,array_column($record['chats']??[],'id'),true) ||
+                        ($job['id']??'')!==($input['request_id']??'') || ($job['chat_id']??'')!==$chat) respond([],403);
+                }
+                if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
                 $result=isset($job['result'])?$job['result']:['pending'=>true];
                 break;
             }
@@ -163,9 +180,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $screen=$answer['screen']??null;
                 $state['devices'][$target]['console']['result']=is_string($screen)&&strlen($screen)<=60000?['screen'=>$screen]:['error'=>'Console non disponibile. Riprova.'];
             }
-            $result=['commands'=>[]];
+            $result=['commands'=>[], 'console_active'=>false];
             foreach ($state['devices'] as $id=>$phone) {
                 $job=$phone['console']??[];
+                if ($phone['status']==='approved' && ($job['until']??0)>=time()) $result['console_active']=true;
                 if ($phone['status']==='approved' && ($job['until']??0)>=time() && !isset($job['result']) && in_array($job['chat_id'],array_column($phone['chats']??[],'id'),true)) {
                     if (!empty($job['claimed'])) continue;
                     $state['devices'][$id]['console']['claimed']=true;

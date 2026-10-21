@@ -1,4 +1,4 @@
-// app.js v1.22.148
+// app.js v1.22.164
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/oaclis/sw.js',{scope:'/oaclis/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -72,29 +72,31 @@ async function openConsole(chat){
  const fitConsole=()=>document.documentElement.style.setProperty('--console-height',(window.visualViewport?.height??innerHeight)+'px');
  fitConsole();window.visualViewport?.addEventListener('resize',fitConsole);window.addEventListener('resize',fitConsole);
  const screen=document.getElementById('console-screen'),form=document.getElementById('console-input'),text=form.querySelector('textarea');
- let busy=false,closed=false;
+ let busy=false,closed=false,idle=Promise.resolve();
  document.getElementById('back').onclick=()=>{closed=true;window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.documentElement.style.removeProperty('--console-height');document.removeEventListener('visibilitychange',resume);clearTimeout(timer);protectedView().catch(()=>location.replace('/oaclis/auth'));};
  const send=async(operation,body={})=>{
+  if(busy&&operation==='input')await idle;
   if(busy||closed)return false;busy=true;
+  let done;idle=new Promise(resolve=>{done=resolve;});
   try{
    const request=await api('console',{chat_id:chat.id,operation,...body});
    const deadline=Date.now()+23000;let result;
-   do{await new Promise(resolve=>setTimeout(resolve,700));if(closed)return false;result=await api('console-result',{chat_id:chat.id,request_id:request.request_id});}while(result.pending&&Date.now()<deadline);
+   do{if(closed)return false;result=await api('console-result',{chat_id:chat.id,request_id:request.request_id});}while(result.pending&&Date.now()<deadline);
    if(result.pending)throw new Error('Il master non risponde. Riapri la console.');
    if(result.error)throw new Error(result.error);
    screen.textContent=result.screen;screen.scrollTop=screen.scrollHeight;
    form.querySelectorAll('textarea,button').forEach(element=>element.disabled=false);return true;
-  }catch(e){if(!closed)screen.textContent=e.message;return false;}finally{busy=false;}
+  }catch(e){if(!closed)screen.textContent=e.message;return false;}finally{busy=false;done();}
  };
- const poll=async()=>{if(closed)return;if(document.hidden||busy){timer=setTimeout(poll,1500);return;}if(await send('read')){clearTimeout(timer);timer=setTimeout(poll,1500);}};
+ const poll=async()=>{if(closed)return;if(document.hidden||busy){timer=setTimeout(poll,1500);return;}if(await send('read')){clearTimeout(timer);timer=setTimeout(poll,200);}};
  const resume=()=>{if(document.visibilityState==='visible'&&!closed){clearTimeout(timer);poll();}};
  document.addEventListener('visibilitychange',resume);
- form.onsubmit=async event=>{event.preventDefault();if(busy)return;clearTimeout(timer);if(await send('input',{text:text.value,key:'Enter'}))text.value='';if(!closed)timer=setTimeout(poll,1500);};
+ form.onsubmit=async event=>{event.preventDefault();clearTimeout(timer);if(await send('input',{text:text.value,key:'Enter'}))text.value='';if(!closed)timer=setTimeout(poll,200);};
  text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
  for(const [key,label] of [['Enter','↵'],['Escape','Esc'],['Tab','Tab'],['Up','↑'],['Down','↓'],['C-c','Ctrl+C']]){
-  const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{if(busy)return;clearTimeout(timer);await send('input',{key});if(!closed)timer=setTimeout(poll,1500);};document.getElementById('console-keys').append(button);
+  const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{clearTimeout(timer);await send('input',{key});if(!closed)timer=setTimeout(poll,200);};document.getElementById('console-keys').append(button);
  }
- if(await send('open')){clearTimeout(timer);timer=setTimeout(poll,1500);}
+ if(await send('open')){clearTimeout(timer);timer=setTimeout(poll,200);}
 }
 async function protectedView(){
  const x=await api('protected');

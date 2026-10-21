@@ -41,3 +41,12 @@ l'accesso. Il relay conserva solo l'ultima schermata, non l'archivio della chat.
 L'installazione mobile usa manifest.webmanifest, le icone PNG e sw.js nel solo scope
 /oaclis/. Il service worker usa esclusivamente la rete: nessuna cache di chat,
 risposte della console, autorizzazioni o credenziali.
+
+Console responsiveness: Rust reuses an HTTPS connection pool instead of launching curl.
+The master checks every 200 ms while a console request is recent, and every two
+seconds otherwise. The phone asks for the result immediately; the relay waits up
+to two seconds, releasing both session and state locks between checks. Revocation,
+chat grants and job identity are checked again after each wait. Console refreshes
+wait 200 ms after a completed read; hidden pages retain the slower 1.5-second wait.
+Input waits for an ongoing read rather than being silently discarded.
+Relay response durations are recorded in the existing orchestrator log, without keys.

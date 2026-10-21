@@ -1,10 +1,10 @@
-// mobile.rs v1.18.277
+// mobile.rs v1.18.321
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::{io::{self, Write}, path::{Path, PathBuf}, process::{Command, Stdio}, sync::{Arc, Mutex}, thread, time::Duration};
+use std::{io::{self, Read}, path::{Path, PathBuf}, sync::{Arc, Mutex, OnceLock}, thread, time::{Duration, Instant}};
 
 const ENDPOINT: &str = "https://www.krprojects.it/oaclis/auth";
 const ACCESS_URL: &str = "https://www.krprojects.it/oaclis/";
@@ -31,24 +31,30 @@ fn request(config: &Path, payload: Value) -> io::Result<Value> {
     if settings.admin_key.len() != 64 || !settings.admin_key.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(invalid("Collegamento mobile da configurare"));
     }
-    if serde_json::to_vec(&payload)?.len() > 131072 { return Err(invalid("Selezione troppo ampia")); }
+    let body = serde_json::to_vec(&payload)?;
+    if body.len() > 131072 { return Err(invalid("Selezione troppo ampia")); }
     let action = payload["action"].as_str().unwrap_or("");
     crate::state_transport::log(format!("SEND mobile-relay {action}"));
-    // Feed the credential over stdin: it must never appear in process arguments.
-    let data = serde_json::to_string(&serde_json::to_string(&payload)?)?;
-    let input = format!("url = \"{ENDPOINT}\"\nheader = \"Origin: https://www.krprojects.it\"\nheader = \"Content-Type: application/json\"\nheader = \"X-Admin-Key: {}\"\ndata = {data}\n", settings.admin_key);
-    let mut child = Command::new("curl")
-        .args(["--silent", "--fail", "--proto", "=https", "--connect-timeout", "3", "--max-time", "10", "--max-filesize", "131072", "--config", "-"])
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
-    let sent = child.stdin.take().unwrap().write_all(input.as_bytes());
-    if sent.is_err() { let _ = child.kill(); let _ = child.wait(); return Err(io::Error::other("Invito non disponibile. Riprova.")); }
-    let output = child.wait_with_output()?;
-    if !output.status.success() {
-        crate::state_transport::log(format!("RECV mobile-relay {action} failed {}", output.status));
-        return Err(io::Error::other("Invito non disponibile. Riprova."));
-    }
-    let reply: Value = serde_json::from_slice(&output.stdout).map_err(|_| io::Error::other("Invito non disponibile. Riprova."))?;
-    crate::state_transport::log(format!("RECV mobile-relay {action} OK"));
+    static CLIENT: OnceLock<ureq::Agent> = OnceLock::new();
+    let client = CLIENT.get_or_init(|| ureq::Agent::config_builder()
+        .timeout_global(Some(Duration::from_secs(10)))
+        .timeout_connect(Some(Duration::from_secs(3)))
+        .max_redirects(0).build().into());
+    let started = Instant::now();
+    let response = client.post(ENDPOINT)
+        .header("Origin", "https://www.krprojects.it")
+        .header("Content-Type", "application/json")
+        .header("X-Admin-Key", &settings.admin_key)
+        .send(body);
+    let mut response = response.map_err(|_| {
+        crate::state_transport::log(format!("RECV mobile-relay {action} failed"));
+        io::Error::other("Collegamento mobile non disponibile. Riprova.")
+    })?;
+    let mut bytes = Vec::new();
+    response.body_mut().as_reader().take(131073).read_to_end(&mut bytes)?;
+    if bytes.len() > 131072 { return Err(invalid("Risposta mobile troppo ampia")); }
+    let reply: Value = serde_json::from_slice(&bytes).map_err(|_| io::Error::other("Risposta mobile non valida"))?;
+    crate::state_transport::log(format!("RECV mobile-relay {action} OK {}ms", started.elapsed().as_millis()));
     Ok(reply)
 }
 
@@ -114,7 +120,9 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
         thread::spawn(move || {
             let mut results = Vec::<Value>::new();
             loop {
+                let mut active = false;
                 if let Ok(reply) = request(&console_config, json!({"action":"console-exchange","results":results})) {
+                    active = reply["console_active"] == true;
                     results.clear();
                     for command in reply["commands"].as_array().into_iter().flatten() {
                         let result = crate::terminal::request(None, &command["value"]);
@@ -124,7 +132,7 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
                     }
                     if !results.is_empty() { continue; }
                 }
-                thread::sleep(Duration::from_secs(2));
+                thread::sleep(Duration::from_millis(if active { 200 } else { 2000 }));
             }
         });
         let worker = registry.clone();
