@@ -1,5 +1,5 @@
 <?php
-// index.php v1.4.253
+// index.php v1.4.268
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -48,9 +48,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $deviceId=preg_match('/^[a-f0-9]{64}$/D',$device)?hash('sha256',$device):'';
         $admin=$_SERVER['HTTP_X_ADMIN_KEY']??'';
         $isAdmin=hash_equals($config['admin_hash'],hash('sha256',$admin));
-        $db=fopen(PRIVATE_DIR.'/state.json','c+');
+        $db=fopen(PRIVATE_DIR.'/state.lock','c+');
         if (!$db || !flock($db,LOCK_EX)) throw new RuntimeException();
-        $raw=stream_get_contents($db);
+        $raw=is_file(PRIVATE_DIR.'/state.json')?file_get_contents(PRIVATE_DIR.'/state.json'):'';
         $state=$raw===''?['invitations'=>[], 'devices'=>[]]:json_decode($raw,true,64,JSON_THROW_ON_ERROR);
         $record=$state['devices'][$deviceId]??null;
         $result=[];
@@ -152,7 +152,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     flock($db,LOCK_UN);
                     usleep(100000);
                     if (!flock($db,LOCK_EX)) throw new RuntimeException();
-                    rewind($db); $raw=stream_get_contents($db);
+                    $raw=file_get_contents(PRIVATE_DIR.'/state.json');
                     $state=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
                     $record=$state['devices'][$deviceId]??null;
                     $job=$record['console']??[];
@@ -206,9 +206,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         if ($state!==($raw===''?['invitations'=>[], 'devices'=>[]]:json_decode($raw,true))) {
             $encoded=json_encode($state,JSON_THROW_ON_ERROR|JSON_PRETTY_PRINT);
-            rewind($db);
-            if (fwrite($db,$encoded)!==strlen($encoded)) throw new RuntimeException();
-            ftruncate($db,strlen($encoded)); fflush($db);
+            $temporary=tempnam(PRIVATE_DIR,'state-');
+            if ($temporary===false) throw new RuntimeException();
+            try {
+                if (file_put_contents($temporary,$encoded)!==strlen($encoded) ||
+                    !rename($temporary,PRIVATE_DIR.'/state.json')) throw new RuntimeException();
+            } finally { if (is_file($temporary)) unlink($temporary); }
         }
         flock($db,LOCK_UN); fclose($db);
         echo json_encode($result,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);

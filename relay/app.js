@@ -1,4 +1,4 @@
-// app.js v1.22.164
+// app.js v1.22.172
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/oaclis/sw.js',{scope:'/oaclis/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -29,7 +29,7 @@ function show(html){app.innerHTML=html;app.hidden=false;if(screenWakeLock&&!docu
 function message(text,error=false){let p=document.getElementById('message');if(!p){p=document.createElement('p');p.id='message';p.setAttribute('role','status');app.append(p);}p.className=error?'error':'status';p.textContent=text;}
 async function api(action,body={}){
  const r=await fetch('/oaclis/auth',{method:'POST',headers:{'Content-Type':'application/json','X-Admin-Key':admin,'X-Device-Code':code},body:JSON.stringify({action,...body}),cache:'no-store'});
- if(!r.ok){if(r.status===403)throw new Error('Accesso non autorizzato.');throw new Error('Verifica non riuscita. Riprova.');}
+ if(!r.ok)throw Object.assign(new Error(r.status===403?'Accesso non autorizzato.':'Collegamento temporaneamente non disponibile. Riprova.'),{status:r.status});
  return r.json();
 }
 function buffer(s){return Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));}
@@ -86,7 +86,7 @@ async function openConsole(chat){
    if(result.error)throw new Error(result.error);
    screen.textContent=result.screen;screen.scrollTop=screen.scrollHeight;
    form.querySelectorAll('textarea,button').forEach(element=>element.disabled=false);return true;
-  }catch(e){if(!closed)screen.textContent=e.message;return false;}finally{busy=false;done();}
+  }catch(e){if(e.status===403){closed=true;location.replace('/oaclis/auth');}else if(!closed)screen.textContent=e.message;return false;}finally{busy=false;done();}
  };
  const poll=async()=>{if(closed)return;if(document.hidden||busy){timer=setTimeout(poll,1500);return;}if(await send('read')){clearTimeout(timer);timer=setTimeout(poll,200);}};
  const resume=()=>{if(document.visibilityState==='visible'&&!closed){clearTimeout(timer);poll();}};
@@ -103,7 +103,7 @@ async function protectedView(){
  show('<h1>Chat autorizzate</h1><div id="authorized-chats" aria-live="polite"></div><button id="lock" class="secondary">Blocca accesso</button>');
  renderAuthorizedChats(x.chats||[]);
  document.getElementById('lock').onclick=e=>run(e.target,async()=>{clearTimeout(timer);await api('logout');location.replace('/oaclis/auth');});
- const refresh=async()=>{try{const data=await api('protected');if(!document.getElementById('authorized-chats'))return;renderAuthorizedChats(data.chats||[]);timer=setTimeout(refresh,5000);}catch{clearTimeout(timer);app.hidden=true;app.replaceChildren();}};
+ const refresh=async()=>{try{const data=await api('protected');if(!document.getElementById('authorized-chats'))return;renderAuthorizedChats(data.chats||[]);timer=setTimeout(refresh,5000);}catch(e){if(e.status===403){clearTimeout(timer);location.replace('/oaclis/auth');}else{message(e.message,true);timer=setTimeout(refresh,5000);}}};
  timer=setTimeout(refresh,5000);
 }
 async function deviceView(){
@@ -116,4 +116,4 @@ async function deviceView(){
  };
  await login();
 }
-(async()=>{try{if(admin)await adminView();else if(invite)await registerView();else if(code){if(authPage)await deviceView();else try{await protectedView();}catch{location.replace('/oaclis/auth');}}}catch(e){if(admin||invite){show('<h1>Prova accesso</h1>');message(e.message,true);}else{app.hidden=true;app.replaceChildren();}}})();
+(async()=>{try{if(admin)await adminView();else if(invite)await registerView();else if(code){if(authPage)await deviceView();else try{await protectedView();}catch(e){if(e.status===403)location.replace('/oaclis/auth');else throw e;}}}catch(e){if(admin||invite){show('<h1>Prova accesso</h1>');message(e.message,true);}else{show('<button id="retry" class="secondary">Riprova</button>');message(e.status===403?'Abbinamento non disponibile. Verifica il telefono sul master.':e.message,true);document.getElementById('retry').onclick=()=>location.reload();}}})();

@@ -50,3 +50,9 @@ chat grants and job identity are checked again after each wait. Console refreshe
 wait 200 ms after a completed read; hidden pages retain the slower 1.5-second wait.
 Input waits for an ongoing read rather than being silently discarded.
 Relay response durations are recorded in the existing orchestrator log, without keys.
+
+Relay state uses a separate state.lock for all readers/writers and long-poll waits.
+Writes replace state.json atomically from a completed temporary file in the same
+private directory. Never lock the renamed state file itself or rewrite it in place.
+Expired mobile sessions return to passkey login; temporary errors retain the list
+and retry, while an unavailable pairing shows a recovery message instead of hiding.
