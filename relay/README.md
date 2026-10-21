@@ -56,3 +56,6 @@ Writes replace state.json atomically from a completed temporary file in the same
 private directory. Never lock the renamed state file itself or rewrite it in place.
 Expired mobile sessions return to passkey login; temporary errors retain the list
 and retry, while an unavailable pairing shows a recovery message instead of hiding.
+
+Console read errors retain the last screen and retry after one second. Pending
+result IDs are reused after transient failures; input commands are never replayed.

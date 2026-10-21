@@ -1,4 +1,4 @@
-// app.js v1.22.172
+// app.js v1.22.191
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/oaclis/sw.js',{scope:'/oaclis/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -67,28 +67,31 @@ function renderAuthorizedChats(chats){
 async function openConsole(chat){
  clearTimeout(timer);
  show('<h1 id="console-title"></h1><pre id="console-screen" tabindex="0" aria-label="Console">Connessione…</pre><form id="console-input"><textarea aria-label="Messaggio" maxlength="8000" rows="2" placeholder="Scrivi un messaggio" disabled></textarea><button disabled aria-label="Invia messaggio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></form><div id="console-keys"><button id="back" class="secondary" type="button" aria-label="Chat autorizzate" title="Chat autorizzate">&lt;</button></div>');
- document.getElementById('console-title').textContent=chat.name;
+ const title=document.getElementById('console-title');title.textContent=chat.name;
  keepConsoleAwake();
  const fitConsole=()=>document.documentElement.style.setProperty('--console-height',(window.visualViewport?.height??innerHeight)+'px');
  fitConsole();window.visualViewport?.addEventListener('resize',fitConsole);window.addEventListener('resize',fitConsole);
  const screen=document.getElementById('console-screen'),form=document.getElementById('console-input'),text=form.querySelector('textarea');
- let busy=false,closed=false,idle=Promise.resolve();
+ let busy=false,closed=false,idle=Promise.resolve(),pending=null;
  document.getElementById('back').onclick=()=>{closed=true;window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.documentElement.style.removeProperty('--console-height');document.removeEventListener('visibilitychange',resume);clearTimeout(timer);protectedView().catch(()=>location.replace('/oaclis/auth'));};
  const send=async(operation,body={})=>{
   if(busy&&operation==='input')await idle;
   if(busy||closed)return false;busy=true;
   let done;idle=new Promise(resolve=>{done=resolve;});
   try{
-   const request=await api('console',{chat_id:chat.id,operation,...body});
+   const request=operation==='read'&&pending?pending:Object.assign(await api('console',{chat_id:chat.id,operation,...body}),{operation,text:body.text});
+   pending=request;
    const deadline=Date.now()+23000;let result;
    do{if(closed)return false;result=await api('console-result',{chat_id:chat.id,request_id:request.request_id});}while(result.pending&&Date.now()<deadline);
-   if(result.pending)throw new Error('Il master non risponde. Riapri la console.');
+   if(result.pending){pending=null;throw new Error('Collegamento temporaneamente non disponibile. Riprova.');}
+   const completed=pending;pending=null;
    if(result.error)throw new Error(result.error);
-   screen.textContent=result.screen;screen.scrollTop=screen.scrollHeight;
+   if(completed.operation==='input'&&text.value===completed.text)text.value='';
+   title.textContent=chat.name;screen.textContent=result.screen;screen.scrollTop=screen.scrollHeight;
    form.querySelectorAll('textarea,button').forEach(element=>element.disabled=false);return true;
-  }catch(e){if(e.status===403){closed=true;location.replace('/oaclis/auth');}else if(!closed)screen.textContent=e.message;return false;}finally{busy=false;done();}
+  }catch(e){if(e.status===403){closed=true;location.replace('/oaclis/auth');}else if(!closed)title.textContent=chat.name+(operation==='input'?' · Invio non confermato':' · Riconnessione…');return false;}finally{busy=false;done();}
  };
- const poll=async()=>{if(closed)return;if(document.hidden||busy){timer=setTimeout(poll,1500);return;}if(await send('read')){clearTimeout(timer);timer=setTimeout(poll,200);}};
+ const poll=async()=>{if(closed)return;if(document.hidden||busy){timer=setTimeout(poll,1500);return;}const ok=await send('read');if(!closed){clearTimeout(timer);timer=setTimeout(poll,ok?200:1000);}};
  const resume=()=>{if(document.visibilityState==='visible'&&!closed){clearTimeout(timer);poll();}};
  document.addEventListener('visibilitychange',resume);
  form.onsubmit=async event=>{event.preventDefault();clearTimeout(timer);if(await send('input',{text:text.value,key:'Enter'}))text.value='';if(!closed)timer=setTimeout(poll,200);};
@@ -96,7 +99,7 @@ async function openConsole(chat){
  for(const [key,label] of [['Enter','↵'],['Escape','Esc'],['Tab','Tab'],['Up','↑'],['Down','↓'],['C-c','Ctrl+C']]){
   const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{clearTimeout(timer);await send('input',{key});if(!closed)timer=setTimeout(poll,200);};document.getElementById('console-keys').append(button);
  }
- if(await send('open')){clearTimeout(timer);timer=setTimeout(poll,200);}
+ const ready=await send('open');if(!closed){clearTimeout(timer);timer=setTimeout(poll,ready?200:1000);}
 }
 async function protectedView(){
  const x=await api('protected');
