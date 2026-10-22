@@ -1,5 +1,5 @@
 <?php
-// index.php v1.4.268
+// index.php v1.5.282
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -25,6 +25,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (str_starts_with($class, $prefix)) require PRIVATE_DIR . '/library/src/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
     });
     function respond(array $value, int $code=200): never { http_response_code($code); echo json_encode($value, JSON_THROW_ON_ERROR); exit; }
+    function readState(): string {
+        $path=PRIVATE_DIR.'/state.json';
+        for ($attempt=0;$attempt<5;$attempt++) {
+            clearstatcache(true,$path);
+            $raw=@file_get_contents($path);
+            if (is_string($raw) && $raw!=='') return $raw;
+            if ($attempt<4) usleep(20000);
+        }
+        throw new RuntimeException('Relay state temporarily unreadable');
+    }
     function decode(string $s): string {
         if (strlen($s)>18000 || !preg_match('/^[A-Za-z0-9_-]+$/D', $s)) throw new RuntimeException();
         $v=base64_decode(strtr($s,'-_','+/'), true);
@@ -50,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $isAdmin=hash_equals($config['admin_hash'],hash('sha256',$admin));
         $db=fopen(PRIVATE_DIR.'/state.lock','c+');
         if (!$db || !flock($db,LOCK_EX)) throw new RuntimeException();
-        $raw=is_file(PRIVATE_DIR.'/state.json')?file_get_contents(PRIVATE_DIR.'/state.json'):'';
+        $raw=readState();
         $state=$raw===''?['invitations'=>[], 'devices'=>[]]:json_decode($raw,true,64,JSON_THROW_ON_ERROR);
         $record=$state['devices'][$deviceId]??null;
         $result=[];
@@ -152,7 +162,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     flock($db,LOCK_UN);
                     usleep(100000);
                     if (!flock($db,LOCK_EX)) throw new RuntimeException();
-                    $raw=file_get_contents(PRIVATE_DIR.'/state.json');
+                    $raw=readState();
                     $state=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
                     $record=$state['devices'][$deviceId]??null;
                     $job=$record['console']??[];

@@ -1,8 +1,8 @@
-// terminal.rs v1.9.142
+// terminal.rs v1.9.154
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
-use std::{env, fs, io::{self, BufRead, BufReader, Read}, os::unix::fs::PermissionsExt, path::{Path, PathBuf}, process::Command, time::Duration};
+use std::{env, fs, io::{self, BufRead, BufReader, Read}, os::unix::fs::PermissionsExt, path::{Path, PathBuf}, process::Command, sync::atomic::{AtomicU64, Ordering}, time::Duration};
 
 fn validate(value: &Value) -> io::Result<&str> {
     let chat = value["chat_id"].as_str().filter(|s| !s.is_empty() && s.len()<=160 && s.bytes().all(|b|b.is_ascii_alphanumeric() || b"_-".contains(&b)))
@@ -75,7 +75,15 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         },
         "input" => {
             let text=value.get("text").and_then(Value::as_str).unwrap_or("");let key=value.get("key").and_then(Value::as_str).unwrap_or("");
-            if !text.is_empty() { tmux(&["send-keys","-t",&target,"-l","--",text])?; }
+            if !text.is_empty() {
+                static INPUT_ID: AtomicU64 = AtomicU64::new(0);
+                let buffer=format!("oaclis-{}-{}",std::process::id(),INPUT_ID.fetch_add(1,Ordering::Relaxed));
+                crate::ssh_settings::command(Command::new("tmux").args(["load-buffer","-b",&buffer,"-"]),Some(text.as_bytes()),Duration::from_secs(5))?;
+                let pasted=tmux(&["paste-buffer","-p","-r","-d","-b",&buffer,"-t",&target]);
+                if pasted.is_err() { let _=tmux(&["delete-buffer","-b",&buffer]); }
+                pasted?;
+                if !key.is_empty() { std::thread::sleep(Duration::from_millis(100)); }
+            }
             if !key.is_empty() { tmux(&["send-keys","-t",&target,key])?; }
         },
         _ => {},

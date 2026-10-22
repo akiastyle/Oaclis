@@ -59,3 +59,7 @@ and retry, while an unavailable pairing shows a recovery message instead of hidi
 
 Console read errors retain the last screen and retry after one second. Pending
 result IDs are reused after transient failures; input commands are never replayed.
+
+Initialize a new relay with state.json containing {"invitations":[],"devices":[]}.
+State reads clear PHP's file metadata cache and retry empty/failed reads briefly.
+An unreadable state is never silently replaced with an empty device registry.
