@@ -1,4 +1,4 @@
-// map.js v3.116.2593
+// map.js v3.116.2606
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -173,6 +173,19 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
     finally { marker.playPending = false; if (play.isConnected) { renderLink(true); updateBadgeMotion(marker, chatLinks.find(value => value.entry.id === connection.entry.id && value.source === connection.source && value.target === connection.target) || connection); } }
   });
   marker.title = name + (connection.flow?.error ? " · " + connection.flow.error : phase === "conflict" ? " · Le copie divergono: scegliere quale mantenere" : phase === "offline" ? " · In attesa del dispositivo" : "");
+  const url = appearance(connection.entry).url || "";
+  let web = marker.querySelector(".link-web");
+  if (url) {
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) throw new Error("URL non valido");
+      if (!web) { web = document.createElement("a"); web.className = "link-web icon-button"; marker.append(web); }
+      web.href = parsed.href; web.target = "_blank"; web.rel = "noopener noreferrer";
+      web.title = "Apri pagina web"; web.setAttribute("aria-label", "Apri pagina web di " + name);
+      web.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + icons.link + '</svg>';
+      web.inert = ["transferring", "paused", "finishing"].includes(marker.dataset.motionPhase);
+    } catch (_) { web?.remove(); }
+  } else { web?.remove(); }
   if (!existing) marker.append(main, edit, play, open);
   else if (!play.isConnected) marker.append(play);
   main.querySelector(".chat-badge").style.color = appearance(connection.entry).color || "var(--ink)";

@@ -1,4 +1,4 @@
-// panels.js v3.139.2552
+// panels.js v3.139.2559
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -423,7 +423,7 @@ function editChat(entry, anchor, origin = sourceId || "master", connection = nul
   const panel = document.createElement("div");
   panel.id = "chat-editor-" + crypto.randomUUID(); panel.classList.add("chat-editor"); panel.opener = anchor; panel.dataset.objectId = entry.id; panel.dataset.sourceDevice = origin; panel.dataset.connectionKey = connectionKey;
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Personalizza chat");
-  panel.innerHTML = '<button type="button" class="icon-button chat-visibility" aria-label="Nascondi chat"></button><button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>';
+  panel.innerHTML = '<button type="button" class="icon-button chat-visibility" aria-label="Nascondi chat"></button><button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + '<label class="field">URL web<input name="url" type="url" maxlength="2048" value="' + esc(value.url || "") + '" placeholder="https://…"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
   bindPanelDrag(panel, true);
   panel.querySelector('.popover-close').onclick = () => closeChatEditor(panel);
@@ -474,7 +474,10 @@ function editChat(entry, anchor, origin = sourceId || "master", connection = nul
     await api("appearance", { key, value }); data.appearance ??= {}; data.appearance[key] = value;
     closeChatEditor(panel); renderLibrary(); renderLink(true);
   };
-  panel.querySelector('form').onsubmit = guard(async event => { event.preventDefault(); await save({ label: event.target.elements.label.value, ...readAppearance() }); });
+  panel.querySelector('form').onsubmit = guard(async event => { event.preventDefault(); const raw=event.target.elements.url.value.trim();
+    let url="";
+    if(raw){const parsed=new URL(raw);if(!["http:","https:"].includes(parsed.protocol)||parsed.username||parsed.password)throw new Error("Inserisci un URL http:// o https:// valido");url=parsed.href;}
+    await save({ label: event.target.elements.label.value, ...readAppearance(), url }); });
   panel.querySelector('.delete-presentation').onclick = guard(() => connection ? removeConnection(connection, panel) : removePresentation("chat", entry.id));
   panel.querySelectorAll('[data-scope]').forEach(button => button.onclick = guard(async () => {
     const previous = button.getAttribute('aria-pressed'); button.setAttribute('aria-pressed', String(previous !== 'true'));

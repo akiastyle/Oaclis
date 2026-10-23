@@ -1,4 +1,4 @@
-// badge-motion.js v1.6.97
+// badge-motion.js v1.6.99
 /* Passive presentation only: no network, storage, timers for progress or transfer decisions. */
 (function () {
   const names = ['chat', 'paths', 'apps'];
@@ -31,7 +31,7 @@
       if (phase === this.phase) return;
       this.phase = phase; this.host.dataset.motionPhase = phase;
       const hidden = ['transferring', 'paused', 'finishing'].includes(phase);
-      this.host.querySelectorAll('.link-edit,.link-open').forEach(button => { button.disabled = hidden; button.setAttribute('aria-hidden', String(hidden)); });
+      this.host.querySelectorAll('.link-edit,.link-open,.link-web').forEach(button => { button.disabled = hidden; button.inert = hidden; button.setAttribute('aria-hidden', String(hidden)); });
     }
     progress(name, progress) {
       if (!Number.isFinite(progress)) return;

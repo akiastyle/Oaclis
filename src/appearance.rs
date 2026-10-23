@@ -1,4 +1,4 @@
-// appearance.rs v1.6.239
+// appearance.rs v1.6.261
 //! Oaclis presentation overrides, separate from Codex metadata and transfer rules.
 use crate::{devices, invalid};
 use serde::{Deserialize, Serialize};
@@ -14,6 +14,8 @@ pub struct Appearance {
     pub label: String,
     pub icon: String,
     pub color: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub url: String,
 }
 impl Appearance {
     pub fn validate(&self) -> io::Result<()> {
@@ -44,6 +46,15 @@ impl Appearance {
                 && self.color[1..].bytes().all(|b| b.is_ascii_hexdigit()))
         {
             return Err(invalid("Colore esadecimale non valido"));
+        }
+        if !self.url.is_empty() {
+            let uri=self.url.split('#').next().unwrap_or("").parse::<ureq::http::Uri>()
+                .map_err(|_|invalid("URL web non valido: usa http:// o https://"))?;
+            if self.url.len()>2048 || self.url.chars().any(char::is_whitespace) || self.url.chars().any(char::is_control)
+                || !matches!(uri.scheme_str(),Some("http"|"https")) || uri.host().is_none_or(str::is_empty)
+                || uri.authority().is_some_and(|a|a.as_str().contains('@')) {
+                return Err(invalid("URL web non valido: usa http:// o https://"));
+            }
         }
         Ok(())
     }
@@ -85,6 +96,7 @@ mod tests {
                 label: "Test".into(),
                 icon: "data:image/png;base64,iVBORw0KGgo=".into(),
                 color: String::new(),
+                url: "https://example.org/project/#preview".into(),
             },
         )]);
         save(&path, &entries).unwrap();
@@ -92,9 +104,12 @@ mod tests {
             load(&path).unwrap()["chat:abc"].icon,
             entries["chat:abc"].icon
         );
+        assert_eq!(load(&path).unwrap()["chat:abc"].url,"https://example.org/project/#preview");
+        entries.get_mut("chat:abc").unwrap().url.clear();
         entries.get_mut("chat:abc").unwrap().icon = "folder".into();
         save(&path, &entries).unwrap();
         assert_eq!(load(&path).unwrap()["chat:abc"].icon, "folder");
+        assert!(load(&path).unwrap()["chat:abc"].url.is_empty());
         assert!(root.join("appearance.json").exists());
         std::fs::remove_dir_all(root).unwrap();
     }
@@ -104,10 +119,17 @@ mod tests {
             label: "Il mio lavoro".into(),
             icon: "laptop".into(),
             color: "#4488aa".into(),
+            url: String::new(),
         };
         assert!(good.validate().is_ok());
         for icon in ["chat", "code", "folder", "desktop", "laptop", "server", "terminal", "globe", "cloud", "box", "database", "git", "book", "star", "bolt", "shield", "bug", "settings", "cpu", "rocket", "link", "image", "wrench", "layers"] {
             assert!(Appearance { icon: icon.into(), ..good.clone() }.validate().is_ok());
+        }
+        for url in ["https://example.org/path?q=1#part", "http://localhost:8080/", "http://192.168.1.154/"] {
+            assert!(Appearance {url:url.into(),..good.clone()}.validate().is_ok());
+        }
+        for url in ["javascript:alert(1)", "data:text/html,hello", "file:///tmp/a", "https://", "https://user:password@example.org", "https://example.org/ bad", "https://example.org/\n"] {
+            assert!(Appearance {url:url.into(),..good.clone()}.validate().is_err());
         }
         let mut bad = good.clone();
         bad.color = "red;display:none".into();

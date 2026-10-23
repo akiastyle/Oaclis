@@ -1,4 +1,4 @@
-/* style.css v2.0.1345 */
+/* style.css v2.0.1351 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -947,7 +947,7 @@ select {
 }
 .link-main .chat-badge { width: 100%; height: 100%; font-size: var(--font-brand); }
 .link-main .chat-badge svg { width: var(--size-24); height: var(--size-24); }
- .link-edit, .link-open {
+ .link-edit, .link-open, .link-web {
   position: absolute;
   top: calc(-1 * var(--space-18));
   right: calc(-1 * var(--space-18));
@@ -961,8 +961,8 @@ select {
   opacity: 0;
   visibility: hidden;
 }
-.link-edit svg, .link-open svg { width: var(--size-14); height: var(--size-14); }
-.link-badge:hover .link-edit, .link-badge:focus-within .link-edit, .link-open { opacity: 1; visibility: visible; }
+.link-edit svg, .link-open svg, .link-web svg { width: var(--size-14); height: var(--size-14); }
+.link-badge:hover .link-edit, .link-badge:focus-within .link-edit, .link-open, .link-web { opacity: 1; visibility: visible; }
 .chat-link:has(.link-badge:hover), .chat-link:has(.link-badge:focus-within) { z-index: 3; }
 .context-popover {
   --surface-enter-opacity: 1;

@@ -1,4 +1,4 @@
-// shared_records.rs v1.19.870
+// shared_records.rs v1.19.873
 //! Shared settings retain the existing clocks, stable identities and ownership boundaries.
 use std::sync::Arc;
 use crate::{
@@ -70,10 +70,11 @@ pub(crate) fn validate(records: &Value) -> io::Result<()> {
                 .ok_or_else(|| invalid("Aspetto non valido"))?;
             if fields
                 .iter()
-                .any(|(k, v)| !["label", "icon", "color"].contains(&k.as_str()) || !v.is_string())
+                .any(|(k, v)| !["label", "icon", "color", "url"].contains(&k.as_str()) || !v.is_string())
             {
                 return Err(invalid("Aspetto non valido"));
             }
+            crate::appearance::Appearance {url:appearance["url"].as_str().unwrap_or("").into(),..Default::default()}.validate()?;
             let label = appearance.get("label").cloned().unwrap_or(json!(""));
             if !valid_text(&label, 320, false) {
                 return Err(invalid("Etichetta non valida"));
