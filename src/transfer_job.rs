@@ -1,4 +1,4 @@
-// transfer_job.rs v2.28.1605
+// transfer_job.rs v2.28.1606
 //! Executes an authorized transfer; independent of routes and scheduling.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid,rules};
 use serde_json::{Value,json};
@@ -34,6 +34,7 @@ fn begin(config: &Path, key: Option<&str>, job: &Mutex<Value>, pending: Value) -
 }
 
 pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value>>) -> io::Result<Value> {
+    if let Some(id)=v["chat_id"].as_str() {if crate::chat_deletion::blocked(config,id)? {return Err(invalid("Chat eliminata definitivamente"));}}
     let ds = devices::load(config.join("devices.json"))?;
     let rule = if let Some(id) = v["rule_id"].as_str() {
         Some(

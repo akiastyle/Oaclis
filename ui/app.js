@@ -1,4 +1,4 @@
-// app.js v3.161.2934
+// app.js v3.161.2942
 "use strict";
 const $ = (s) => document.querySelector(s);
 const token = $('meta[name="oaclis-token"]').content;
@@ -319,13 +319,15 @@ async function poll() {
     if (state !== "checking") lastConnection[device.id] = state;
   }
   if (next.shared && saved === saveLinks && !removingPresentation && !positionsSaving && !linkPositionSaving && !drag && !document.querySelector('.map-node[data-dragging="true"], .link-badge[data-dragging="true"]')) {
-    const previous = JSON.stringify([data.devices, data.appearance, chatLinks, data.chat_settings, positions, linkPositions]);
+    const previous = JSON.stringify([data.devices, data.appearance, chatLinks, data.chat_settings, positions, linkPositions, data.deleted_chats || []]);
     const shared = next.shared;
-    if (previous !== JSON.stringify([shared.devices, shared.appearance, shared.links, shared.chat_settings, shared.positions, shared.link_positions])) {
+    if (previous !== JSON.stringify([shared.devices, shared.appearance, shared.links, shared.chat_settings, shared.positions, shared.link_positions, shared.deleted_chats || []])) {
       const nodesChanged = JSON.stringify([data.devices, Object.fromEntries(Object.entries(data.appearance || {}).filter(([key]) => key.startsWith("device:"))), positions]) !==
         JSON.stringify([shared.devices, Object.fromEntries(Object.entries(shared.appearance || {}).filter(([key]) => key.startsWith("device:"))), shared.positions]);
-      const libraryChanged = JSON.stringify([data.appearance, data.chat_settings]) !== JSON.stringify([shared.appearance, shared.chat_settings]);
+      const libraryChanged = JSON.stringify([data.appearance, data.chat_settings, data.deleted_chats || []]) !== JSON.stringify([shared.appearance, shared.chat_settings, shared.deleted_chats || []]);
       Object.assign(data, shared); chatLinks = shared.links; positions = shared.positions; linkPositions = shared.link_positions || {};
+      document.querySelectorAll('.chat-editor').forEach(panel=>{if((data.deleted_chats || []).includes(panel.dataset.objectId))closeChatEditor(panel);});
+      document.querySelectorAll('.chat-terminal').forEach(panel=>{if((data.deleted_chats || []).includes(panel.dataset.chatId))closeChatTerminal(panel);});
       if (nodesChanged) renderMap(true);
       if (nodesChanged || libraryChanged) renderLibrary();
     }

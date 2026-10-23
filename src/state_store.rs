@@ -1,4 +1,4 @@
-// state_store.rs v2.36.1272
+// state_store.rs v2.36.1273
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -203,6 +203,7 @@ pub(crate) fn change_with_files<T>(
     let mut next = (*current).clone();
     let mut files = json!({});
     let result = action(&mut next, &mut files)?;
+    crate::chat_deletion::purge(&mut next,&mut files);
     if next != *current
         || !files.as_object().unwrap().is_empty()
         || !store.persisted.load(Ordering::Relaxed)

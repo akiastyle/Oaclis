@@ -1,4 +1,4 @@
-/* style.css v2.0.1351 */
+/* style.css v2.0.1353 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1260,3 +1260,5 @@ select {
 #mobile-links > path { transition: stroke var(--duration-ui) var(--ease-ui); }
 #mobile-links marker path { fill: var(--muted); stroke: none; stroke-dasharray: none; }
 #mobile-links marker[data-active="true"] path { fill: var(--status-online); }
+
+.library-row > .delete-chat { right:calc(var(--space-3) + var(--size-24) + var(--space-4)); color:var(--color-delete-text); background:var(--color-delete); }

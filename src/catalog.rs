@@ -1,4 +1,4 @@
-// catalog.rs v2.27.1418
+// catalog.rs v2.27.1419
 //! Read Codex archives natively; Oaclis metadata comes from its in-memory JSON state.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -115,6 +115,7 @@ pub(crate) fn local_at(root: &Path, config: &Path) -> io::Result<Vec<Value>> {
         state_store::strip_entries(&mut data);
         chat["sync_data"] = data;
     }
+    chats.retain(|chat| state.shared["deletions"].get(chat["id"].as_str().unwrap_or("")).is_none());
     chats.sort_by(|a, b| b["path"].as_str().cmp(&a["path"].as_str()));
     Ok(chats)
 }

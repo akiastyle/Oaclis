@@ -1,4 +1,4 @@
-// terminal.rs v1.9.154
+// terminal.rs v1.9.159
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -25,7 +25,7 @@ fn tmux(args: &[&str]) -> io::Result<Vec<u8>> {
 fn executable(path: &Path) -> bool {
     path.metadata().is_ok_and(|m|m.is_file() && m.permissions().mode() & 0o111 != 0)
 }
-fn codex(home: &Path) -> io::Result<PathBuf> {
+pub(crate) fn codex(home: &Path) -> io::Result<PathBuf> {
     if let Some(path) = env::split_paths(&env::var_os("PATH").unwrap_or_default()).map(|p|p.join("codex")).find(|p|executable(p)) { return Ok(path); }
     let directory = home.join(".nvm/versions/node");
     let mut versions = Vec::new();
@@ -65,6 +65,9 @@ fn open(home: &Path, root: &Path, chat: &str, session: &str) -> io::Result<()> {
 }
 pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let chat=validate(value)?;
+    if let Some(home)=env::var_os("HOME") {
+        if crate::chat_deletion::blocked(&PathBuf::from(home).join(".config/oaclis"),chat)? { return Err(invalid("Chat eliminata definitivamente")); }
+    }
     let session=format!("oaclis-{chat}");let target=format!("{session}:0.0");
     match value["action"].as_str().unwrap() {
         "open" => {

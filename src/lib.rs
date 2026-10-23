@@ -1,5 +1,6 @@
-// lib.rs v1.3.89
+// lib.rs v1.3.90
 pub mod state_store;
+mod chat_deletion;
 mod state_migration;
 mod shared_records;
 pub mod state_transport;

@@ -1,4 +1,4 @@
-// mobile.rs v1.18.321
+// mobile.rs v1.19.334
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -243,4 +243,17 @@ mod tests {
             assert!(invitation_qr(&invalid).is_err());
         }
     }
+}
+
+pub(crate) fn forget_chat(config:&Path,id:&str)->io::Result<()> {
+    if !config.join("mobile-relay.json").is_file(){return Ok(());}
+    let roster=request(config,json!({"action":"admin-list"}))?;
+    listed_devices(&roster,"approved")?;
+    for device in roster["devices"].as_array().into_iter().flatten().filter(|d|d["status"]=="approved") {
+        let grants=request(config,json!({"action":"chat-access","id":device["id"]}))?;
+        let mut chats=grants["chats"].as_array().cloned().ok_or_else(||invalid("Permessi mobile non disponibili"))?;
+        let before=chats.len();chats.retain(|c|c["id"]!=id);
+        if chats.len()!=before{let result=request(config,json!({"action":"set-chat-access","id":device["id"],"chats":chats}))?;if result["ok"]!=true{return Err(invalid("Rimozione permesso mobile non completata"));}}
+    }
+    Ok(())
 }

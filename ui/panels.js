@@ -1,4 +1,4 @@
-// panels.js v3.139.2559
+// panels.js v3.140.2584
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -191,6 +191,30 @@ async function saveChatScopes(entry, scopes, origin = sourceId || "master") {
   data.chat_settings = result.preferences; chatLinks = result.links;
   if (link?.entry.id === entry.id) link.scopes = scopes;
   renderLink(true);
+}
+
+async function deleteChat(entry) {
+  if(removingPresentation)return;
+  if(!window.confirm('Eliminare definitivamente “'+chatLabel(entry)+'” da Codex e da tutti i dispositivi?\n\nLa chat, la cronologia, i collegamenti e le azioni associate saranno cancellati senza possibilità di recupero. I dispositivi offline la cancelleranno quando torneranno disponibili.\n\nFile e cartelle del progetto resteranno intatti.'))return;
+  removingPresentation=true;
+  const previous=data.deleted_chats || [];
+  const removed=chatLinks.filter(c=>c.entry.id===entry.id);
+  const oldLink=link;
+  data.deleted_chats=[...new Set([...previous,entry.id])];
+  chatLinks=chatLinks.filter(c=>c.entry.id!==entry.id);
+  if(link?.entry.id===entry.id)link=null;
+  document.querySelectorAll('.chat-editor').forEach(p=>{if(p.dataset.objectId===entry.id)closeChatEditor(p);});
+  document.querySelectorAll('.chat-terminal').forEach(p=>{if(p.dataset.chatId===entry.id)closeChatTerminal(p);});
+  renderLibrary();renderLink(true);
+  try {
+    const result=await api("chat/delete",{id:entry.id,confirmed:true});
+    data.deleted_chats=result.deleted_chats;
+    notice("Eliminazione definitiva richiesta");
+  } catch(error) {
+    data.deleted_chats=previous;
+    for(const c of removed)if(!chatLinks.some(v=>v.entry.id===c.entry.id&&v.source===c.source&&v.target===c.target))chatLinks.push(c);
+    link=oldLink;renderLibrary();renderLink(true);throw error;
+  } finally {removingPresentation=false;}
 }
 
 async function removePresentation(kind, id) {
@@ -425,6 +449,7 @@ function editChat(entry, anchor, origin = sourceId || "master", connection = nul
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", "Personalizza chat");
   panel.innerHTML = '<button type="button" class="icon-button chat-visibility" aria-label="Nascondi chat"></button><button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>' + esc(chatLabel(entry)) + '</h2><form><label class="field">Nome visualizzato<input name="label" maxlength="160" value="' + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + '<label class="field">URL web<input name="url" type="url" maxlength="2048" value="' + esc(value.url || "") + '" placeholder="https://…"></label>' + appearanceFields(value) + '<details><summary>Sincronizza</summary>' + scopeFields(scopes, entry) + '</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
+  panel.querySelector('.delete-presentation').textContent=connection?"Elimina collegamento":"Nascondi dalla lista";
   bindPanelDrag(panel, true);
   panel.querySelector('.popover-close').onclick = () => closeChatEditor(panel);
   const visibility = panel.querySelector('.chat-visibility');

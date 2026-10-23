@@ -1,4 +1,4 @@
-// shared_settings.rs v1.12.518
+// shared_settings.rs v1.12.528
 //! Native settings replication over existing, mutually approved SSH connections.
 use crate::{
     invalid, shared_records as records,
@@ -179,6 +179,7 @@ pub(crate) fn exchange(config: &Path, packet: Option<&Value>) -> io::Result<Valu
             ));
         }
         records::validate(&packet["records"])?;
+        crate::chat_deletion::validate(&packet["deletions"])?;
     }
     let local_name = std::env::var("HOSTNAME").unwrap_or_else(|_| "Oaclis".into());
     let master = std::fs::read_to_string(config.join("role"))
@@ -186,6 +187,10 @@ pub(crate) fn exchange(config: &Path, packet: Option<&Value>) -> io::Result<Valu
         .trim()
         == "master";
     state_store::change_with_files(config, |state, files| {
+        if let Some(packet)=packet {crate::chat_deletion::merge(state,&packet["deletions"]);}
+        crate::chat_deletion::validate(&state.shared["deletions"])?;
+        crate::chat_deletion::purge(state,files);
+        let deletions=state.shared.get("deletions").cloned().unwrap_or(json!({}));
         let devices: Vec<Value> =
             serde_json::from_value(read_json(&config.join("devices.json"), json!([]))?)?;
         let saved_positions = positions(config)?;
@@ -240,6 +245,7 @@ pub(crate) fn exchange(config: &Path, packet: Option<&Value>) -> io::Result<Valu
                 }
             }
         }
+        crate::chat_deletion::purge_records(&mut values,&crate::chat_deletion::ids(state));
         records::validate(&values)?;
         let (devices, mut positions, link_positions) =
             records::apply(state, &values, &mut mapping, &devices, &id)?;
@@ -248,7 +254,7 @@ pub(crate) fn exchange(config: &Path, packet: Option<&Value>) -> io::Result<Valu
                 positions[key] = point.clone();
             }
         }
-        state.shared = Arc::new(json!({"records":values,"mapping":mapping,"baseline":{}}));
+        state.shared = Arc::new(json!({"records":values,"mapping":mapping,"baseline":{},"deletions":deletions}));
         let baseline = records::snapshot(
             state,
             &mapping,
@@ -261,7 +267,7 @@ pub(crate) fn exchange(config: &Path, packet: Option<&Value>) -> io::Result<Valu
         files["devices.json"] = json!(devices);
         files["positions.json"] = positions;
         files["link-positions.json"] = link_positions;
-        Ok(json!({"schema":1,"sender":id,"records":values}))
+        Ok(json!({"schema":1,"sender":id,"records":values,"deletions":state.shared["deletions"]}))
     })
 }
 fn sync_peer(config: &Path, peer: &str, device: &crate::devices::Device) -> io::Result<Value> {

@@ -1,4 +1,4 @@
-// map.js v3.116.2616
+// map.js v3.116.2628
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -35,7 +35,8 @@ function renderLink(force = false) {
     const rect = node.getBoundingClientRect();
     return [node.dataset.id, [rect.x, rect.y, rect.width, rect.height]];
   }));
-  const links = [...chatLinks];
+  if(link && (data.deleted_chats || []).includes(link.entry.id))link=null;
+  const links = chatLinks.filter(v => !(data.deleted_chats || []).includes(v.entry.id));
   if (link) {
     const existing = links.findIndex(v => v.entry.id === link.entry.id &&
       [v.source, v.target].sort().join(":") === [link.source, link.target].sort().join(":"));
@@ -259,7 +260,7 @@ function renderLibrary() {
   const search = $("#search").value.toLocaleLowerCase();
   const focused = document.activeElement?.dataset.chatId;
   const entries = visibleChats.filter(
-    (c) => (showHiddenChats || !data.chat_settings?.[c.id]?.hidden) && (
+    (c) => !(data.deleted_chats || []).includes(c.id) && (showHiddenChats || !data.chat_settings?.[c.id]?.hidden) && (
       chatLabel(c).toLocaleLowerCase().includes(search) ||
       c.name.toLocaleLowerCase().includes(search) ||
       c.id.toLocaleLowerCase().includes(search)),
@@ -326,7 +327,12 @@ function renderLibrary() {
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
     edit.onclick = () => editChat(entry, edit);
     row.classList.toggle("hidden-chat", data.chat_settings?.[entry.id]?.hidden === true);
-    row.append(button, edit);
+    const remove=document.createElement("button");remove.type="button";
+    remove.className="icon-button delete-chat";remove.title="Elimina definitivamente";
+    remove.setAttribute("aria-label","Elimina definitivamente "+chatLabel(entry));
+    remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>';
+    remove.onclick=guard(()=>deleteChat(entry));
+    row.append(button, edit, remove);
     $("#library-list").append(row);
     if (focused === entry.id) button.focus({ preventScroll: true });
   }
