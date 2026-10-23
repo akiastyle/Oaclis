@@ -1,6 +1,6 @@
-/* badge-motion.css v1.0.101 */
+/* badge-motion.css v1.0.118 */
 :root {
-  --badge-action-x: 46px;
+  --badge-action-x: 44px;
   --badge-ring-gap: 2px;
   --badge-ring-width: 2px;
   --badge-stagger: .3s;
@@ -12,7 +12,7 @@
 .motion-badge .link-main { z-index: 4; }
 .motion-badge .link-main .chat-badge { background: var(--panel); }
 .motion-badge .link-edit, .motion-badge .link-open, .motion-badge .link-web {
-  left: var(--badge-action-x); right: auto; top: -12px; bottom: auto;
+  left: calc(-1 * var(--space-20)); right: auto; top: calc(-1 * var(--space-20)); bottom: auto;
   width: 20px; height: 20px; padding: 4px; z-index: 2;
   opacity: 0; visibility: visible; pointer-events: none;
   transform: translate(-44px,40px) scale(.5);
@@ -22,7 +22,7 @@
   transition-delay: var(--badge-stagger);
 }
 .motion-badge .link-edit svg,.motion-badge .link-open svg,.motion-badge .link-web svg { width: 100%; height: 100%; }
-.motion-badge .link-open { top: 36px; transform: translate(-44px,-18px) scale(.5); transition-delay: 0s; }
+.motion-badge .link-open { left:var(--badge-action-x); top:var(--badge-action-x); transform: translate(-44px,-18px) scale(.5); transition-delay: 0s; }
 .motion-badge[data-motion-phase="idle"] .link-edit,.motion-badge[data-motion-phase="idle"] .link-open,.motion-badge[data-motion-phase="idle"] .link-web,
 .motion-badge[data-motion-phase="checking"] .link-edit,.motion-badge[data-motion-phase="checking"] .link-open,.motion-badge[data-motion-phase="checking"] .link-web { opacity:1; transform:translate(0,0) scale(1); pointer-events:auto; }
 .motion-badge[data-motion-phase="idle"] .link-edit,.motion-badge[data-motion-phase="checking"] .link-edit { transition-delay:0s; }
@@ -60,19 +60,16 @@
 
 :root { --link-ready-color: var(--scope-active); }
 .motion-badge .link-play {
-  position: absolute; left: var(--badge-action-x); top: 12px; width: 20px; height: 20px;
+  position: absolute; left: var(--badge-action-x); top: calc(-1 * var(--space-20)); width: 20px; height: 20px;
   padding: 4px; z-index: 2; border-radius: var(--radius-icon);
   color: var(--link-ready-color);
   background: color-mix(in srgb,var(--panel) var(--glass-opacity),transparent);
   backdrop-filter: blur(var(--glass-blur));
 }
 .motion-badge .link-play svg { width:100%; height:100%; }
-.motion-badge .link-play[data-ready="true"] { animation: link-ready-pulse 1.5s ease-in-out infinite; }
-.motion-badge .link-play[hidden],
-.motion-badge[data-motion-phase="transferring"] .link-play,
-.motion-badge[data-motion-phase="paused"] .link-play,
-.motion-badge[data-motion-phase="finishing"] .link-play { display:none; }
+.motion-badge .link-play[data-ready="true"]:enabled { animation: link-ready-pulse 1.5s ease-in-out infinite; }
+.motion-badge .link-play:disabled { color:var(--muted); animation:none; cursor:default; }
 @keyframes link-ready-pulse { 50% { box-shadow:0 0 var(--space-8) var(--link-ready-color); } }
 @media (prefers-reduced-motion: reduce) { .motion-badge .link-play { animation:none; } }
 
-.motion-badge .link-web { left:-28px; top:12px; transform:translate(44px,0) scale(.5); transition-delay:calc(2 * var(--badge-stagger)); }
+.motion-badge .link-web { left:calc(-1 * var(--space-20)); top:var(--badge-action-x); transform:translate(44px,0) scale(.5); transition-delay:calc(2 * var(--badge-stagger)); }

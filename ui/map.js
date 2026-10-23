@@ -1,4 +1,4 @@
-// map.js v3.116.2606
+// map.js v3.116.2616
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -159,10 +159,12 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
   const play = marker.querySelector(".link-play") || document.createElement("button");
   play.type = "button"; play.className = "link-play icon-button";
   const phase = connection.flow?.phase;
-  play.hidden = phase !== "ready" || connection.operation !== "sync" && connection.flow?.initialized;
-  play.disabled = data.paused || phase === "transferring" || connection.flow?.requested === true;
-  play.dataset.ready = String(phase === "ready");
-  play.title = phase === "failed" ? "Riprova trasferimento" : "Sincronizza verso la copia rimasta indietro";
+  play.hidden = false;
+  play.disabled = data.paused || phase !== "ready" || marker.playPending === true || connection.flow?.requested === true ||
+    connection.operation !== "sync" && connection.flow?.initialized ||
+    [connection.source,connection.target].some(id => id !== "master" && data.connections[id] === "offline");
+  play.dataset.ready = String(!play.disabled);
+  play.title = play.disabled ? (phase === "transferring" || marker.playPending || connection.flow?.requested ? "Sincronizzazione in corso" : "Sincronizzazione non disponibile") : "Sincronizza verso la copia rimasta indietro";
   play.setAttribute("aria-label", play.title);
   play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg>';
   play.onclick = guard(async () => {
