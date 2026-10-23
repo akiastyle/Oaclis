@@ -1,4 +1,4 @@
-// app.js v1.22.191
+// app.js v1.22.201
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/oaclis/sw.js',{scope:'/oaclis/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -72,7 +72,8 @@ async function openConsole(chat){
  const fitConsole=()=>document.documentElement.style.setProperty('--console-height',(window.visualViewport?.height??innerHeight)+'px');
  fitConsole();window.visualViewport?.addEventListener('resize',fitConsole);window.addEventListener('resize',fitConsole);
  const screen=document.getElementById('console-screen'),form=document.getElementById('console-input'),text=form.querySelector('textarea');
- let busy=false,closed=false,idle=Promise.resolve(),pending=null;
+ let busy=false,closed=false,idle=Promise.resolve(),pending=null,followOutput=true;
+ screen.addEventListener('scroll',()=>{followOutput=screen.scrollHeight-screen.clientHeight-screen.scrollTop<=24;},{passive:true});
  document.getElementById('back').onclick=()=>{closed=true;window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.documentElement.style.removeProperty('--console-height');document.removeEventListener('visibilitychange',resume);clearTimeout(timer);protectedView().catch(()=>location.replace('/oaclis/auth'));};
  const send=async(operation,body={})=>{
   if(busy&&operation==='input')await idle;
@@ -87,7 +88,12 @@ async function openConsole(chat){
    const completed=pending;pending=null;
    if(result.error)throw new Error(result.error);
    if(completed.operation==='input'&&text.value===completed.text)text.value='';
-   title.textContent=chat.name;screen.textContent=result.screen;screen.scrollTop=screen.scrollHeight;
+   title.textContent=chat.name;
+   if(completed.operation==='open'||completed.operation==='input')followOutput=true;
+   if(followOutput){
+    if(screen.textContent!==result.screen)screen.textContent=result.screen;
+    screen.scrollTop=screen.scrollHeight;
+   }
    form.querySelectorAll('textarea,button').forEach(element=>element.disabled=false);return true;
   }catch(e){if(e.status===403){closed=true;location.replace('/oaclis/auth');}else if(!closed)title.textContent=chat.name+(operation==='input'?' · Invio non confermato':' · Riconnessione…');return false;}finally{busy=false;done();}
  };
