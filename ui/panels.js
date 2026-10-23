@@ -1,4 +1,4 @@
-// panels.js v3.140.2584
+// panels.js v3.140.2590
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -195,7 +195,9 @@ async function saveChatScopes(entry, scopes, origin = sourceId || "master") {
 
 async function deleteChat(entry) {
   if(removingPresentation)return;
-  if(!window.confirm('Eliminare definitivamente “'+chatLabel(entry)+'” da Codex e da tutti i dispositivi?\n\nLa chat, la cronologia, i collegamenti e le azioni associate saranno cancellati senza possibilità di recupero. I dispositivi offline la cancelleranno quando torneranno disponibili.\n\nFile e cartelle del progetto resteranno intatti.'))return;
+  const source=sourceId || "master";
+  const global=source!=="master" || chatLinks.some(c=>c.entry.id===entry.id);
+  if(!window.confirm('Eliminare definitivamente “'+chatLabel(entry)+'” da Codex'+(global?' e da tutti i dispositivi':' su questo master')+'?\n\nLa chat e la cronologia saranno cancellate senza possibilità di recupero.'+(global?' Anche i collegamenti e le azioni associate saranno rimossi. I dispositivi offline la cancelleranno quando torneranno disponibili.':'')+'\n\nFile e cartelle del progetto resteranno intatti.'))return;
   removingPresentation=true;
   const previous=data.deleted_chats || [];
   const removed=chatLinks.filter(c=>c.entry.id===entry.id);
@@ -207,7 +209,7 @@ async function deleteChat(entry) {
   document.querySelectorAll('.chat-terminal').forEach(p=>{if(p.dataset.chatId===entry.id)closeChatTerminal(p);});
   renderLibrary();renderLink(true);
   try {
-    const result=await api("chat/delete",{id:entry.id,confirmed:true});
+    const result=await api("chat/delete",{id:entry.id,source_device_id:source,confirmed:true});
     data.deleted_chats=result.deleted_chats;
     notice("Eliminazione definitiva richiesta");
   } catch(error) {

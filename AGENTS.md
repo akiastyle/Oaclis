@@ -85,6 +85,7 @@
 - Deleting a connection removes only that chat/device association; never alter chat visibility, appearance, inventories, or user files.
 - Hiding/removing a chat presentation sets hidden and removes its associations, while retaining its label, custom icon, color, analysis and inventories. Do not use a removed flag for chat presentation.
 - Permanent chat deletion is a separate, explicitly confirmed action. Use native `codex delete <UUID> --force`; purge its Oaclis links, inventories, transfer records, positions and mobile grants. Never delete project paths or apps.
+- An unlinked chat resident on the master is deleted locally only: do not export its deletion intent, contact peers/mobile relay, or audit it after completion. Linked chats retain global deletion propagation.
 - Keep only UUID deletion intents and peer acknowledgements in shared-settings.json for offline delivery and to prevent resurrection by stale peers or late workers. Deletion must never start analysis or content sync. Updated peers apply pending deletion after reconnecting.
 - Metadata replication must not clear chat appearance when an old deletion tombstone is received.
 

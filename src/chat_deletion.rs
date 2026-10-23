@@ -1,4 +1,4 @@
-// chat_deletion.rs v1.12.150
+// chat_deletion.rs v1.12.172
 //! Irreversible chat deletion; only UUIDs and peer acknowledgements remain for offline delivery.
 use crate::{invalid, state_store::{self,State}};
 use serde_json::{Value,json};
@@ -18,6 +18,7 @@ pub(crate) fn validate(value:&Value)->io::Result<()> {
     let entries=value.as_object().filter(|v|v.len()<=10000).ok_or_else(||invalid("Cancellazioni non valide"))?;
     for (id,entry) in entries {
         if !valid_chat(id) || !entry.is_object() {return Err(invalid("Chat da cancellare non valida"));}
+        if entry.get("global").is_some_and(|v|!v.is_boolean()){return Err(invalid("Ambito cancellazione non valido"));}
         for name in ["targets","done"] {
             if !entry[name].as_array().is_some_and(|v|v.len()<=1000 && v.iter().all(|x|x.as_str().is_some_and(crate::devices::identifier))) {
                 return Err(invalid("Destinatari cancellazione non validi"));
@@ -31,7 +32,11 @@ pub(crate) fn merge(state:&mut State,incoming:&Value) {
     let shared=Arc::make_mut(&mut state.shared);
     if !shared["deletions"].is_object(){shared["deletions"]=json!({});}
     for (id,entry) in incoming.as_object().into_iter().flatten() {
+        let was_global=shared["deletions"].get(id).is_some_and(|v|v["global"]!=false);
+        let global=was_global || entry["global"]!=false;
         if !shared["deletions"][id].is_object(){shared["deletions"][id]=json!({"targets":[],"done":[]});}
+        if !was_global && global {shared["deletions"][id]["done"]=json!([]);}
+        shared["deletions"][id]["global"]=json!(global);
         for name in ["targets","done"] {
             let all:BTreeSet<_>=shared["deletions"][id][name].as_array().into_iter().flatten()
                 .chain(entry[name].as_array().into_iter().flatten()).filter_map(Value::as_str).map(str::to_owned).collect();
@@ -68,14 +73,17 @@ pub(crate) fn purge(state:&mut State,files:&mut Value) {
         points.retain(|key,_|!deleted.iter().any(|id|key.split(':').next()==Some(id.as_str())));
     }
 }
-pub(crate) fn request(config:&Path,id:&str)->io::Result<Value> {
+pub(crate) fn request(config:&Path,id:&str,source:&str)->io::Result<Value> {
     if !valid_chat(id){return Err(invalid("Identificativo chat non valido"));}
     let local=state_store::identity(config)?;
-    let pairing=state_store::read_json(&config.join("pairing.json"),json!({}))?;
-    let mut targets:BTreeSet<String>=pairing["approved"].as_object().into_iter().flatten().map(|(id,_)|id.clone()).collect();
-    targets.insert(local);
     state_store::change_with_files(config,|state,files|{
-        merge(state,&json!({id:{"targets":targets,"done":[]}}));
+        let global=source!="master" || state.links.values().any(|v|v["entry"]["id"]==id);
+        let mut targets=BTreeSet::from([local]);
+        if global {
+            let pairing=state_store::read_json(&config.join("pairing.json"),json!({}))?;
+            targets.extend(pairing["approved"].as_object().into_iter().flatten().map(|(id,_)|id.clone()));
+        }
+        merge(state,&json!({id:{"targets":targets,"done":[],"global":global}}));
         validate(&state.shared["deletions"])?;
         files["link-positions.json"]=state_store::read_json(&config.join("link-positions.json"),json!({}))?;
         purge(state,files);
@@ -124,7 +132,7 @@ pub(crate) fn start(home:PathBuf,config:PathBuf,codex:PathBuf,job:Arc<Mutex<Valu
                 let pending:Vec<String>=ids(&state).into_iter().filter(|id|{
                     let done=state.shared["deletions"][id]["done"].as_array().is_some_and(|v|v.iter().any(|v|v==&local));
                     let busy=job.lock().unwrap();
-                    (!done || audit_due) && !(busy["status"]=="running" && busy["chat_id"]==*id) &&
+                    (!done || audit_due && state.shared["deletions"][id]["global"]!=false) && !(busy["status"]=="running" && busy["chat_id"]==*id) &&
                         attempts.get(id).is_none_or(|t|t.elapsed()>=Duration::from_secs(30))
                 }).collect();
                 if pending.is_empty(){return Ok(());}
@@ -134,7 +142,7 @@ pub(crate) fn start(home:PathBuf,config:PathBuf,codex:PathBuf,job:Arc<Mutex<Valu
                     let done=state.shared["deletions"][&id]["done"].as_array().is_some_and(|v|v.iter().any(|v|v==&local));
                     if done && !present.contains(&id){continue;}
                     remove_local(&home,&codex,&id,present.contains(&id))?;
-                    crate::mobile::forget_chat(&config,&id)?;
+                    if state.shared["deletions"][&id]["global"]!=false {crate::mobile::forget_chat(&config,&id)?;}
                     state_store::change(&config,|state|{
                         let done=&mut Arc::make_mut(&mut state.shared)["deletions"][&id]["done"];
                         if !done.as_array().unwrap().iter().any(|v|v==&local){done.as_array_mut().unwrap().push(json!(local));}

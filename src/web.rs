@@ -1,4 +1,4 @@
-// web.rs v2.26.1681
+// web.rs v2.26.1683
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -346,7 +346,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Post, "/api/chat/delete") => {
                     let value=body(&mut request)?;
                     if value["confirmed"]!=true {return Err(invalid("Conferma cancellazione richiesta"));}
-                    crate::chat_deletion::request(&config,value["id"].as_str().ok_or_else(||invalid("Chat richiesta"))?)
+                    crate::chat_deletion::request(&config,value["id"].as_str().ok_or_else(||invalid("Chat richiesta"))?,value["source_device_id"].as_str().unwrap_or(""))
                 }
                 (&Method::Post, "/api/chat/visibility") => {
                     let value = body(&mut request)?;

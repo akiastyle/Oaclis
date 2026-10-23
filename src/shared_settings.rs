@@ -1,4 +1,4 @@
-// shared_settings.rs v1.12.528
+// shared_settings.rs v1.12.532
 //! Native settings replication over existing, mutually approved SSH connections.
 use crate::{
     invalid, shared_records as records,
@@ -267,7 +267,9 @@ pub(crate) fn exchange(config: &Path, packet: Option<&Value>) -> io::Result<Valu
         files["devices.json"] = json!(devices);
         files["positions.json"] = positions;
         files["link-positions.json"] = link_positions;
-        Ok(json!({"schema":1,"sender":id,"records":values,"deletions":state.shared["deletions"]}))
+        let outgoing:serde_json::Map<String,Value>=state.shared["deletions"].as_object().into_iter().flatten()
+            .filter(|(_,entry)|entry["global"]!=false).map(|(id,entry)|(id.clone(),entry.clone())).collect();
+        Ok(json!({"schema":1,"sender":id,"records":values,"deletions":outgoing}))
     })
 }
 fn sync_peer(config: &Path, peer: &str, device: &crate::devices::Device) -> io::Result<Value> {
