@@ -1,4 +1,4 @@
-// app.js v1.22.201
+// app.js v1.22.221
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/oaclis/sw.js',{scope:'/oaclis/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -69,11 +69,15 @@ async function openConsole(chat){
  show('<h1 id="console-title"></h1><pre id="console-screen" tabindex="0" aria-label="Console">Connessione…</pre><form id="console-input"><textarea aria-label="Messaggio" maxlength="8000" rows="2" placeholder="Scrivi un messaggio" disabled></textarea><button disabled aria-label="Invia messaggio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></form><div id="console-keys"><button id="back" class="secondary" type="button" aria-label="Chat autorizzate" title="Chat autorizzate">&lt;</button></div>');
  const title=document.getElementById('console-title');title.textContent=chat.name;
  keepConsoleAwake();
- const fitConsole=()=>document.documentElement.style.setProperty('--console-height',(window.visualViewport?.height??innerHeight)+'px');
- fitConsole();window.visualViewport?.addEventListener('resize',fitConsole);window.addEventListener('resize',fitConsole);
  const screen=document.getElementById('console-screen'),form=document.getElementById('console-input'),text=form.querySelector('textarea');
  let busy=false,closed=false,idle=Promise.resolve(),pending=null,followOutput=true;
  screen.addEventListener('scroll',()=>{followOutput=screen.scrollHeight-screen.clientHeight-screen.scrollTop<=24;},{passive:true});
+ const fitConsole=()=>{
+  const stick=followOutput||screen.scrollHeight-screen.clientHeight-screen.scrollTop<=24;
+  document.documentElement.style.setProperty('--console-height',(window.visualViewport?.height??innerHeight)+'px');
+  if(stick)requestAnimationFrame(()=>{if(!closed){followOutput=true;screen.scrollTop=screen.scrollHeight;}});
+ };
+ fitConsole();window.visualViewport?.addEventListener('resize',fitConsole);window.addEventListener('resize',fitConsole);
  document.getElementById('back').onclick=()=>{closed=true;window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.documentElement.style.removeProperty('--console-height');document.removeEventListener('visibilitychange',resume);clearTimeout(timer);protectedView().catch(()=>location.replace('/oaclis/auth'));};
  const send=async(operation,body={})=>{
   if(busy&&operation==='input')await idle;
@@ -90,9 +94,15 @@ async function openConsole(chat){
    if(completed.operation==='input'&&text.value===completed.text)text.value='';
    title.textContent=chat.name;
    if(completed.operation==='open'||completed.operation==='input')followOutput=true;
-   if(followOutput){
-    if(screen.textContent!==result.screen)screen.textContent=result.screen;
-    screen.scrollTop=screen.scrollHeight;
+   const top=screen.scrollTop,left=screen.scrollLeft,current=screen.textContent;
+   if(current!==result.screen){
+    if(current&&result.screen.startsWith(current))screen.firstChild.appendData(result.screen.slice(current.length));
+    else screen.textContent=result.screen;
+   }
+   if(followOutput)screen.scrollTop=screen.scrollHeight;
+   else {
+    if(screen.scrollTop!==top)screen.scrollTop=top;
+    if(screen.scrollLeft!==left)screen.scrollLeft=left;
    }
    form.querySelectorAll('textarea,button').forEach(element=>element.disabled=false);return true;
   }catch(e){if(e.status===403){closed=true;location.replace('/oaclis/auth');}else if(!closed)title.textContent=chat.name+(operation==='input'?' · Invio non confermato':' · Riconnessione…');return false;}finally{busy=false;done();}
