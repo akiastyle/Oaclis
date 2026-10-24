@@ -33,6 +33,9 @@ Dopo aver scaricato la repository, il primo comando da eseguire dipende dall’a
 
 Eseguire installazione e servizio con un utente normale, senza `sudo bash run.sh`. Le sole operazioni di sistema richiedono sudo; su Windows `run.ps1` richiede UAC per configurare la rete. La distribuzione WSL deve avere un utente normale predefinito. Le installazioni root esistenti non vengono migrate automaticamente.
 
+L'apertura della webapp passa dal collegamento personale `~/.config/oaclis/open-ui.html`, creato dal servizio con permessi 0600. `oaclis open-ui` e `run.ps1` lo usano automaticamente. La pagina HTTP non distribuisce credenziali: aprire solo localhost da un altro browser non autorizza l'accesso ai dati. L'autorizzazione rimane nella scheda del browser, anche dopo un refresh; dopo un riavvio del servizio riaprire il collegamento personale. Il file contiene una credenziale: non condividerlo.
+
+
 ### macOS / Linux / WSL / container Docker
 
 Nel terminale del sistema o del container, dalla cartella `Oaclis`:

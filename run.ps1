@@ -1,4 +1,4 @@
-# run.ps1 v1.6.244
+# run.ps1 v1.6.250
 # Windows checks; an explicitly selected WSL prepares and installs Oaclis.
 param([switch]$Check, [string]$Distro, [switch]$PrepareAwake, [switch]$PrepareNetwork, [switch]$DesktopTest)
 $ErrorActionPreference = 'Stop'
@@ -107,7 +107,11 @@ function Open-OaclisWebApp {
         } catch { Start-Sleep -Seconds 1 }
     }
     if (-not $ready) { throw 'Oaclis non risponde su http://127.0.0.1:23232: verificare il servizio Linux.' }
-    Start-Process 'http://127.0.0.1:23232'
+    $launchPath = (& wsl -d $Distro -- bash -c 'exec "$HOME/.local/bin/oaclis" ui-launch-path' | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $launchPath) { throw 'Collegamento personale Oaclis non disponibile.' }
+    $windowsPath = (& wsl -d $Distro -- wslpath -w $launchPath | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or -not $windowsPath) { throw 'Collegamento personale Oaclis non accessibile da Windows.' }
+    Start-Process -FilePath $windowsPath
     Write-Host '[OK] Webapp aperta: http://127.0.0.1:23232'
 }
 if ($PrepareAwake) { Initialize-OaclisWindowsAwake; return }

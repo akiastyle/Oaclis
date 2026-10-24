@@ -1,4 +1,4 @@
-/* style.css v2.0.1359 */
+/* style.css v2.0.1361 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1197,7 +1197,7 @@ select {
   backdrop-filter: blur(var(--glass-device-blur)) saturate(var(--glass-saturation));
   -webkit-backdrop-filter: blur(var(--glass-device-blur)) saturate(var(--glass-saturation));
 }
-.path-authorization::backdrop { background: transparent; }
+.path-authorization::backdrop { background: rgb(0 0 0 / 65%); }
 .path-authorization .authorization-path { overflow-wrap: anywhere; }
 .path-authorization form { display: grid; gap: var(--space-12); }
 .path-authorization .authorization-error:empty { display: none; }

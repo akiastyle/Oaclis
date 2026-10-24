@@ -1,4 +1,4 @@
-// path_access.rs v1.12.354
+// path_access.rs v1.12.379
 //! One-use authorization for creating a missing project directory; passwords never enter state.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -135,12 +135,13 @@ pub(crate) fn prepare(mut request: Value) -> io::Result<Value> {
         },
         Err(error) => return Err(error),
     }
-    let mut password = request["password"]
-        .take()
-        .as_str()
-        .ok_or_else(|| invalid("Password richiesta"))?
-        .as_bytes()
-        .to_vec();
+    let uid = number("-u")?;
+    let gid = number("-g")?;
+    let executable = std::env::current_exe()?;
+    let Value::String(password) = request["password"].take() else {
+        return Err(invalid("Password richiesta"));
+    };
+    let mut password = password.into_bytes();
     if password.is_empty()
         || password.len() > 1024
         || password.iter().any(|b| matches!(b, 0 | 10 | 13))
@@ -148,11 +149,9 @@ pub(crate) fn prepare(mut request: Value) -> io::Result<Value> {
         password.fill(0);
         return Err(invalid("Password non valida"));
     }
-    let uid = number("-u")?;
-    let gid = number("-g")?;
-    let mut child = Command::new("sudo")
+    let child = Command::new("sudo")
         .args(["-S", "-k", "-p", "", "--"])
-        .arg(std::env::current_exe()?)
+        .arg(executable)
         .arg("prepare-path-root")
         .arg(&path)
         .arg(uid.to_string())
@@ -160,7 +159,11 @@ pub(crate) fn prepare(mut request: Value) -> io::Result<Value> {
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .spawn()?;
+        .spawn();
+    let mut child = match child {
+        Ok(child) => child,
+        Err(error) => { password.fill(0); return Err(error); }
+    };
     let sent = (|| {
         let mut input = child.stdin.take().unwrap();
         input.write_all(&password)?;

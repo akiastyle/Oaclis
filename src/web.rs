@@ -1,4 +1,4 @@
-// web.rs v2.26.1687
+// web.rs v2.26.1690
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -138,6 +138,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     fs::File::open("/dev/urandom")?.read_exact(&mut random)?;
     let token: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
     let server = Server::http("0.0.0.0:23232").map_err(io::Error::other)?;
+    crate::open_ui::prepare_access(&config, &token)?;
     let peers = crate::peers::start(home.clone());
     let saved_transfers = environment::database(&config, "", "transfer-list", None)?;
     if let Some(records) = saved_transfers.as_object() {
@@ -204,7 +205,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 "/assets/oaclis-crown.svg" => Some((include_str!("../ui/assets/oaclis-crown.svg").into(), "image/svg+xml")),
                 "/assets/oaclis-whale.svg" => Some((include_str!("../ui/assets/oaclis-whale.svg").into(), "image/svg+xml")),
                 "/" => Some((
-                    include_str!("../ui/index.html").replace("__TOKEN__", &token).replace("__BRAND_ICON__", brand_icon).replace("__MASTER_CROWN__", if role == "master" { "<img class=\"brand-crown\" src=\"/assets/oaclis-crown.svg\" alt=\"\" width=\"24\" height=\"24\">" } else { "" }).replace("__APP_VERSION__", env!("OACLIS_APP_VERSION")),
+                    include_str!("../ui/index.html").replace("__BRAND_ICON__", brand_icon).replace("__MASTER_CROWN__", if role == "master" { "<img class=\"brand-crown\" src=\"/assets/oaclis-crown.svg\" alt=\"\" width=\"24\" height=\"24\">" } else { "" }).replace("__APP_VERSION__", env!("OACLIS_APP_VERSION")),
                     "text/html; charset=utf-8",
                 )),
                 "/style.css" => Some((

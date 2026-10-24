@@ -1,8 +1,13 @@
-// app.js v3.161.2994
+// app.js v4.161.3001
 "use strict";
 OaclisSettings.translate(document.body);
 const $ = (s) => document.querySelector(s);
-const token = $('meta[name="oaclis-token"]').content;
+const launchToken = /^#access=([a-f0-9]{64})$/.exec(location.hash)?.[1];
+if (launchToken) {
+  sessionStorage.setItem('oaclis-local-access', launchToken);
+  history.replaceState(null, '', location.pathname + location.search);
+}
+const token = launchToken || sessionStorage.getItem('oaclis-local-access') || '';
 const esc = (v) =>
   String(v ?? "").replace(
     /[&<>"']/g,
