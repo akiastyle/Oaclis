@@ -1,4 +1,4 @@
-// main.rs v1.2.181
+// main.rs v1.2.183
 use oaclis::{
     chat::Chat,
     compare,
@@ -16,6 +16,8 @@ use std::path::Path;
 fn run() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args_os().skip(1).collect();
     match args.as_slice() {
+        [command] if command == "ssh-gateway" => oaclis::ssh_gateway::run()?,
+        [command] if command == "file-request" => oaclis::ssh_gateway::files()?,
         [command] if command == "environment-request" => oaclis::environment::forward()?,
         [command] if command == "prepare-awake" => oaclis::keep_awake::prepare(None)?,
         [command, option, user] if command == "prepare-awake" && option == "--user" => oaclis::keep_awake::prepare(Some(user.to_str().ok_or("Utente non valido")?))?,

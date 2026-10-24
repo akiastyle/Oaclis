@@ -1,4 +1,4 @@
-// pairing.rs v1.48.663
+// pairing.rs v1.53.714
 //! Signed discovery and mutually approved SSH; persistent identities stay unchanged.
 use crate::{invalid, ssh_settings as ssh};
 use serde_json::{Value, json};
@@ -202,16 +202,44 @@ fn append_unique(path: &Path, line: &str) -> io::Result<()> {
     let mut text=match crate::open_regular(path) { Ok((mut f,_))=>{let mut s=String::new();f.read_to_string(&mut s)?;s},Err(e) if e.kind()==io::ErrorKind::NotFound=>String::new(),Err(e)=>return Err(e) };
     if !text.lines().any(|s|s==line) { text=text.trim_end_matches('\n').to_owned()+if text.is_empty() {""} else {"\n"}+line+"\n";ssh::atomic(path,text.as_bytes())?; } Ok(())
 }
+fn managed_key(line: &str, key: &str, id: &str) -> bool {
+    line.trim() == format!("{key} oaclis-peer-{id}") || line.trim().ends_with(&format!(" {key} oaclis-peer-{id}"))
+}
+fn restricted_key(home: &Path, key: &str, id: &str) -> io::Result<String> {
+    public_key(key)?;
+    if !peer_id(id) { return Err(invalid("Identita peer non valida")); }
+    let binary = home.join(".local/bin/oaclis");
+    let binary = binary.to_str().filter(|s|!s.contains(['\n','\r','\0'])).ok_or_else(||invalid("Home non valida"))?;
+    let command = format!("exec {} ssh-gateway", crate::ssh::quote(binary)).replace('\\', "\\\\").replace('"', "\\\"");
+    Ok(format!("restrict,command=\"{command}\" {key} oaclis-peer-{id}"))
+}
+fn install_key(home: &Path, key: &str, id: &str) -> io::Result<()> {
+    let path = ssh::ssh_directory(home)?.join("authorized_keys");
+    let replacement = restricted_key(home,key,id)?;
+    let text = match crate::open_regular(&path) { Ok((mut f,_))=>{let mut text=String::new();f.read_to_string(&mut text)?;text},Err(e) if e.kind()==io::ErrorKind::NotFound=>String::new(),Err(e)=>return Err(e) };
+    if text.lines().filter(|line|managed_key(line,key,id)).eq(std::iter::once(replacement.as_str())) { return Ok(()); }
+    let mut lines:Vec<_>=text.lines().filter(|line|!managed_key(line,key,id)).map(str::to_owned).collect();
+    lines.push(replacement);
+    ssh::atomic(&path,format!("{}\n",lines.join("\n")).as_bytes())
+}
+pub(crate) fn protect_keys(home: &Path) -> io::Result<()> {
+    let config=home.join(".config/oaclis");let _lock=ssh::lock(&config)?;
+    let saved=state(&config)?;
+    for (id,approval) in saved["approved"].as_object().unwrap() {
+        if approval["device_id"].as_str().is_some_and(|id|!id.is_empty()) { install_key(home,approval["public_key"].as_str().unwrap(),id)?; }
+    }
+    Ok(())
+}
 fn forget(home: &Path, config: &Path, device: &str) -> io::Result<Value> {
     let mut saved=state(config)?;
     let approvals=saved["approved"].as_object().unwrap().clone();
     for (id,approval) in approvals {
         if approval["device_id"]!=device { continue; }
-        let line=format!("{} oaclis-peer-{id}",approval["public_key"].as_str().ok_or_else(||invalid("Approvazione non valida"))?);
+        let key=approval["public_key"].as_str().ok_or_else(||invalid("Approvazione non valida"))?;
         let path=home.join(".ssh/authorized_keys");
         if path.symlink_metadata().is_ok() {
             let (mut f,_)=crate::open_regular(&path)?;let mut text=String::new();f.read_to_string(&mut text)?;
-            ssh::atomic(&path,text.lines().filter(|s|*s!=line).map(|s|format!("{s}\n")).collect::<String>().as_bytes())?;
+            ssh::atomic(&path,text.lines().filter(|s|!managed_key(s,key,&id)).map(|s|format!("{s}\n")).collect::<String>().as_bytes())?;
         }
         saved["approved"].as_object_mut().unwrap().remove(&id);ignore(&mut saved,&id);
     }
@@ -221,7 +249,7 @@ fn commit(home: &Path, config: &Path, card: &Value) -> io::Result<Value> {
     validate(card)?;let mut saved=state(config)?;let (_,key)=identity(config)?;let id=card["id"].as_str().unwrap();
     if saved["approved"][id]["public_key"]!=card["public_key"] || !card["approved"].as_array().unwrap().contains(&json!(identifier(&key)?)) { return Err(invalid("Sono richieste entrambe le autorizzazioni")); }
     let data=&card["ssh"];let host_key=data["host_key"].as_str().ok_or_else(||invalid(format!("SSH non pronto su {}: attivare il server SSH",card["name"].as_str().unwrap())))?;
-    let directory=ssh::ssh_directory(home)?;let known=config.join("known_hosts");
+    ssh::ssh_directory(home)?;let known=config.join("known_hosts");
     let address=data["address"].as_str().unwrap();let port=data["port"].as_u64().unwrap();let endpoint=if port==22 {address.into()} else {format!("[{address}]:{port}")};
     if known.symlink_metadata().is_ok() {
         crate::open_regular(&known)?;
@@ -243,7 +271,7 @@ fn commit(home: &Path, config: &Path, card: &Value) -> io::Result<Value> {
     ssh::apply(home,config,"save",&json!({"id":device.id,"ssh_alias":device.ssh_alias,"paired":true,"settings":{"address":address,"port":port,"user":data["user"],"identity_file":config.join("pairing_ed25519")}}))?;
     crate::devices::save(config.join("devices.json"),&devices)?;
     saved["approved"][id]["device_id"]=json!(device.id);crate::staging::save_json(&config.join("pairing.json"),&saved)?;
-    append_unique(&directory.join("authorized_keys"),&format!("{} oaclis-peer-{id}",card["public_key"].as_str().unwrap()))?;
+    install_key(home,card["public_key"].as_str().unwrap(),id)?;
     Ok(json!({"device_id":device.id}))
 }
 pub(crate) fn request(home: &Path, operation: &str, value: &Value) -> io::Result<Value> {
@@ -313,6 +341,21 @@ mod tests {
         request(&root.0,"approve",&json!({"peer":card,"accept":true})).unwrap();card["approved"]=json!([card["id"]]);
         assert!(request(&root.0,"commit",&card).unwrap_err().to_string().contains("SSH non pronto"));assert!(!root.0.join(".ssh/authorized_keys").exists());
         let signed=request(&root.0,"sign",&card).unwrap();assert!(verify(&signed).unwrap()["ssh"]["host_key"].is_null());
+    }
+    #[test]
+    fn restricted_keys_replace_only_managed_entries_and_can_be_revoked() {
+        let root=fixture("restricted-keys");let home=root.0.join("home");fs::create_dir(&home).unwrap();
+        let config=home.join(".config/oaclis");fs::create_dir_all(&config).unwrap();
+        let (_,key)=identity(&config).unwrap();let id=identifier(&key).unwrap();
+        let ssh=ssh::ssh_directory(&home).unwrap();
+        let path=ssh.join("authorized_keys");
+        fs::write(&path,format!("personal-key\n{key} oaclis-peer-{id}\n")).unwrap();
+        install_key(&home,&key,&id).unwrap();install_key(&home,&key,&id).unwrap();
+        let text=fs::read_to_string(&path).unwrap();assert_eq!(text.lines().count(),2);
+        assert!(text.starts_with("personal-key\nrestrict,command=\"exec "));
+        assert!(text.contains(" ssh-gateway\" ssh-ed25519 "));
+        crate::staging::save_json(&config.join("pairing.json"),&json!({"approved":{id:{"public_key":key,"device_id":"device"}},"ignored":[]})).unwrap();
+        forget(&home,&config,"device").unwrap();assert_eq!(fs::read_to_string(&path).unwrap(),"personal-key\n");
     }
     #[test]
     fn step3_pairing_parses_linux_and_macos_interfaces_without_network_probes() {

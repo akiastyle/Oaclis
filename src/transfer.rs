@@ -1,4 +1,4 @@
-// transfer.rs v1.11.421
+// transfer.rs v1.11.468
 use crate::{
     check_unchanged,
     devices::Device,
@@ -51,7 +51,7 @@ struct RemoteStage<'a> {
 impl Drop for RemoteStage<'_> {
     fn drop(&mut self) {
         // shortcut: offline durante la pulizia lascia una cartella privata, aggiungere recupero con le regole persistenti.
-        let _ = ssh::run(self.device, &format!("rm -rf -- {}", quote(&self.path)));
+        let _ = ssh::file(self.device, &serde_json::json!({"operation":"cleanup","stage":self.path}));
     }
 }
 
@@ -115,20 +115,7 @@ pub(crate) fn write_file(
         .file
         .set_times(std::fs::FileTimes::new().set_modified(metadata.modified()?))?;
     let prefix = format!("{}/.oaclis-", parent.trim_end_matches('/'));
-    let existence = if let Some(receipt) = previous {
-        verify_command(target, receipt)?
-    } else {
-        format!("[ ! -e {} ] && [ ! -L {} ]", quote(target), quote(target))
-    };
-    let output = ssh::run(
-        device,
-        &format!(
-            "p={}; while [ \"$p\" != / ]; do [ -d \"$p\" ] && [ ! -L \"$p\" ] || exit 2; p=$(dirname -- \"$p\"); done; {} || exit 3; mktemp -d -- {}",
-            quote(parent),
-            existence,
-            quote(&format!("{prefix}XXXXXXXXXX"))
-        ),
-    )?;
+    let output = ssh::file(device, &serde_json::json!({"operation":"stage","target":target,"previous":previous}))?;
     let stage = String::from_utf8(output)
         .map_err(io::Error::other)?
         .trim_end_matches('\n')
@@ -145,17 +132,7 @@ pub(crate) fn write_file(
     };
     let remote_file = format!("{}/file", stage.path);
     if let Some(receipt) = previous {
-        ssh::run(
-            device,
-            &format!(
-                "cp --reflink=auto -- {} {} && {} && cp --reflink=auto -- {} {}",
-                quote(target),
-                quote(&format!("{}/previous", stage.path)),
-                verify_command(&format!("{}/previous", stage.path), receipt)?,
-                quote(&format!("{}/previous", stage.path)),
-                quote(&remote_file)
-            ),
-        )?;
+        ssh::file(device, &serde_json::json!({"operation":"seed","target":target,"stage":stage.path,"previous":receipt}))?;
     }
     let mut command = Command::new("rsync");
     command
@@ -180,10 +157,7 @@ pub(crate) fn write_file(
         .arg(format!("{}:{}", device.ssh_alias, remote_file));
     progress::run(&mut command, notify)?;
     notify(Event::Verifying);
-    ssh::run(
-        device,
-        &publish_command(target, &remote_file, previous, &expected)?,
-    )?;
+    ssh::file(device, &serde_json::json!({"operation":"publish","target":target,"staged":remote_file,"previous":previous,"incoming":expected}))?;
     notify(Event::Completed);
     Ok(expected)
 }
@@ -255,18 +229,7 @@ pub(crate) fn inspect_remote(device: &Device, target: &Path) -> io::Result<Optio
     let target = target
         .to_str()
         .ok_or_else(|| invalid("Percorso remoto non UTF-8"))?;
-    let parent = Path::new(target)
-        .parent()
-        .and_then(Path::to_str)
-        .ok_or_else(|| invalid("Cartella mancante"))?;
-    let output = ssh::run(
-        device,
-        &format!(
-            "p={}; while [ \"$p\" != / ]; do [ -d \"$p\" ] && [ ! -L \"$p\" ] || exit 2; p=$(dirname -- \"$p\"); done; if [ ! -e {t} ] && [ ! -L {t} ]; then echo missing; else [ -f {t} ] && [ ! -L {t} ] && sha256sum < {t} && wc -c < {t} && stat -c %a -- {t}; fi",
-            quote(parent),
-            t = quote(target)
-        ),
-    )?;
+    let output = ssh::file(device, &serde_json::json!({"operation":"inspect","target":target}))?;
     let output = String::from_utf8(output).map_err(io::Error::other)?;
     if output == "missing\n" {
         return Ok(None);

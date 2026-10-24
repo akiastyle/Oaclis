@@ -35,6 +35,9 @@ Eseguire installazione e servizio con un utente normale, senza `sudo bash run.sh
 
 L'apertura della webapp passa dal collegamento personale `~/.config/oaclis/open-ui.html`, creato dal servizio con permessi 0600. `oaclis open-ui` e `run.ps1` lo usano automaticamente. La pagina HTTP non distribuisce credenziali: aprire solo localhost da un altro browser non autorizza l'accesso ai dati. L'autorizzazione rimane nella scheda del browser, anche dopo un refresh; dopo un riavvio del servizio riaprire il collegamento personale. Il file contiene una credenziale: non condividerlo.
 
+Le chiavi create dal pairing Oaclis usano un comando SSH vincolato al programma, senza shell libera, SFTP, terminale interattivo o inoltri di porte. Il canale accetta richieste native e rsync in modalita server; console e trasferimenti mantengono i permessi dell'utente normale. Non e una sandbox dei percorsi. Installare la stessa versione su tutti i device prima di attivare questa gestione: `prepare-service`, richiamato da `run.sh`, aggiorna le sole chiavi Oaclis gia approvate, conservando le chiavi personali. Il canale protetto rifiuta l'esecuzione come root; per un master root esistente completare prima la migrazione. Non ci sono ripieghi automatici sulla shell libera.
+
+
 
 ### macOS / Linux / WSL / container Docker
 

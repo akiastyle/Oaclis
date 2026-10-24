@@ -1,10 +1,10 @@
-// rules.rs v1.19.537
+// rules.rs v1.19.571
 use crate::{
     devices::{self, Device},
     invalid, open_regular,
     paths::{ProjectPaths, validate_absolute},
     progress::Event,
-    ssh::{self, quote},
+    ssh,
     staging,
     sync::{self, Direction, Kind, Outcome},
     transfer,
@@ -145,13 +145,7 @@ pub(crate) fn ensure_remote(device: &Device, directory: &Path) -> io::Result<()>
     let directory = directory
         .to_str()
         .ok_or_else(|| invalid("Directory remota non UTF-8"))?;
-    ssh::run(
-        device,
-        &format!(
-            "p={d}; while [ \"$p\" != / ]; do [ ! -L \"$p\" ] && {{ [ ! -e \"$p\" ] || [ -d \"$p\" ]; }} || exit 2; p=$(dirname -- \"$p\"); done; mkdir -p -- {d}",
-            d = quote(directory)
-        ),
-    )?;
+    ssh::file(device, &serde_json::json!({"operation":"mkdir","target":directory}))?;
     Ok(())
 }
 fn local_files(rule: &Rule, directory: &Path, files: &mut BTreeSet<PathBuf>) -> io::Result<()> {
@@ -257,17 +251,7 @@ fn reserved_path(path: &Path) -> bool {
     })
 }
 fn remote_files(device: &Device, rule: &Rule) -> io::Result<BTreeSet<PathBuf>> {
-    let output = ssh::run(
-        device,
-        &format!(
-            "find -- {} -printf '%y\\0%P\\0'",
-            quote(
-                rule.remote_root
-                    .to_str()
-                    .ok_or_else(|| invalid("Radice non UTF-8"))?
-            )
-        ),
-    )?;
+    let output = ssh::file(device, &serde_json::json!({"operation":"list","target":rule.remote_root}))?;
     let parts: Vec<_> = output.split(|b| *b == 0).collect();
     if parts.last() != Some(&&b""[..]) || parts.len() % 2 != 1 {
         return Err(invalid("Elenco remoto non valido"));
@@ -432,17 +416,7 @@ pub fn execute(
                 fs::set_permissions(&local, fs::Permissions::from_mode(mode & 0o777))?;
             } else {
                 let mode = fs::metadata(&local)?.permissions().mode() & 0o777;
-                ssh::run(
-                    device,
-                    &format!(
-                        "[ ! -L {p} ] && chmod {mode:o} -- {p}",
-                        p = quote(
-                            remote
-                                .to_str()
-                                .ok_or_else(|| invalid("Percorso non UTF-8"))?
-                        )
-                    ),
-                )?;
+                ssh::file(device, &serde_json::json!({"operation":"chmod","target":remote,"mode":mode}))?;
             }
         }
         results.push(FileResult { path, outcome });

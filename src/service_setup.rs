@@ -1,4 +1,4 @@
-// service_setup.rs v1.8.192
+// service_setup.rs v1.8.193
 use crate::invalid;
 use std::{env, fs, io::{self, Write}, net::{TcpStream, SocketAddr}, path::Path, process::Command, time::Duration};
 
@@ -50,6 +50,7 @@ pub fn prepare() -> io::Result<()> {
     let name = format!("oaclis-{uid}.service");
     let privileged = uid != "0";
     if privileged { checked(Command::new("sudo").arg("-v"))?; }
+    crate::pairing::protect_keys(home)?;
     let content = unit(home, &uid, fields[3], fields[0], &env::vars().collect::<Vec<_>>())?;
     let mut temporary = crate::staging::StagedFile::new(&env::temp_dir())?;
     // systemd-analyze requires a recognized unit suffix.
