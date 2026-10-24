@@ -1,4 +1,4 @@
-// voice.js v1.33.226
+// voice.js v1.33.232
 'use strict';
 window.OaclisVoice=(()=>{
  const numbers=['uno','due','tre','quattro','cinque','sei','sette','otto','nove','dieci','undici','dodici','tredici','quattordici','quindici','sedici','diciassette','diciotto','diciannove','venti'];
@@ -42,6 +42,8 @@ window.OaclisVoice=(()=>{
  }
  function create(){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+  // Android continuous mode promotes cumulative partial results to final results.
+  const singleUtterance=navigator.userAgentData?.platform==='Android'||/Android/i.test(navigator.userAgent);
   let adapter=null,recognition=null,retiring=null,generation=0,revision=0,target=null,undo=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=false,locked=false,state='idle',disposed=false,utteranceRevision=0;
   let button,status,microphoneState,preview,options,help,root;
   const blocked=()=>locked||adapter?.sending?.();
@@ -164,7 +166,7 @@ window.OaclisVoice=(()=>{
   function start(){
    if(!Recognition||!window.isSecureContext||disposed||!wanted||document.hidden||blocked()||recognition||retiring)return;
    clearTimeout(retryTimer);const current=++generation,session=new Recognition(),consumed=new Set();recognition=session;
-   session.lang='it-IT';session.continuous=true;session.interimResults=true;session.maxAlternatives=1;
+   session.lang='it-IT';session.continuous=!singleUtterance;session.interimResults=true;session.maxAlternatives=1;
    state='starting';paint();utteranceRevision=revision;
    const fresh=()=>!disposed&&recognition===session&&generation===current;
    session.onstart=()=>{if(fresh()){state='listening';paint();}};
@@ -187,7 +189,7 @@ window.OaclisVoice=(()=>{
     feedback(messages[event.error]||'Ascolto interrotto.');
     if(terminal){wanted=false;invalidate();state='error';paint();}
    };
-   session.onend=()=>{if(retiring===session){retiring=null;state='idle';paint();if(wanted&&!blocked()&&!disposed)retryTimer=setTimeout(start,0);return;}if(!fresh())return;recognition=null;state='idle';preview.textContent='';paint();retry();};
+   session.onend=()=>{if(retiring===session){retiring=null;state='idle';paint();if(wanted&&!blocked()&&!disposed)retryTimer=setTimeout(start,0);return;}if(!fresh())return;recognition=null;state='idle';preview.textContent='';paint();if(singleUtterance&&consumed.size&&wanted&&!document.hidden&&!blocked())retryTimer=setTimeout(start,200);else retry();};
    try{session.start();}catch{if(fresh()){recognition=null;state='error';paint();feedback('Microfono non avviato.');retry();}}
   }
   function focus(event){

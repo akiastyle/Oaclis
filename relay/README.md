@@ -95,3 +95,9 @@ Non viene aperto uno stream getUserMedia aggiuntivo. La sintesi vocale non e'
 compresa in questa prima versione.
 Verifiche automatiche con SpeechRecognition simulato: `node tools/test_mobile_voice.cjs`
 (test locale ignorato da Git). Il test fisico S24/PWA resta da eseguire sul telefono.
+
+Su Android ogni sessione vocale riconosce una frase, con anteprima provvisoria e
+riarmo dopo il risultato definitivo finche il toggle resta acceso. Questo evita
+la promozione dei risultati parziali a finali nella modalita continua di Chromium.
+Le ripetizioni intenzionali in frasi successive restano valide: non si deduplica
+confrontando il testo. Sugli altri sistemi resta la modalita continua.
