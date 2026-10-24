@@ -1,12 +1,12 @@
 <?php
-// index.php v1.5.286
+// index.php v1.5.294
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
-header("Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; manifest-src 'self'; img-src 'self'; worker-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
+header("Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; manifest-src 'self'; img-src 'self' data:; worker-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
 header('Permissions-Policy: publickey-credentials-create=(self), publickey-credentials-get=(self), screen-wake-lock=(self), microphone=(self)');
 if (($_SERVER['HTTP_HOST'] ?? '') !== 'www.krprojects.it') { http_response_code(404); exit; }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -80,7 +80,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $allowed=[];
             foreach ($chats as $chat) {
                 if (!is_array($chat) || !is_string($chat['id']??null) || !preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,159}$/D',$chat['id']) || !is_string($chat['name']??null) || trim($chat['name'])==='' || mb_strlen($chat['name'])>320 || preg_match('/[\x00-\x1f\x7f]/u',$chat['name']) || isset($allowed[$chat['id']])) throw new RuntimeException();
-                $allowed[$chat['id']]=['id'=>$chat['id'],'name'=>$chat['name']];
+                $icon=$chat['icon']??''; $color=$chat['color']??'';
+                if (!is_string($icon) || strlen($icon)>48000 || ($icon!=='' && !preg_match('/^(?:[a-z]+|data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+\/=]*)$/D',$icon)) || !is_string($color) || ($color!=='' && !preg_match('/^#[a-f0-9]{6}$/iD',$color))) throw new RuntimeException();
+                $allowed[$chat['id']]=['id'=>$chat['id'],'name'=>$chat['name'],'icon'=>$icon,'color'=>$color];
             }
             $state['devices'][$target]['chats']=array_values($allowed);
             if (isset($state['devices'][$target]['console']) && !isset($allowed[$state['devices'][$target]['console']['chat_id']])) unset($state['devices'][$target]['console']);
@@ -231,5 +233,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD']!=='GET') {http_response_code(405);exit;}
 ?>
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><meta name="theme-color" content="#111314"><link rel="manifest" href="/oaclis/manifest.webmanifest"><link rel="icon" type="image/png" href="/oaclis/icon-192.png"><link rel="apple-touch-icon" href="/oaclis/icon-192.png"><link rel="stylesheet" href="/oaclis/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/oaclis/voice.js?v=<?= hash_file('sha256', __DIR__.'/voice.js') ?>"></script><script defer src="/oaclis/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><meta name="theme-color" content="#111314"><link rel="manifest" href="/oaclis/manifest.webmanifest"><link rel="icon" type="image/png" href="/oaclis/icon-192.png"><link rel="apple-touch-icon" href="/oaclis/icon-192.png"><link rel="stylesheet" href="/oaclis/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/oaclis/locale.js?v=<?= hash_file('sha256', __DIR__.'/locale.js') ?>"></script><script defer src="/oaclis/icons.js?v=<?= hash_file('sha256', __DIR__.'/icons.js') ?>"></script><script defer src="/oaclis/voice.js?v=<?= hash_file('sha256', __DIR__.'/voice.js') ?>"></script><script defer src="/oaclis/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
 <body><main id="app" hidden aria-live="polite"></main></body></html>

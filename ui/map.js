@@ -1,4 +1,4 @@
-// map.js v3.116.2654
+// map.js v3.116.2744
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -135,18 +135,18 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
   const badgeHtml = badge(connection.entry);
   if (main.dataset.badgeHtml !== badgeHtml) { main.innerHTML = badgeHtml; main.dataset.badgeHtml = badgeHtml; }
   main.title = name;
-  main.setAttribute("aria-label", "Sposta " + name);
-  main.title = "Trascina " + name;
+  main.setAttribute("aria-label", OaclisSettings.text("Sposta ") + name);
+  main.title = OaclisSettings.text("Trascina ") + name;
   const open = marker.querySelector(".link-open") || document.createElement("button");
   open.type = "button"; open.className = "link-open icon-button";
-  open.setAttribute("aria-label", "Apri " + name); open.title = "Apri console";
+  open.setAttribute("aria-label", OaclisSettings.text("Apri ") + name); open.title = OaclisSettings.text("Apri console");
   open.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + icons.terminal + '</svg>';
   open.onclick = () => chooseChatTerminal(connection, open);
   const edit = marker.querySelector(".link-edit") || document.createElement("button");
   edit.type = "button";
   edit.className = "link-edit icon-button";
-  edit.setAttribute("aria-label", "Modifica " + name);
-  edit.title = "Modifica chat";
+  edit.setAttribute("aria-label", OaclisSettings.text("Modifica ") + name);
+  edit.title = OaclisSettings.text("Modifica chat");
   edit.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
   edit.onclick = guard(async () => {
     const cached = connection.source === sourceId ? visibleChats : connection.source === "master" ? data.chats : [];
@@ -165,7 +165,7 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
     connection.operation !== "sync" && connection.flow?.initialized ||
     [connection.source,connection.target].some(id => id !== "master" && data.connections[id] === "offline");
   play.dataset.ready = String(!play.disabled);
-  play.title = play.disabled ? (phase === "transferring" || marker.playPending || connection.flow?.requested ? "Sincronizzazione in corso" : "Sincronizzazione non disponibile") : "Sincronizza verso la copia rimasta indietro";
+  play.title = play.disabled ? (phase === "transferring" || marker.playPending || connection.flow?.requested ? OaclisSettings.text("Sincronizzazione in corso") : OaclisSettings.text("Sincronizzazione non disponibile")) : OaclisSettings.text("Sincronizza verso la copia rimasta indietro");
   play.setAttribute("aria-label", play.title);
   play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg>';
   play.onclick = guard(async () => {
@@ -175,16 +175,16 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
     try { chatLinks = await saveLinkChange(() => api("links/play", connection)); renderLink(true); }
     finally { marker.playPending = false; if (play.isConnected) { renderLink(true); updateBadgeMotion(marker, chatLinks.find(value => value.entry.id === connection.entry.id && value.source === connection.source && value.target === connection.target) || connection); } }
   });
-  marker.title = name + (connection.flow?.error ? " · " + connection.flow.error : phase === "conflict" ? " · Le copie divergono: scegliere quale mantenere" : phase === "offline" ? " · In attesa del dispositivo" : "");
+  marker.title = name + (connection.flow?.error ? " · " + connection.flow.error : phase === "conflict" ? OaclisSettings.text(" · Le copie divergono: scegliere quale mantenere") : phase === "offline" ? OaclisSettings.text(" · In attesa del dispositivo") : "");
   const url = appearance(connection.entry).url || "";
   let web = marker.querySelector(".link-web");
   if (url) {
     try {
       const parsed = new URL(url);
-      if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) throw new Error("URL non valido");
+      if (!["http:", "https:"].includes(parsed.protocol) || parsed.username || parsed.password) throw new Error(OaclisSettings.text("URL non valido"));
       if (!web) { web = document.createElement("a"); web.className = "link-web icon-button"; marker.append(web); }
       web.href = parsed.href; web.target = "_blank"; web.rel = "noopener noreferrer";
-      web.title = "Apri pagina web"; web.setAttribute("aria-label", "Apri pagina web di " + name);
+      web.title = OaclisSettings.text("Apri pagina web"); web.setAttribute("aria-label", OaclisSettings.text("Apri pagina web di ") + name);
       web.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + icons.link + '</svg>';
       web.inert = ["transferring", "paused", "finishing"].includes(marker.dataset.motionPhase);
     } catch (_) { web?.remove(); }
@@ -269,7 +269,7 @@ function renderLibrary() {
   if (!entries.length) {
     $("#library-list").innerHTML =
       '<p class="muted">' +
-      (search ? "Nessun risultato." : "Nessuna chat disponibile.") +
+      (search ? OaclisSettings.text("Nessun risultato.") : OaclisSettings.text("Nessuna chat disponibile.")) +
       "</p>";
     return;
   }
@@ -322,14 +322,14 @@ function renderLibrary() {
         "color-mix(in srgb, " + rowColor + " 14%, transparent)";
     const edit = document.createElement("button");
     edit.className = "icon-button";
-    edit.setAttribute("aria-label", "Personalizza " + chatLabel(entry));
+    edit.setAttribute("aria-label", OaclisSettings.text("Personalizza ") + chatLabel(entry));
     edit.innerHTML =
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
     edit.onclick = () => editChat(entry, edit);
     row.classList.toggle("hidden-chat", data.chat_settings?.[entry.id]?.hidden === true);
     const remove=document.createElement("button");remove.type="button";
-    remove.className="icon-button delete-chat";remove.title="Elimina definitivamente";
-    remove.setAttribute("aria-label","Elimina definitivamente "+chatLabel(entry));
+    remove.className="icon-button delete-chat";remove.title=OaclisSettings.text("Elimina definitivamente");
+    remove.setAttribute("aria-label",OaclisSettings.text("Elimina definitivamente ")+chatLabel(entry));
     remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>';
     remove.onclick=guard(()=>deleteChat(entry));
     row.append(button, edit, remove);
@@ -428,7 +428,7 @@ function renderMap(animate = false) {
     node.setAttribute("role", mobile ? "group" : "button");
     node.innerHTML =
       '<span class="device-symbol">' + iconBody(mobile ? "mobile" : data.appearance?.["device:" + device.id]?.icon ?? "desktop", device.name) +
-      (!mobile && device.id !== "master" && data.ssh_settings?.[device.id]?.in_lan !== true ? '<span class="remote-badge" role="img" aria-label="Probabilmente remoto" title="Probabilmente remoto"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></span>' : '') + '</span>' +
+      (!mobile && device.id !== "master" && data.ssh_settings?.[device.id]?.in_lan !== true ? OaclisSettings.html('<span class="remote-badge" role="img" aria-label="Probabilmente remoto" title="Probabilmente remoto"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></span>') : '') + '</span>' +
       '<span class="node-name">'  +
       esc(device.name) +
       '</span><i class="status-dot" aria-hidden="true"></i>';
@@ -445,8 +445,8 @@ function renderMap(animate = false) {
     if (!mobile) {
     const customize = document.createElement("button");
     customize.className = "node-color icon-button";
-    customize.setAttribute("aria-label", "Modifica " + device.name);
-    customize.title = "Modifica dispositivo";
+    customize.setAttribute("aria-label", OaclisSettings.text("Modifica ") + device.name);
+    customize.title = OaclisSettings.text("Modifica dispositivo");
     customize.innerHTML =
       '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
     customize.onclick = (e) => {
@@ -455,8 +455,8 @@ function renderMap(animate = false) {
     };
     actions.append(customize);
     for (const [action, label, shape] of [
-      ["restart", "Riavvia Oaclis", '<path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5"/>'],
-      ["toggle-awake", "Sempre attivo", '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>'],
+      ["restart", OaclisSettings.text("Riavvia Oaclis"), '<path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5"/>'],
+      ["toggle-awake", OaclisSettings.text("Sempre attivo"), '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>'],
     ]) {
       const button = document.createElement("button");
       button.className = "node-color node-" + action + " icon-button";
@@ -467,19 +467,19 @@ function renderMap(animate = false) {
         result.observed_at ??= Date.now();
         data.device_runtime ??= {}; data.device_runtime[device.id] = result;
         button.setAttribute("aria-pressed", String(result.active));
-        button.title = (result.active ? "Standby bloccato" : "Standby consentito") + (result.error ? " · " + result.error : "");
+        button.title = (result.active ? OaclisSettings.text("Standby bloccato") : OaclisSettings.text("Standby consentito")) + (result.error ? " · " + result.error : "");
       };
       if (action === "toggle-awake" && data.device_runtime?.[device.id]) update(data.device_runtime[device.id]);
       button.onclick = guard(async event => {
         event.stopPropagation();
-        if (action === "restart" && !window.confirm("Riavviare Oaclis su “" + device.name + "”?")) return;
+        if (action === "restart" && !window.confirm(OaclisSettings.text("Riavviare Oaclis su “") + device.name + "”?")) return;
         button.disabled = true; button.dataset.busy = "true";
-        if (action === "toggle-awake") button.title = button.getAttribute("aria-pressed") === "true" ? "Disattivazione blocco standby…" : "Attivazione blocco standby…";
+        if (action === "toggle-awake") button.title = button.getAttribute("aria-pressed") === "true" ? OaclisSettings.text("Disattivazione blocco standby…") : OaclisSettings.text("Attivazione blocco standby…");
         try {
           const result = await api("device/control", { device_id: device.id, action });
           if (action === "toggle-awake") update(result);
           else if (device.id === "master") window.setTimeout(() => window.location.reload(), 1500);
-          else notice("Riavvio Oaclis richiesto su " + device.name);
+          else notice(OaclisSettings.text("Riavvio Oaclis richiesto su ") + device.name);
         } finally { delete button.dataset.busy; renderConnections(); }
       });
       actions.append(button);
@@ -487,8 +487,8 @@ function renderMap(animate = false) {
     if (device.id !== "master" && data.role === "master") {
       const desktop = document.createElement("a");
       desktop.className = "node-color node-desktop icon-button";
-      desktop.title = "Desktop remoto";
-      desktop.setAttribute("aria-label", "Desktop remoto · " + device.name);
+      desktop.title = OaclisSettings.text("Desktop remoto");
+      desktop.setAttribute("aria-label", OaclisSettings.text("Desktop remoto · ") + device.name);
       desktop.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8m-4-4v4"/></svg>';
       desktop.hidden = true;
       desktop.onclick = event => {
@@ -510,17 +510,17 @@ function renderMap(animate = false) {
           current = await api("device/control", {device_id:device.id,action:"status"});
           data.device_runtime ??= {}; data.device_runtime[device.id] = current;
         } finally { delete version.dataset.checking; renderConnections(); }
-        if (!current.build?.source_id) throw new Error("Il dispositivo non comunica la versione installata");
-        if (current.build.source_id === data.build?.source_id) { notice("Oaclis è allineato su " + device.name); return; }
+        if (!current.build?.source_id) throw new Error(OaclisSettings.text("Il dispositivo non comunica la versione installata"));
+        if (current.build.source_id === data.build?.source_id) { notice(OaclisSettings.text("Oaclis è allineato su ") + device.name); return; }
         version.dataset.busy = "true"; version.disabled = true;
         try {
           const result = await api("device/control", {device_id:device.id,action:"update"});
           result.observed_at ??= Date.now();
           data.device_runtime ??= {}; data.device_runtime[device.id] = result;
-          notice("Aggiornamento Oaclis avviato su " + device.name);
+          notice(OaclisSettings.text("Aggiornamento Oaclis avviato su ") + device.name);
         } catch (error) {
           console.error("Oaclis update:", error);
-          notice("Aggiornamento non riuscito");
+          notice(OaclisSettings.text("Aggiornamento non riuscito"));
         } finally { delete version.dataset.busy; renderConnections(); }
       });
       actions.append(version);
@@ -528,13 +528,13 @@ function renderMap(animate = false) {
     } else {
       const access = document.createElement('button');
       access.className = 'node-color icon-button'; access.type = 'button';
-      access.title = 'QR accesso'; access.setAttribute('aria-label', 'QR accesso · ' + device.name);
+      access.title = OaclisSettings.text('QR accesso'); access.setAttribute('aria-label', OaclisSettings.text('QR accesso · ') + device.name);
       access.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h2v2h-2zm4 0h2v6h-6v-2"/></svg>';
       access.onclick = event => { event.stopPropagation(); openMobileAccess(access); };
       actions.append(access);
       const remove = document.createElement('button');
       remove.className = 'node-color icon-button'; remove.type = 'button';
-      remove.title = 'Elimina telefono'; remove.setAttribute('aria-label', 'Elimina ' + device.name);
+      remove.title = OaclisSettings.text('Elimina telefono'); remove.setAttribute('aria-label', OaclisSettings.text('Elimina ') + device.name);
       remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>';
       remove.onclick = guard(async event => { event.stopPropagation(); await removeMobile(device); });
       actions.append(remove);
@@ -543,9 +543,9 @@ function renderMap(animate = false) {
     place(node, previous[device.id] || positions[device.id] || defaultPosition(index));
     if (!mobile) {
       for (const [operation, label] of [
-        ["sync", "Sincronizzazione bidirezionale"],
-        ["send", "Invia a questo dispositivo"],
-        ["receive", "Ricevi da questo dispositivo"],
+        ["sync", OaclisSettings.text("Sincronizzazione bidirezionale")],
+        ["send", OaclisSettings.text("Invia a questo dispositivo")],
+        ["receive", OaclisSettings.text("Ricevi da questo dispositivo")],
       ]) {
         const port = document.createElement("button");
         port.className = "connection-port " + operation;
@@ -560,7 +560,7 @@ function renderMap(animate = false) {
         port.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + paths[operation] + '"/></svg>';
         const local = device.id === "master";
   const objectId = device.id || "device-" + crypto.randomUUID();
-        if (local) port.title = operation === "send" ? "Invia a un dispositivo" : operation === "receive" ? "Ricevi da un dispositivo" : label;
+        if (local) port.title = operation === "send" ? OaclisSettings.text("Invia a un dispositivo") : operation === "receive" ? OaclisSettings.text("Ricevi da un dispositivo") : label;
         const peer = () => !local ? "master" :
           sourceId && sourceId !== "master" ? sourceId : data.devices.length === 1 ? data.devices[0].id : null;
         const origin = () => operation === "receive" ? peer() : device.id;
@@ -573,7 +573,7 @@ function renderMap(animate = false) {
             selectChat(selected, target(sourceId), transferOperation);
           else {
             const id = origin();
-            if (!id) { notice("Seleziona il dispositivo da cui ricevere la chat."); return; }
+            if (!id) { notice(OaclisSettings.text("Seleziona il dispositivo da cui ricevere la chat.")); return; }
             await openDevice(id);
           }
         });
@@ -590,7 +590,7 @@ function renderMap(animate = false) {
           e.stopPropagation();
           if (!drag) return;
           if (!accepts(drag.sourceId)) {
-            notice("Trascina su Ricevi o Bidirezionale di un altro dispositivo compatibile.");
+            notice(OaclisSettings.text("Trascina su Ricevi o Bidirezionale di un altro dispositivo compatibile."));
             return;
           }
           sourceId = drag.sourceId;
@@ -680,11 +680,11 @@ function renderConnections() {
       state +
       (id === sourceId ? " selected" : "") +
       (id !== "master" || data.appearance?.["device:" + id]?.color ? " colored-device" : "");
-    const label = mobile ? mobile.active ? 'Attivo' : 'Non attivo' : {
-      online: "raggiungibile",
-      offline: "non raggiungibile",
-      checking: "verifica in corso",
-      unknown: "non verificato",
+    const label = mobile ? mobile.active ? OaclisSettings.text('Attivo') : OaclisSettings.text('Non attivo') : {
+      online: OaclisSettings.text("raggiungibile"),
+      offline: OaclisSettings.text("non raggiungibile"),
+      checking: OaclisSettings.text("verifica in corso"),
+      unknown: OaclisSettings.text("non verificato"),
     }[state];
     node.querySelectorAll(".node-restart, .node-toggle-awake").forEach(button => { button.disabled = state !== "online" || button.dataset.busy === "true"; });
     const awake = node.querySelector(".node-toggle-awake");
@@ -692,7 +692,7 @@ function renderConnections() {
     if (awake && !awake.dataset.busy) {
       const known = state === "online" && runtime?.available !== false && typeof runtime?.active === "boolean";
       awake.setAttribute("aria-pressed", known ? String(runtime.active) : "mixed");
-      awake.title = (known ? runtime.active ? "Standby bloccato" : "Standby consentito" : "Stato standby non disponibile") + (runtime?.error ? " · " + runtime.error : "");
+      awake.title = (known ? runtime.active ? OaclisSettings.text("Standby bloccato") : OaclisSettings.text("Standby consentito") : OaclisSettings.text("Stato standby non disponibile")) + (runtime?.error ? " · " + runtime.error : "");
       awake.setAttribute("aria-label", deviceName(id) + " · " + awake.title);
     }
     const desktop = node.querySelector(".node-desktop");
@@ -717,7 +717,7 @@ function renderConnections() {
       version.dataset.state = status;
       version.disabled = state !== "online" || !!pending || !!version.dataset.checking;
       version.title = build?.version || "";
-      version.setAttribute("aria-label", build?.version || "Versione non disponibile");
+      version.setAttribute("aria-label", build?.version || OaclisSettings.text("Versione non disponibile"));
     }
     node.title = deviceName(id) + " · " + label;
     node.setAttribute(
@@ -725,7 +725,7 @@ function renderConnections() {
       deviceName(id) +
         ", " +
         label +
-        (mobile ? ". Invio per scegliere le chat, frecce per spostare." : ". Invio per le chat, frecce per spostare."),
+        (mobile ? OaclisSettings.text(". Invio per scegliere le chat, frecce per spostare.") : OaclisSettings.text(". Invio per le chat, frecce per spostare.")),
     );
   });
 }
@@ -739,7 +739,7 @@ async function selectChat(entry, targetId, operation = "copy") {
       link = null;
       renderLink(true);
     });
-  } catch (error) { notice("Associazione non salvata: " + error.message); }
+  } catch (error) { notice(OaclisSettings.text("Associazione non salvata: ") + error.message); }
 }
 
 

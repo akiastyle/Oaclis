@@ -1,43 +1,26 @@
-// voice.js v1.33.331
+// voice.js v1.33.400
 'use strict';
 window.OaclisVoice=(()=>{
- const numbers=['uno','due','tre','quattro','cinque','sei','sette','otto','nove','dieci','undici','dodici','tredici','quattordici','quindici','sedici','diciassette','diciotto','diciannove','venti'];
- const normalize=text=>text.normalize('NFKC').trim().toLocaleLowerCase('it-IT').replace(/\s+/g,' ').replace(/[.!?,;:]+$/u,'').trim();
+ const locale=OaclisSettings,grammar=locale.voice;
+ const numbers=grammar.numbers;
+ const normalize=text=>text.normalize('NFKC').trim().toLocaleLowerCase(locale.speechLanguage).replace(/\s+/g,' ').replace(/[.!?,;:]+$/u,'').trim();
  const number=text=>/^\d+$/.test(text)?Number(text):numbers.indexOf(text)+1;
- const commands=[
-  {id:'send',aliases:['invia','invia messaggio'],label:'invia'},
-  {id:'back',aliases:['indietro','torna indietro'],label:'indietro'},
-  {id:'chatList',aliases:['elenco chat','mostra chat'],label:'elenco chat'},
-  {id:'selectChatNumber',pattern:/^seleziona chat numero (.+)$/,label:'seleziona chat numero …'},
-  {id:'selectChat',pattern:/^(?:seleziona|apri) chat (.+)$/,label:'apri chat …'},
-  {id:'searchChat',pattern:/^cerca chat (.+)$/,label:'cerca chat …'},
-  {id:'compose',aliases:['scrivi messaggio'],label:'scrivi messaggio'},
-  {id:'newLine',aliases:['a capo','nuova riga'],label:'a capo'},
-  {id:'undoDictation',aliases:['annulla dettatura'],label:'annulla dettatura'},
-  {id:'clearDraft',aliases:['svuota messaggio'],label:'svuota messaggio'},
-  {id:'scrollUp',aliases:['scorri su'],label:'scorri su'},
-  {id:'scrollDown',aliases:['scorri giù','scorri in basso'],label:'scorri giù'},
-  {id:'pauseRec',aliases:['stop rec'],label:'stop rec'},
-  {id:'resumeRec',aliases:['start rec'],label:'start rec'},
-  {id:'help',aliases:['help','aiuto vocale','mostra comandi'],label:'help'},
-  {id:'closeHelp',aliases:['chiudi help','chiudi aiuto'],label:'chiudi help'},
-  {id:'stop',aliases:['ferma ascolto','disattiva microfono','spegni microfono'],label:'ferma ascolto'},
- ];
+ const commands=grammar.commands.map(([id,phrases,label])=>Array.isArray(phrases)?{id,aliases:phrases,label:phrases[0]}:{id,pattern:phrases,label});
  function parse(segment){
   const original=segment.trim(),text=normalize(original);
-  if(text==='scrivi messaggio')return {type:'command',id:'compose',args:''};
-  if(text.startsWith('scrivi '))return {type:'dictation',text:original.replace(/^scrivi\s+/iu,'')};
-  const explicit=text.startsWith('comando '),value=explicit?text.slice(8):text;
+  if(commands.find(command=>command.id==='compose').aliases.includes(text))return {type:'command',id:'compose',args:''};
+  if(text.startsWith(grammar.literal+' '))return {type:'dictation',text:original.replace(new RegExp('^'+grammar.literal+'\\s+','iu'),'')};
+  const explicit=text.startsWith(grammar.explicit+' '),value=explicit?text.slice(grammar.explicit.length+1):text;
+  const raw=explicit?original.replace(new RegExp('^'+grammar.explicit+'\\s+','iu'),''):original;
   for(const item of commands){
    const match=item.pattern?.exec(value);
    if(item.aliases?.includes(value)||match){
-    // Keep parameter case/accents as dictated; only the matching copy is normalized.
-    const args=match?original.replace(explicit?/^comando\s+/iu:/^/u,'').replace(/^(?:(?:seleziona chat numero)|(?:(?:seleziona|apri|cerca) chat))\s+/iu,'').replace(/[.!?,;:]+$/u,'').trim():'';
-    if(args.length>160)return {type:'error',message:'Nome troppo lungo.'};
+    const args=match?(item.pattern.exec(raw)?.[1]||match[1]).replace(/[.!?,;:]+$/u,'').trim():'';
+    if(args.length>160)return {type:'error',message:locale.text('Nome troppo lungo.')};
     return {type:'command',id:item.id,args};
    }
   }
-  return explicit?{type:'error',message:'Comando sconosciuto.'}:{type:'dictation',text:segment};
+  return explicit?{type:'error',message:locale.text('Comando sconosciuto.')}:{type:'dictation',text:segment};
  }
  function resolve(chats,name){
   const target=normalize(name),exact=chats.filter(chat=>normalize(chat.name)===target);
@@ -51,12 +34,12 @@ window.OaclisVoice=(()=>{
   let button,status,preview,options,help,root;
   const blocked=()=>locked||adapter?.sending?.();
   const valid=field=>field?.isConnected&&!field.disabled&&!field.readOnly&&adapter?.fields().includes(field)&&['textarea','input'].includes(field.localName)&&field.type!=='password';
-  const feedback=text=>{if(status)status.textContent=text;};
+  const feedback=text=>{if(status)status.textContent=locale.text(text);};
   const paint=()=>{
    if(!button)return;
    const mode=!wanted?'off':paused?'paused':state==='listening'&&!blocked()?'listening':'busy';
    button.dataset.state=state;button.dataset.mode=mode;button.setAttribute('aria-pressed',String(wanted));
-   button.title=({off:'Attiva voce',paused:'Dettatura in pausa · start rec per riprendere',listening:'Dettatura attiva · clic per spegnere',busy:'Collegamento o elaborazione vocale · clic per spegnere'})[mode];
+   button.title=locale.text(({off:'Attiva voce',paused:'Dettatura in pausa · start rec per riprendere',listening:'Dettatura attiva · clic per spegnere',busy:'Collegamento o elaborazione vocale · clic per spegnere'})[mode]);
    button.setAttribute('aria-label',button.title);
   };
   const clearPending=()=>{clearTimeout(pendingTimer);pending=null;if(options){if(options.open)options.close();options.replaceChildren();}};
@@ -86,12 +69,12 @@ window.OaclisVoice=(()=>{
   function showHelp(){
    if(help.open)return;
    help.replaceChildren();
-   const close=document.createElement('button');close.type='button';close.className='voice-close secondary';close.setAttribute('aria-label','Chiudi comandi vocali');
+   const close=document.createElement('button');close.type='button';close.className='voice-close secondary';close.setAttribute('aria-label',locale.text('Chiudi comandi vocali'));
    close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';close.onclick=()=>help.close();
-   const title=document.createElement('h1');title.textContent='Comandi vocali';
+   const title=document.createElement('h1');title.textContent=locale.text('Comandi vocali');
    const list=document.createElement('ul');
    for(const command of commands.filter(command=>command.id==='closeHelp'||available(command.id))){const item=document.createElement('li');item.textContent=command.aliases?.join(' / ')||command.label;list.append(item);}
-   const tip=document.createElement('p');tip.textContent='Stop rec sospende la scrittura e resta in ascolto. Start rec riprende. Il pulsante microfono spegne completamente. Per dettare una parola comando: “scrivi invia”.';
+   const tip=document.createElement('p');tip.textContent=grammar.tip;
    help.append(close,title,list,tip);help.showModal();
   }
   function available(id){
@@ -112,7 +95,7 @@ window.OaclisVoice=(()=>{
     const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=kind==='select'?`${index+1}. ${item.name}`:item.name;
     b.onclick=()=>choose(index);options.append(b);
    }
-   const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent='Annulla';cancel.onclick=()=>{clearPending();feedback('Operazione annullata');};options.append(cancel);options.showModal();
+   const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent=locale.text('Annulla');cancel.onclick=()=>{clearPending();feedback('Operazione annullata');};options.append(cancel);options.showModal();
    pendingTimer=setTimeout(()=>{clearPending();feedback('Scelta scaduta');},kind==='select'?15000:10000);
   }
   async function action(task){
@@ -147,10 +130,10 @@ window.OaclisVoice=(()=>{
    }
    if(paused||help?.open)return;
    if(pending){
-    const value=normalize(segment).replace(/^comando /u,'');
-    if(['annulla selezione','annulla operazione'].includes(value)){clearPending();feedback('Operazione annullata');return;}
-    if(pending.kind==='clear'&&value==='conferma svuotamento'){choose(0);return;}
-    const match=/^scegli (.+)$/.exec(value);
+    const value=normalize(segment).replace(new RegExp('^'+grammar.explicit+' '),'');
+    if(grammar.cancel.includes(value)){clearPending();feedback('Operazione annullata');return;}
+    if(pending.kind==='clear'&&value===grammar.confirm){choose(0);return;}
+    const match=grammar.choose.exec(value);
     if(pending.kind==='select'&&match){const n=number(match[1]);if(n>=1&&n<=20)choose(n-1);else feedback('Scegli un numero tra quelli mostrati.');return;}
     feedback(pending.kind==='select'?'Scegli uno dei numeri mostrati oppure annulla selezione.':'Pronuncia conferma svuotamento oppure annulla operazione.');return;
    }
@@ -164,7 +147,7 @@ window.OaclisVoice=(()=>{
     case 'undoDictation':
      if(!valid(undo?.field)||undo.revision!==revision||undo.chat!==adapter?.chatId||undo.field.value!==undo.after){feedback('Annullamento non disponibile dopo altre modifiche.');break;}
      undo.field.value=undo.value;undo.field.setSelectionRange(undo.start,undo.end);undo.field.dispatchEvent(new Event('input',{bubbles:true}));undo=null;feedback('Dettatura annullata');break;
-    case 'clearDraft':choices('clear',[{name:'Conferma svuotamento'}]);feedback('Confermare lo svuotamento del messaggio?');break;
+    case 'clearDraft':choices('clear',[{name:locale.text('Conferma svuotamento')}]);feedback('Confermare lo svuotamento del messaggio?');break;
     case 'selectChatNumber':{
      const n=number(normalize(args)),chat=adapter.list()[n-1];
      if(n<1||n>20||!chat){feedback('Numero fuori elenco.');break;}await openChat(chat);break;
@@ -188,7 +171,7 @@ window.OaclisVoice=(()=>{
   function start(){
    if(!Recognition||!window.isSecureContext||disposed||!wanted||document.hidden||blocked()||recognition||retiring)return;
    clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=new Recognition(),consumed=new Set();let sessionError=null;recognition=session;
-   session.lang='it-IT';session.continuous=!singleUtterance;session.interimResults=true;session.maxAlternatives=1;
+   session.lang=locale.speechLanguage;session.continuous=!singleUtterance;session.interimResults=true;session.maxAlternatives=1;
    state='starting';paint();utteranceRevision=revision;
    const fresh=()=>!disposed&&recognition===session&&generation===current;
    session.onstart=()=>{if(fresh()){state='listening';paint();}};
@@ -237,11 +220,11 @@ window.OaclisVoice=(()=>{
   function hidden(){if(document.hidden)stop();}
   function bind(next,host){
    root?.remove();button?.remove();invalidate();clearPending();revision++;undo=null;target=null;adapter=next;
-   root=document.createElement('section');root.className='voice-panel';root.setAttribute('aria-label','Controlli vocali');
+   root=document.createElement('section');root.className='voice-panel';root.setAttribute('aria-label',locale.text('Controlli vocali'));
    status=document.createElement('span');status.className='voice-sr';status.setAttribute('aria-live','polite');status.setAttribute('role','status');
    preview=document.createElement('span');preview.className='voice-preview voice-sr';preview.setAttribute('aria-hidden','true');
-   options=document.createElement('dialog');options.className='voice-options voice-dialog';options.setAttribute('aria-label','Conferma comando vocale');options.addEventListener('cancel',event=>{event.preventDefault();clearPending();});
-   help=document.createElement('dialog');help.className='voice-help voice-dialog';help.setAttribute('aria-label','Comandi vocali');
+   options=document.createElement('dialog');options.className='voice-options voice-dialog';options.setAttribute('aria-label',locale.text('Conferma comando vocale'));options.addEventListener('cancel',event=>{event.preventDefault();clearPending();});
+   help=document.createElement('dialog');help.className='voice-help voice-dialog';help.setAttribute('aria-label',locale.text('Comandi vocali'));
    root.append(status,preview,options,help);document.getElementById('app').append(root);
    button=document.createElement('button');button.type='button';button.className='voice-mic secondary';button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8"/></svg>';
    host.append(button);

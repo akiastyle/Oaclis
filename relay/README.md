@@ -71,9 +71,9 @@ Il microfono verde indica la dettatura attiva; arancione lampeggiante indica
 collegamento o elaborazione, giallo fisso indica la pausa di scrittura. Non ci
 sono righe di stato, anteprime o pulsanti “?” sotto i comandi della console.
 Le indicazioni di accessibilita restano disponibili ai lettori di schermo.
-`help` apre a tutto schermo i comandi disponibili; `chiudi help` o la X lo chiudono.
-`stop rec` mantiene il microfono in ascolto ma ignora dettatura e azioni di modifica;
-`start rec` riprende la scrittura. In pausa restano utilizzabili i controlli di
+`mostra comandi` apre la guida a tutto schermo; `chiudi comandi` o la X la chiudono.
+`pausa dettatura` mantiene il microfono in ascolto ma ignora dettatura e azioni di modifica;
+`riprendi dettatura` riprende la scrittura. In pausa restano utilizzabili i controlli di
 registrazione, help e spegnimento. Un clic sul microfono acceso spegne tutto;
 il clic successivo riattiva la dettatura. Scelte ambigue e conferme esplicite
 usano pannelli a tutto schermo solo quando necessari.
@@ -116,3 +116,25 @@ Gli errori effettivi conservano il limite di tre retry; il silenzio Android non
 e' un errore. Lo spegnimento esplicito e il background annullano ogni riarmo.
 Un microfono realmente spento non puo ricevere il comando per riaccendersi:
 serve il pulsante.
+
+## Lingue condivise e lista chat
+
+La fonte unica per Oaclis e PWA e' `ui/locale.js`: impostare `settings.language`
+a `auto` (default), `it` o `en`. In automatico si sceglie la prima lingua
+supportata tra quelle preferite dal browser; se nessuna e' supportata si usa
+l'inglese. La lingua scelta imposta testi UI, attributo HTML lang, comandi,
+numeri parlati e SpeechRecognition.lang (it-IT / en-US). Non ci sono nuove
+preferenze su DB, scansioni periodiche o un pannello da gestire.
+
+Italiano: `pausa dettatura`, `riprendi dettatura`, `mostra comandi`,
+`chiudi comandi`, `scrivi invia`, `comando invia`. Inglese: `pause dictation`,
+`resume dictation`, `show commands`, `close commands`, `write send`,
+`command send`. Gli ID delle azioni interne non cambiano. Nomi delle chat,
+bozze e output delle console non vengono tradotti.
+
+Il deploy pubblica `ui/locale.js` e `ui/icons.js` come `/oaclis/locale.js` e
+`/oaclis/icons.js`, prima degli script relay che li usano. Non mantenere copie
+indipendenti in relay/. La lista usa numero grande separato, icona condivisa
+o PNG personalizzato, nome a sinistra e play a destra nella stessa azione.
+L'aspetto delle chat autorizzate viene aggiornato nel worker relay esistente
+quando cambia la presentazione sul master; gli ID autorizzati non cambiano.

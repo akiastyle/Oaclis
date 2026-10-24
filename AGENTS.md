@@ -17,6 +17,8 @@
 - Rust entrypoint: `src/main.rs`; HTTP adapter: `src/web.rs`. Catalog reads live in `src/catalog.rs`, initial/manual inventory detection in `src/initial_inventory.rs`, transfer execution in `src/transfer_job.rs`.
 - Keep chat handling, paths, transfers, rules, preparation, settings, and presentation in small independent modules.
 - Operational application logic is Rust-only in `src/`; no Python helper is required. Project Python files remain read-only inventory evidence. Frontend assets live in `ui/`. `ui/app.js` owns shared state, API helpers and startup/polling; `ui/map.js` owns map/links/library, `ui/panels.js` owns contextual panels, and `ui/console.js` owns chat consoles. These classic deferred scripts share controller globals; keep their loading order in `ui/index.html` and their Rust asset routes consistent.
+- `ui/locale.js` is the single EN/IT settings, translation and voice-command source for native UI and mobile PWA. It follows browser preferences by default; source settings can pin a language. Publish this same file to the relay; do not create a separate mobile dictionary. Translate interface copy only, never user labels, chat content or terminal output.
+- `ui/icons.js` is the shared icon catalog; the relay uses the same published source.
 - `ui/badge-motion.js` and `ui/badge-motion.css` handle animation only. They do not decide or execute transfers, calculate progress, or access storage.
 - Public HTTP access stays routed through the Rust adapter. Do not expose internal helpers, credentials, or configuration files directly.
 - Prefer existing reliable Linux tools for transport: SSH and rsync. Oaclis owns scheduling; do not add cron jobs or systemd scheduling as a side effect.

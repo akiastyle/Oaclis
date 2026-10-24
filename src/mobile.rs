@@ -1,4 +1,4 @@
-// mobile.rs v1.19.334
+// mobile.rs v1.20.377
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -136,15 +136,25 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
             }
         });
         let worker = registry.clone();
-        thread::spawn(move || loop {
+        thread::spawn(move || {
+         let mut last_appearance=None;
+         loop {
             {
                 let _exchange = worker.exchange.lock().unwrap();
                 match request(&config, json!({"action":"admin-list"})).and_then(|r| listed_devices(&r, "approved")) {
-                    Ok(reply) => *worker.devices.lock().unwrap() = reply["devices"].as_array().unwrap().clone(),
+                    Ok(reply) => {
+                        *worker.devices.lock().unwrap() = reply["devices"].as_array().unwrap().clone();
+                        if let Ok(state)=crate::state_store::snapshot(&config) {
+                            if last_appearance.as_ref().is_none_or(|previous| !Arc::ptr_eq(previous,&state.appearance)) {
+                                if refresh_chat_appearance(&config,&state,&reply["devices"]).is_ok() { last_appearance=Some(state.appearance.clone()); }
+                            }
+                        }
+                    },
                     Err(_) => { for device in worker.devices.lock().unwrap().iter_mut() { device["active"] = json!(false); } }
                 }
             }
             thread::sleep(Duration::from_secs(10));
+         }
         });
     }
     registry
@@ -153,6 +163,25 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
 pub(crate) fn remove(config: &Path, value: &Value, registry: &Registry) -> io::Result<Value> {
     let id = value["id"].as_str().and_then(|s| s.strip_prefix("mobile-")).ok_or_else(|| invalid("Telefono non valido"))?;
     approve(config, &json!({"id":id,"accept":false}), registry)
+}
+
+fn refresh_chat_appearance(config:&Path,state:&crate::state_store::State,devices:&Value)->io::Result<()> {
+    for device in devices.as_array().into_iter().flatten() {
+        let Some(id)=device["id"].as_str().and_then(|id|id.strip_prefix("mobile-")) else {continue;};
+        let saved=request(config,json!({"action":"chat-access","id":id}))?;
+        let mut chats=saved["chats"].as_array().cloned().unwrap_or_default();
+        for chat in &mut chats {
+            if let Some(value)=chat["id"].as_str().and_then(|id|state.appearance.get(&format!("chat:{id}"))) {
+                if let Some(label)=value.value["label"].as_str().filter(|label|!label.trim().is_empty()) { chat["name"]=json!(label); }
+                chat["icon"]=json!(value.value["icon"].as_str().unwrap_or(""));
+                chat["color"]=json!(value.value["color"].as_str().unwrap_or(""));
+            }
+        }
+        if json!(chats)!=saved["chats"] {
+            if request(config,json!({"action":"set-chat-access","id":id,"chats":chats}))?["ok"]!=true { return Err(invalid("Aggiornamento aspetto chat non riuscito")); }
+        }
+    }
+    Ok(())
 }
 
 fn chat_choices(config: &Path, codex: &Path, existing: &Value) -> io::Result<std::collections::BTreeMap<String, Value>> {
@@ -167,7 +196,9 @@ fn chat_choices(config: &Path, codex: &Path, existing: &Value) -> io::Result<std
         let label = state.appearance.get(&format!("chat:{id}"))
             .and_then(|r| r.value["label"].as_str()).filter(|s| !s.trim().is_empty())
             .unwrap_or_else(|| entry["name"].as_str().unwrap_or("Senza titolo"));
-        choices.insert(id.into(), json!({"id":id,"name":label.chars().filter(|c| !c.is_control()).take(320).collect::<String>()}));
+        let value=state.appearance.get(&format!("chat:{id}"));
+        choices.insert(id.into(), json!({"id":id,"name":label.chars().filter(|c| !c.is_control()).take(320).collect::<String>(),
+            "icon":value.and_then(|record|record.value["icon"].as_str()).unwrap_or(""),"color":value.and_then(|record|record.value["color"].as_str()).unwrap_or("")}));
     }
     Ok(choices)
 }
@@ -219,7 +250,7 @@ mod tests {
         std::fs::write(root.join("sessions").join(format!("rollout-{id}.jsonl")), "").unwrap();
         std::fs::write(root.join("session_index.jsonl"), json!({"id":id,"thread_name":"Originale"}).to_string()).unwrap();
         crate::state_store::change(&root, |state| {
-            crate::state_store::chat_record(state, id).value = json!({"label":"Rinominata"});
+            crate::state_store::chat_record(state, id).value = json!({"label":"Rinominata","icon":"code","color":"#12ab34"});
             Arc::make_mut(&mut state.links).insert("remote".into(),json!({"entry":{"id":"remote-chat","name":"Remota"}}));
             Ok(())
         }).unwrap();
@@ -227,7 +258,9 @@ mod tests {
         assert_eq!(choices[id]["name"],"Rinominata");
         assert_eq!(choices["remote-chat"]["name"],"Remota");
         assert_eq!(choices["saved-chat"]["name"],"Salvata");
-        assert!(choices.values().all(|v|v.as_object().unwrap().len()==2));
+        assert_eq!(choices[id]["icon"],"code");
+        assert_eq!(choices[id]["color"],"#12ab34");
+        assert!(choices.values().all(|v|v.as_object().unwrap().len()==4 && v.get("paths").is_none()));
         std::fs::remove_dir_all(&root).unwrap();
     }
     #[test]
