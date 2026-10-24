@@ -1,4 +1,4 @@
-# run.ps1 v1.6.225
+# run.ps1 v1.6.244
 # Windows checks; an explicitly selected WSL prepares and installs Oaclis.
 param([switch]$Check, [string]$Distro, [switch]$PrepareAwake, [switch]$PrepareNetwork, [switch]$DesktopTest)
 $ErrorActionPreference = 'Stop'
@@ -41,10 +41,18 @@ function Test-OaclisTcp {
 }
 function Initialize-OaclisWslNetwork {
     param($Network)
-    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        throw 'Per configurare inoltri e firewall, riaprire PowerShell come amministratore e rieseguire .\run.ps1 -Distro <nome>.'
+    $networkScript = Join-Path $PSScriptRoot 'scripts/wsl-network.ps1'
+    if (([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        & $networkScript -LanIp $Network.lan_ip -WslIp $Network.wsl_ip
+    } else {
+        $scriptLiteral = $networkScript.Replace("'", "''")
+        $lan = [Net.IPAddress]::Parse($Network.lan_ip).ToString()
+        $guest = [Net.IPAddress]::Parse($Network.wsl_ip).ToString()
+        $command = "try { & '$scriptLiteral' -LanIp '$lan' -WslIp '$guest'; exit 0 } catch { Write-Error `$_; exit 1 }"
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
+        $process = Start-Process -FilePath (Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powershell.exe') -Verb RunAs -ArgumentList @('-NoProfile', '-EncodedCommand', $encoded) -Wait -PassThru
+        if ($process.ExitCode -ne 0) { throw 'Configurazione rete non completata. Installazione interrotta.' }
     }
-    & (Join-Path $PSScriptRoot 'scripts/wsl-network.ps1') -LanIp $Network.lan_ip -WslIp $Network.wsl_ip
     foreach ($mapping in @(@{External=2222;Internal=22}, @{External=23232;Internal=23232})) {
         if (-not (Test-OaclisTcp -Address $Network.wsl_ip -Port $mapping.Internal)) {
             Write-Warning "WSL non ascolta sulla porta $($mapping.Internal). Avviare SSH (22) oppure Oaclis (23232) nella distribuzione."
@@ -124,6 +132,11 @@ if ([string]::IsNullOrWhiteSpace($Distro)) {
     return
 }
 if ($Distro -notin $distros) { throw 'Distribuzione non presente. Scegliere un nome riportato sopra.' }
+if (-not $Check -and -not $PrepareNetwork) {
+    $linuxUid = (& wsl -d $Distro -- id -u | Out-String).Trim()
+    if ($LASTEXITCODE -ne 0 -or $linuxUid -notmatch '^\d+$') { throw 'Impossibile verificare utente WSL.' }
+    if ($linuxUid -eq '0') { throw 'Selezionare un utente WSL normale come predefinito prima di installare Oaclis. Installazione root esistente viene conservata.' }
+}
 if (-not $Check -and -not $PrepareNetwork) {
     $reply = Read-Host "Preparare e installare Oaclis in WSL ($Distro)? [s/N]"
     if ($reply -notin @('s', 'S')) { Write-Host 'Operazione annullata.'; return }

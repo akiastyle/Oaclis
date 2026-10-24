@@ -31,6 +31,8 @@ La porta Oaclis resta **23232** in tutte le combinazioni. La sua pubblicazione, 
 
 Dopo aver scaricato la repository, il primo comando da eseguire dipende dall’ambiente. In modalità normale, `run.sh` prepara i prerequisiti e poi compila e installa automaticamente Oaclis in `~/.local/bin/oaclis`, senza un’altra conferma. `run.ps1` richiama lo stesso percorso solo quando si sceglie WSL. Non avviano la UI e non modificano rete o autorizzazioni SSH. Dopo l’installazione eseguono `oaclis setup`: cercano il master sulla 23232 e configurano la nuova installazione come client se ne trovano uno. Un ruolo già configurato resta conservato. Le installazioni delle dipendenze richiedono una conferma esplicita.
 
+Eseguire installazione e servizio con un utente normale, senza `sudo bash run.sh`. Le sole operazioni di sistema richiedono sudo; su Windows `run.ps1` richiede UAC per configurare la rete. La distribuzione WSL deve avere un utente normale predefinito. Le installazioni root esistenti non vengono migrate automaticamente.
+
 ### macOS / Linux / WSL / container Docker
 
 Nel terminale del sistema o del container, dalla cartella `Oaclis`:

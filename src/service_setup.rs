@@ -1,4 +1,4 @@
-// service_setup.rs v1.8.189
+// service_setup.rs v1.8.192
 use crate::invalid;
 use std::{env, fs, io::{self, Write}, net::{TcpStream, SocketAddr}, path::Path, process::Command, time::Duration};
 
@@ -8,6 +8,7 @@ fn quoted(value: &str) -> io::Result<String> {
 }
 
 fn unit(home: &Path, uid: &str, gid: &str, name: &str, environment: &[(String, String)]) -> io::Result<String> {
+    if uid == "0" { return Err(invalid("Il servizio Oaclis richiede un utente normale")); }
     let mut paths = vec![home.join(".local/bin"), home.join(".cargo/bin")];
     for path in env::split_paths(&environment.iter().find(|(k, _)| k == "PATH").map(|(_, v)| v.as_str()).unwrap_or("/usr/local/bin:/usr/bin:/bin")) {
         if !paths.contains(&path) { paths.push(path); }
@@ -35,6 +36,7 @@ pub fn prepare() -> io::Result<()> {
     let identity = Command::new("id").args(["-u"]).output()?;
     if !identity.status.success() { return Err(invalid("Impossibile identificare l'utente")); }
     let uid = String::from_utf8_lossy(&identity.stdout).trim().to_owned();
+    if uid == "0" { return Err(invalid("Installare il servizio Oaclis come utente normale, senza sudo davanti allo script. Installazione root esistente viene conservata.")); }
     let record = Command::new("getent").args(["passwd", &uid]).output()?;
     if !record.status.success() { return Err(invalid("Utente corrente non disponibile")); }
     let record = String::from_utf8_lossy(&record.stdout);
@@ -95,6 +97,7 @@ mod tests {
         }
         assert_eq!(quoted("/home/a%u").unwrap(), "\"/home/a%%u\"");
         assert!(quoted("path\nExecStart=unwanted").is_err());
+        assert!(unit(Path::new("/root"), "0", "0", "root", &[]).is_err());
         assert!(!text.contains("sudo"));
         assert!(!text.contains(" setup"));
     }
