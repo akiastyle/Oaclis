@@ -1,8 +1,14 @@
-# run.ps1 v1.6.217
+# run.ps1 v1.6.225
 # Windows checks; an explicitly selected WSL prepares and installs Oaclis.
-param([switch]$Check, [string]$Distro, [switch]$PrepareAwake, [switch]$PrepareNetwork)
+param([switch]$Check, [string]$Distro, [switch]$PrepareAwake, [switch]$PrepareNetwork, [switch]$DesktopTest)
 $ErrorActionPreference = 'Stop'
 $bootstrapRoot = $PSScriptRoot
+if ($DesktopTest) {
+    if ($Check -or $PrepareAwake -or $PrepareNetwork) { throw 'Usare -DesktopTest senza altre modalita.' }
+    & (Join-Path $PSScriptRoot 'scripts/desktop-test.ps1') -Action Prepare
+    if ($LASTEXITCODE -ne 0) { throw 'Preparazione desktop non completata.' }
+    return
+}
 if (@($Check, $PrepareAwake, $PrepareNetwork | Where-Object { $_ }).Count -gt 1) { throw 'Usare una sola modalita: -Check, -PrepareAwake, oppure -PrepareNetwork.' }
 if ($env:OS -ne 'Windows_NT') { throw 'Su macOS/Linux usare bash run.sh.' }
 function Get-OaclisWslNetwork {

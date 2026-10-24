@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# run.sh v1.5.213
+# run.sh v1.5.216
 # Prepare prerequisites, compile, configure and enable application startup.
 set -euo pipefail
+if [[ ${1:-} == --desktop-test ]]; then
+    exec bash "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/scripts/desktop-test.sh" --prepare
+fi
 case "${1:-}" in ''|--check|--prepare-awake) ;; *) echo 'Uso: bash run.sh [--check|--prepare-awake]' >&2; exit 2;; esac
 check_only=${1:-}
 if [[ "$check_only" == --prepare-awake ]]; then
