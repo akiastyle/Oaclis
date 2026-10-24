@@ -138,3 +138,16 @@ indipendenti in relay/. La lista usa numero grande separato, icona condivisa
 o PNG personalizzato, nome a sinistra e play a destra nella stessa azione.
 L'aspetto delle chat autorizzate viene aggiornato nel worker relay esistente
 quando cambia la presentazione sul master; gli ID autorizzati non cambiano.
+
+## Identita e versione online
+
+La lista autenticata mostra la balena con il marchio aclis e, in fondo, la
+versione generale calcolata dal master (non un contatore separato della PWA).
+Il master trasmette OACLIS_APP_VERSION nel heartbeat admin-list gia' esistente;
+il relay conserva l'ultimo valore in app_version nello stato privato e lo
+restituisce soltanto da protected dopo approvazione e sessione passkey valida.
+Il refresh esistente della lista aggiorna anche il valore visualizzato.
+L'accesso normale senza abbinamento, in attesa, negato o annullato resta vuoto;
+per riprovare una passkey annullata ricaricare. L'invito di nuovo abbinamento
+conserva il modulo necessario a creare la passkey. La console non aggiunge
+logo o footer, per lasciare spazio al testo.

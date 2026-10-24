@@ -1,5 +1,5 @@
 <?php
-// index.php v1.5.294
+// index.php v1.5.300
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -68,6 +68,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         switch ($action) {
         case 'admin-list':
             if (!$isAdmin) respond([],403);
+            if (array_key_exists('app_version',$input)) {
+                if (!is_string($input['app_version']) || !preg_match('/^v[0-9]{1,10}\.[0-9]{1,10}\.[0-9]{1,10}$/D',$input['app_version'])) throw new RuntimeException();
+                $state['app_version']=$input['app_version'];
+            }
             $result['devices']=array_values(array_map(function($id,$r){return ['id'=>$id,'name'=>$r['name'],'status'=>$r['status'],'created'=>$r['created'],'lastAccess'=>$r['lastAccess']??null,'active'=>$r['status']==='approved' && ($r['lastSeen']??0)>=time()-30];},array_keys($state['devices']),$state['devices']));
             break;
         case 'chat-access': case 'set-chat-access':
@@ -207,7 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'protected':
             if (!$record || $record['status']!=='approved' || ($_SESSION['auth']['device']??'')!==$deviceId || ($_SESSION['auth']['until']??0)<time()) respond([],403);
             if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
-            $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c'),'chats'=>$record['chats']??[]];
+            $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c'),'chats'=>$record['chats']??[],'version'=>$state['app_version']??''];
             break;
         case 'logout':
             if ($record && ($_SESSION['auth']['device']??'')===$deviceId) $state['devices'][$deviceId]['lastSeen']=0;

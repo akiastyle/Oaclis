@@ -1,4 +1,4 @@
-// app.js v1.40.350
+// app.js v1.40.363
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/oaclis/sw.js',{scope:'/oaclis/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -155,7 +155,7 @@ async function openConsole(chat){
     if(screen.scrollLeft!==left)screen.scrollLeft=left;
    }
    consoleReady=true;form.querySelectorAll('textarea,button').forEach(element=>element.disabled=false);voice.ready();voice.resume();return true;
-  }catch(e){if(e.status===403){closed=true;location.replace('/oaclis/auth');}else if(!closed)title.textContent=chat.name+(operation==='input'?OaclisSettings.text(' · Invio non confermato'):OaclisSettings.text(' · Riconnessione…'));return false;}finally{busy=false;done();}
+  }catch(e){if(e.status===403){voice.stop();show('');closed=true;location.replace('/oaclis/auth');}else if(!closed)title.textContent=chat.name+(operation==='input'?OaclisSettings.text(' · Invio non confermato'):OaclisSettings.text(' · Riconnessione…'));return false;}finally{busy=false;done();}
  };
  const poll=async()=>{if(closed)return;if(document.hidden||busy){timer=setTimeout(poll,1500);return;}const ok=await send('read');if(!closed){clearTimeout(timer);timer=setTimeout(poll,ok?200:1000);}};
  const resume=()=>{if(document.visibilityState==='visible'&&!closed){clearTimeout(timer);poll();}};
@@ -179,21 +179,22 @@ async function protectedView(){
  voice.pause();
  let x;try{x=await api('protected');}catch(error){voice.resume();throw error;}
  authorizedChats=x.chats||[];
- show(OaclisSettings.html('<h1>Chat autorizzate</h1><div id="chat-tools"><input id="chat-search" type="search" maxlength="160" aria-label="Cerca chat" placeholder="Cerca chat"></div><div id="authorized-chats" aria-live="polite"></div><button id="lock" class="secondary">Blocca accesso</button>'));
+ show(OaclisSettings.html('<header class="online-brand" aria-label="Oaclis"><img src="/oaclis/icon-192.png" alt="" width="32" height="32"><span>aclis</span></header><h1>Chat autorizzate</h1><div id="chat-tools"><input id="chat-search" type="search" maxlength="160" aria-label="Cerca chat" placeholder="Cerca chat"></div><div id="authorized-chats" aria-live="polite"></div><button id="lock" class="secondary">Blocca accesso</button><small id="online-version" aria-label="Versione Oaclis"></small>'));
  document.getElementById('chat-search').oninput=()=>renderAuthorizedChats(authorizedChats.filter(chat=>OaclisVoice.normalize(chat.name).includes(OaclisVoice.normalize(document.getElementById('chat-search').value))));
+ document.getElementById('online-version').textContent=x.version||'';
  renderAuthorizedChats(authorizedChats);bindVoice();
  document.getElementById('lock').onclick=e=>run(e.target,async()=>{clearTimeout(timer);voice.stop();drafts.clear();await api('logout');location.replace('/oaclis/auth');});
- const refresh=async()=>{try{const data=await api('protected');if(!document.getElementById('authorized-chats'))return;authorizedChats=data.chats||[];document.getElementById('chat-search').dispatchEvent(new Event('input'));timer=setTimeout(refresh,5000);}catch(e){if(e.status===403){clearTimeout(timer);location.replace('/oaclis/auth');}else{message(e.message,true);timer=setTimeout(refresh,5000);}}};
+ const refresh=async()=>{try{const data=await api('protected');if(!document.getElementById('authorized-chats'))return;authorizedChats=data.chats||[];document.getElementById('online-version').textContent=data.version||'';document.getElementById('chat-search').dispatchEvent(new Event('input'));timer=setTimeout(refresh,5000);}catch(e){if(e.status===403){clearTimeout(timer);voice.stop();show('');location.replace('/oaclis/auth');}else{message(e.message,true);timer=setTimeout(refresh,5000);}}};
  timer=setTimeout(refresh,5000);
 }
 async function deviceView(){
  const x=await api('status');
- if(x.status==='pending'){show(OaclisSettings.html('<h1>Richiesta inviata</h1><p>La passkey è pronta. Approva questo telefono dalla pagina sul PC.</p>'));timer=setInterval(async()=>{try{const s=await api('status');if(s.status==='approved'){clearInterval(timer);await deviceView();}}catch{clearInterval(timer);app.hidden=true;app.replaceChildren();}},3000);return;}
+ if(x.status==='pending'){show('');timer=setInterval(async()=>{try{const s=await api('status');if(s.status==='approved'){clearInterval(timer);await deviceView();}}catch{clearInterval(timer);app.hidden=true;app.replaceChildren();}},3000);return;}
  const login=async()=>{
   show('');
   try{const data=await api('login-options');const c=await navigator.credentials.get(options(data));await api('login',credential(c));location.replace('/oaclis/');}
-  catch(e){show(OaclisSettings.html('<button id="login">Riprova con passkey</button>'));message(e.name==='NotAllowedError'?OaclisSettings.text('Accesso annullato.'):e.message,true);document.getElementById('login').onclick=()=>login();}
+  catch{show('');}
  };
  await login();
 }
-(async()=>{try{if(admin)await adminView();else if(invite)await registerView();else if(code){if(authPage)await deviceView();else try{await protectedView();}catch(e){if(e.status===403)location.replace('/oaclis/auth');else throw e;}}}catch(e){if(admin||invite){show(OaclisSettings.html('<h1>Prova accesso</h1>'));message(e.message,true);}else{show(OaclisSettings.html('<button id="retry" class="secondary">Riprova</button>'));message(e.status===403?OaclisSettings.text('Abbinamento non disponibile. Verifica il telefono sul master.'):e.message,true);document.getElementById('retry').onclick=()=>location.reload();}}})();
+(async()=>{try{if(admin)await adminView();else if(invite)await registerView();else if(code){if(authPage)await deviceView();else try{await protectedView();}catch(e){if(e.status===403)location.replace('/oaclis/auth');else throw e;}}}catch(e){if(admin||invite){show(OaclisSettings.html('<h1>Prova accesso</h1>'));message(e.message,true);}else{voice.stop();show('');}}})();
