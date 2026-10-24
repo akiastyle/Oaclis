@@ -1,5 +1,5 @@
 <?php
-// index.php v1.5.282
+// index.php v1.5.286
 declare(strict_types=1);
 const ORIGIN = 'https://www.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -7,7 +7,7 @@ header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: no-referrer');
 header("Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; manifest-src 'self'; img-src 'self'; worker-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
-header('Permissions-Policy: publickey-credentials-create=(self), publickey-credentials-get=(self), screen-wake-lock=(self)');
+header('Permissions-Policy: publickey-credentials-create=(self), publickey-credentials-get=(self), screen-wake-lock=(self), microphone=(self)');
 if (($_SERVER['HTTP_HOST'] ?? '') !== 'www.krprojects.it') { http_response_code(404); exit; }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
@@ -231,5 +231,5 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD']!=='GET') {http_response_code(405);exit;}
 ?>
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><meta name="theme-color" content="#111314"><link rel="manifest" href="/oaclis/manifest.webmanifest"><link rel="icon" type="image/png" href="/oaclis/icon-192.png"><link rel="apple-touch-icon" href="/oaclis/icon-192.png"><link rel="stylesheet" href="/oaclis/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/oaclis/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><meta name="theme-color" content="#111314"><link rel="manifest" href="/oaclis/manifest.webmanifest"><link rel="icon" type="image/png" href="/oaclis/icon-192.png"><link rel="apple-touch-icon" href="/oaclis/icon-192.png"><link rel="stylesheet" href="/oaclis/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/oaclis/voice.js?v=<?= hash_file('sha256', __DIR__.'/voice.js') ?>"></script><script defer src="/oaclis/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
 <body><main id="app" hidden aria-live="polite"></main></body></html>

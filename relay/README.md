@@ -63,3 +63,35 @@ result IDs are reused after transient failures; input commands are never replaye
 Initialize a new relay with state.json containing {"invitations":[],"devices":[]}.
 State reads clear PHP's file metadata cache and retry empty/failed reads briefly.
 An unreadable state is never silently replaced with an empty device registry.
+
+## Voce nella PWA
+
+Il pulsante microfono nell'elenco chat e nella console avvia l'italiano parlato.
+“Ascolto attivo” compare solo dopo l'avvio effettivo; “?” elenca i comandi
+attuabili nella schermata. Le parole provvisorie restano separate dalla bozza.
+
+- Dettatura: parlare nel messaggio o nel filtro selezionato. `scrivi invia` detta
+  la parola riservata; una frase isolata uguale a un comando esegue quel comando.
+- `scrivi messaggio`, `a capo`, `annulla dettatura`, `invia`.
+- `svuota messaggio` richiede `conferma svuotamento` entro 10 secondi;
+  `annulla operazione` interrompe. Una modifica della bozza annulla la conferma.
+- `elenco chat`, `indietro`, `apri chat Santi`, `cerca chat Santi`,
+  `seleziona chat numero tre`. I numeri corrispondono alla lista filtrata visibile
+  (oppure all'ultima lista mostrata dalla console); supporto da uno a venti.
+- Per nomi ambigui, scegliere un'opzione a schermo o pronunciare `scegli due`;
+  `annulla selezione` interrompe, la scelta scade dopo 15 secondi.
+- `scorri su`, `scorri giù`, `aiuto vocale`, `ferma ascolto`.
+
+Un segmento esegue una sola azione: i comandi non vengono cercati dentro frasi
+libere. `comando teletrasporto` segnala un errore senza scrivere nella bozza.
+La navigazione conserva le bozze per chat nella memoria della pagina; il reload,
+la chiusura della pagina e il logout non le conservano. Nessun audio o risultato
+vocale viene salvato nei log; solo un invio esplicito usa la console esistente.
+
+Il riconoscimento dipende dal browser e puo usare servizi audio in rete.
+Non e' garantito offline, in background o a schermo bloccato. Dopo il background
+serve un nuovo tocco sul microfono; i retry dopo interruzioni sono limitati a tre.
+Non viene aperto uno stream getUserMedia aggiuntivo. La sintesi vocale non e'
+compresa in questa prima versione.
+Verifiche automatiche con SpeechRecognition simulato: `node tools/test_mobile_voice.cjs`
+(test locale ignorato da Git). Il test fisico S24/PWA resta da eseguire sul telefono.
