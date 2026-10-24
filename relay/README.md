@@ -80,7 +80,7 @@ attuabili nella schermata. Le parole provvisorie restano separate dalla bozza.
   (oppure all'ultima lista mostrata dalla console); supporto da uno a venti.
 - Per nomi ambigui, scegliere un'opzione a schermo o pronunciare `scegli due`;
   `annulla selezione` interrompe, la scelta scade dopo 15 secondi.
-- `scorri su`, `scorri giù`, `aiuto vocale`, `ferma ascolto`.
+- `scorri su`, `scorri giù`, `aiuto vocale`, `ferma ascolto` o `spegni microfono`.
 
 Un segmento esegue una sola azione: i comandi non vengono cercati dentro frasi
 libere. `comando teletrasporto` segnala un errore senza scrivere nella bozza.
@@ -101,3 +101,10 @@ riarmo dopo il risultato definitivo finche il toggle resta acceso. Questo evita
 la promozione dei risultati parziali a finali nella modalita continua di Chromium.
 Le ripetizioni intenzionali in frasi successive restano valide: non si deduplica
 confrontando il testo. Sugli altri sistemi resta la modalita continua.
+
+Il toggle resta richiesto dopo una frase, un invio e le normali pause di silenzio
+su Android. Durante l'invio l'ascolto e' sospeso e riprende da solo al termine.
+Gli errori effettivi conservano il limite di tre retry; il silenzio Android non
+e' un errore. Lo spegnimento esplicito e il background annullano ogni riarmo.
+Un microfono realmente spento non puo ricevere il comando per riaccendersi:
+serve il pulsante.

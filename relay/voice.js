@@ -1,4 +1,4 @@
-// voice.js v1.33.232
+// voice.js v1.33.259
 'use strict';
 window.OaclisVoice=(()=>{
  const numbers=['uno','due','tre','quattro','cinque','sei','sette','otto','nove','dieci','undici','dodici','tredici','quattordici','quindici','sedici','diciassette','diciotto','diciannove','venti'];
@@ -18,7 +18,7 @@ window.OaclisVoice=(()=>{
   {id:'scrollUp',aliases:['scorri su'],label:'scorri su'},
   {id:'scrollDown',aliases:['scorri giù','scorri in basso'],label:'scorri giù'},
   {id:'help',aliases:['aiuto vocale','mostra comandi'],label:'aiuto vocale'},
-  {id:'stop',aliases:['ferma ascolto','disattiva microfono'],label:'ferma ascolto'},
+  {id:'stop',aliases:['ferma ascolto','disattiva microfono','spegni microfono'],label:'ferma ascolto'},
  ];
  function parse(segment){
   const original=segment.trim(),text=normalize(original);
@@ -49,10 +49,10 @@ window.OaclisVoice=(()=>{
   const blocked=()=>locked||adapter?.sending?.();
   const valid=field=>field?.isConnected&&!field.disabled&&!field.readOnly&&adapter?.fields().includes(field)&&['textarea','input'].includes(field.localName)&&field.type!=='password';
   const feedback=text=>{if(status)status.textContent=text;};
-  const paint=()=>{if(microphoneState)microphoneState.textContent=({idle:'',starting:'Avvio microfono…',listening:'Ascolto attivo',stopping:'Arresto microfono…',error:'Microfono non attivo'})[state];if(button){button.dataset.state=state;button.setAttribute('aria-pressed',String(wanted));button.title=wanted?'Ferma ascolto':'Attiva voce';button.setAttribute('aria-label',button.title);}};
+  const paint=()=>{if(microphoneState)microphoneState.textContent=({idle:wanted?'In attesa della voce':'',starting:'Avvio microfono…',listening:'Ascolto attivo',stopping:wanted?'Voce in pausa durante l’operazione…':'Arresto microfono…',error:'Microfono non attivo'})[state];if(button){button.dataset.state=state;button.setAttribute('aria-pressed',String(wanted));button.title=wanted?'Ferma ascolto':'Attiva voce';button.setAttribute('aria-label',button.title);}};
   const clearPending=()=>{clearTimeout(pendingTimer);pending=null;if(options)options.replaceChildren();};
   const invalidate=()=>{
-   clearTimeout(retryTimer);generation++;
+   clearTimeout(retryTimer);retryTimer=null;generation++;
    const old=recognition;recognition=null;
    if(old){retiring=old;state='stopping';try{old.abort();}catch{retiring=null;}}
    if(preview)preview.textContent='';if(!retiring)state='idle';paint();
@@ -161,11 +161,11 @@ window.OaclisVoice=(()=>{
   function retry(){
    if(!wanted||document.hidden||blocked()||disposed)return;
    if(retries>=3){wanted=false;state='error';paint();feedback('Ascolto interrotto. Tocca il microfono per riprovare.');return;}
-   const delay=[500,1000,2000][retries++];retryTimer=setTimeout(start,delay);
+   const delay=[500,1000,2000][retries++];retryTimer=setTimeout(()=>{retryTimer=null;start();},delay);
   }
   function start(){
    if(!Recognition||!window.isSecureContext||disposed||!wanted||document.hidden||blocked()||recognition||retiring)return;
-   clearTimeout(retryTimer);const current=++generation,session=new Recognition(),consumed=new Set();recognition=session;
+   clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=new Recognition(),consumed=new Set();let sessionError=null;recognition=session;
    session.lang='it-IT';session.continuous=!singleUtterance;session.interimResults=true;session.maxAlternatives=1;
    state='starting';paint();utteranceRevision=revision;
    const fresh=()=>!disposed&&recognition===session&&generation===current;
@@ -184,18 +184,27 @@ window.OaclisVoice=(()=>{
    };
    session.onerror=event=>{
     if(!fresh())return;
+    sessionError=event.error;
+    if(singleUtterance&&event.error==='no-speech'){feedback('In attesa della voce');return;}
     const terminal=['not-allowed','service-not-allowed','audio-capture','language-not-supported'].includes(event.error);
     const messages={'not-allowed':'Microfono non autorizzato.','service-not-allowed':'Servizio vocale non consentito.','audio-capture':'Microfono non disponibile.','network':'Rete vocale non disponibile.','language-not-supported':'Italiano non disponibile.'};
     feedback(messages[event.error]||'Ascolto interrotto.');
     if(terminal){wanted=false;invalidate();state='error';paint();}
    };
-   session.onend=()=>{if(retiring===session){retiring=null;state='idle';paint();if(wanted&&!blocked()&&!disposed)retryTimer=setTimeout(start,0);return;}if(!fresh())return;recognition=null;state='idle';preview.textContent='';paint();if(singleUtterance&&consumed.size&&wanted&&!document.hidden&&!blocked())retryTimer=setTimeout(start,200);else retry();};
+   session.onend=()=>{
+    if(retiring===session){retiring=null;state='idle';paint();if(wanted&&!blocked()&&!disposed)retryTimer=setTimeout(()=>{retryTimer=null;start();},0);return;}
+    if(!fresh())return;
+    recognition=null;state='idle';preview.textContent='';paint();
+    const normalEnd=singleUtterance&&(!sessionError||sessionError==='no-speech');
+    if(normalEnd&&wanted&&!document.hidden&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},consumed.size?200:750);
+    else retry();
+   };
    try{session.start();}catch{if(fresh()){recognition=null;state='error';paint();feedback('Microfono non avviato.');retry();}}
   }
   function focus(event){
    if(valid(event.target)&&target!==event.target){
     target=event.target;revision++;undo=null;clearPending();
-    if(recognition){invalidate();if(wanted&&!blocked())retryTimer=setTimeout(start,0);}
+    if(recognition){invalidate();if(wanted&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},0);}
    }
   }
   function input(event){
@@ -217,13 +226,13 @@ window.OaclisVoice=(()=>{
    button.onclick=()=>{if(wanted)stop();else{wanted=true;retries=0;start();}};
    if(!Recognition||!window.isSecureContext){button.disabled=true;feedback('Voce non disponibile in questo browser.');}
    paint();
-   if(wanted&&!blocked())retryTimer=setTimeout(start,0);
+   if(wanted&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},0);
   }
   function leave(){invalidate();clearPending();revision++;target=null;adapter=null;undo=null;root=null;button=null;status=null;microphoneState=null;preview=null;options=null;help=null;}
   function ready(){if(adapter?.compose&&valid(adapter.compose)&&!target)target=adapter.compose;}
   function destroy(){stop();disposed=true;leave();document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
   document.addEventListener('focusin',focus);document.addEventListener('input',input);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',stop);
-  return {bind,leave,ready,stop,destroy,pause:()=>{clearPending();invalidate();},resume:()=>{if(wanted&&!blocked())start();}};
+  return {bind,leave,ready,stop,destroy,pause:()=>{clearPending();invalidate();},resume:()=>{if(wanted&&!blocked()&&!retryTimer)start();}};
  }
  return {create,parse,resolve,commands,normalize,number};
 })();
