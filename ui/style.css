@@ -1,4 +1,4 @@
-/* style.css v2.0.1357 */
+/* style.css v2.0.1359 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1061,6 +1061,8 @@ select {
 
 .brand { display: inline-flex; align-items: center; gap: var(--space-2); }
 .brand-logo { width: var(--size-32); height: var(--size-32); object-fit: contain; flex-shrink: 0; }
+.brand-mark { position: relative; display: inline-flex; width: var(--size-32); height: var(--size-32); flex-shrink: 0; }
+.brand-crown { position: absolute; width: var(--size-24); height: var(--size-24); left: -4px; top: -10px; object-fit: contain; transform: rotate(-18deg); pointer-events: none; }
 
 @font-face {
   font-family: "OaclisBrand";
