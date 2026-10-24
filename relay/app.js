@@ -1,4 +1,4 @@
-// app.js v1.39.277
+// app.js v1.40.301
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/oaclis/sw.js',{scope:'/oaclis/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -82,6 +82,23 @@ function renderAuthorizedChats(chats){
  for(const [index,chat] of chats.entries()){const li=document.createElement('li');const button=document.createElement('button');button.className='secondary';button.textContent=(index+1)+'. '+chat.name;button.onclick=()=>openConsole(chat);li.append(button);ul.append(li);}
  list.append(ul);
 }
+function consoleScreen(value){
+ const lines=String(value??'').split('\n');
+ let last=lines.findLastIndex(line=>line.trim());
+ // Only terminal chrome at the screen edges; never remove mentions in messages.
+ if(last>=0&&/^\s{2,}(?:GPT-[\w.-]+|gpt-[\w.-]+|o\d[\w.-]*)\b.*(?: · .* · |context left.*(?:shortcuts|agents))/.test(lines[last]))lines.splice(last,1);
+ last=lines.findLastIndex(line=>line.trim());
+ if(last>=0&&/^\s*[›>]\s*Ask Codex to do anything[.!?]?\s*$/i.test(lines[last]))lines.splice(last,1);
+ for(let i=0;i<Math.min(12,lines.length);i++){
+  if(!/^\s*[╭┌].*[╮┐]\s*$/.test(lines[i])||!/^\s*[│┃]\s*>_ OpenAI Codex\b/.test(lines[i+1]||''))continue;
+  const end=lines.findIndex((line,index)=>index>i&&index<=i+12&&/^\s*[╰└].*[╯┘]\s*$/.test(line));
+  if(end>i&&lines.slice(i,end).some(line=>/^\s*[│┃]\s*(?:model|directory):/i.test(line)))lines.splice(i,end-i+1);
+  break;
+ }
+ while(lines.length&&!lines.at(-1).trim())lines.pop();
+ while(lines.length&&!lines[0].trim())lines.shift();
+ return lines.join('\n');
+}
 async function openConsole(chat){
  clearTimeout(timer);
  show('<h1 id="console-title"></h1><pre id="console-screen" tabindex="0" aria-label="Console">Connessione…</pre><form id="console-input"><textarea aria-label="Messaggio" maxlength="8000" rows="2" placeholder="Scrivi un messaggio" disabled></textarea><button disabled aria-label="Invia messaggio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></form><div id="console-keys"><button id="back" class="secondary" type="button" aria-label="Chat autorizzate" title="Chat autorizzate">&lt;</button></div>');
@@ -115,10 +132,11 @@ async function openConsole(chat){
    if(completed.operation==='input'&&text.value===completed.text){text.value='';saveDraft(chat.id,'');}
    title.textContent=chat.name;
    if(completed.operation==='open'||completed.operation==='input')followOutput=true;
+   const output=consoleScreen(result.screen);
    const top=screen.scrollTop,left=screen.scrollLeft,current=screen.textContent;
-   if(current!==result.screen){
-    if(current&&result.screen.startsWith(current))screen.firstChild.appendData(result.screen.slice(current.length));
-    else screen.textContent=result.screen;
+   if(current!==output){
+    if(current&&output.startsWith(current))screen.firstChild.appendData(output.slice(current.length));
+    else screen.textContent=output;
    }
    if(followOutput)screen.scrollTop=screen.scrollHeight;
    else {
