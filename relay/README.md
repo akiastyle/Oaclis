@@ -67,8 +67,16 @@ An unreadable state is never silently replaced with an empty device registry.
 ## Voce nella PWA
 
 Il pulsante microfono nell'elenco chat e nella console avvia l'italiano parlato.
-“Ascolto attivo” compare solo dopo l'avvio effettivo; “?” elenca i comandi
-attuabili nella schermata. Le parole provvisorie restano separate dalla bozza.
+Il microfono verde indica la dettatura attiva; arancione lampeggiante indica
+collegamento o elaborazione, giallo fisso indica la pausa di scrittura. Non ci
+sono righe di stato, anteprime o pulsanti “?” sotto i comandi della console.
+Le indicazioni di accessibilita restano disponibili ai lettori di schermo.
+`help` apre a tutto schermo i comandi disponibili; `chiudi help` o la X lo chiudono.
+`stop rec` mantiene il microfono in ascolto ma ignora dettatura e azioni di modifica;
+`start rec` riprende la scrittura. In pausa restano utilizzabili i controlli di
+registrazione, help e spegnimento. Un clic sul microfono acceso spegne tutto;
+il clic successivo riattiva la dettatura. Scelte ambigue e conferme esplicite
+usano pannelli a tutto schermo solo quando necessari.
 
 - Dettatura: parlare nel messaggio o nel filtro selezionato. `scrivi invia` detta
   la parola riservata; una frase isolata uguale a un comando esegue quel comando.
