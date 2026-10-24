@@ -39,3 +39,16 @@ Desktop reale, input funzionante, monitor disponibili, latenza e comportamento a
 La sola installazione non dimostra che il collegamento video funzioni sul device.
 
 Fonti: https://rustdesk.com/docs/en/client/ e https://github.com/rustdesk/rustdesk/releases/tag/1.5.0
+
+## Integrazione nella mappa
+
+Sul master, i device che comunicano un ID RustDesk valido mostrano un'icona monitor
+nella barra dei comandi. Il clic apre `rustdesk://connection/new/ID` nel client
+installato sul computer del browser; la password resta nel client RustDesk.
+Il browser puo chiedere il consenso ad aprire l'applicazione esterna.
+I device offline non sono apribili; telefono e card del master non espongono l'icona.
+La disponibilita viene rilevata una volta all'avvio e trasmessa nello scambio di stato
+esistente: dopo l'installazione di RustDesk o l'accesso a una nuova GUI, riavviare Oaclis
+sul device per aggiornare questo dato. Nessuna scansione viene eseguita durante i refresh UI.
+Il comando Oaclis e' mostrato solo sul master; l'autenticazione della sessione e le
+restrizioni del client esterno continuano a essere gestite da RustDesk.

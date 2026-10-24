@@ -1,4 +1,4 @@
-/* style.css v2.0.1353 */
+/* style.css v2.0.1357 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1262,3 +1262,7 @@ select {
 #mobile-links marker[data-active="true"] path { fill: var(--status-online); }
 
 .library-row > .delete-chat { right:calc(var(--space-3) + var(--size-24) + var(--space-4)); color:var(--color-delete-text); background:var(--color-delete); }
+
+.device-actions .node-desktop { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
+.device-actions .node-desktop[hidden] { display: none; }
+.device-actions .node-desktop[aria-disabled="true"] { opacity: .4; cursor: default; }

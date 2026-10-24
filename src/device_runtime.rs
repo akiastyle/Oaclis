@@ -1,4 +1,4 @@
-// device_runtime.rs v1.17.305
+// device_runtime.rs v1.17.323
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
@@ -32,11 +32,14 @@ pub(crate) struct Runtime {
     config: PathBuf,
     error: Option<String>,
     restarting: bool,
+    desktop: std::sync::Arc<std::sync::Mutex<Value>>,
     update: std::sync::Arc<std::sync::Mutex<Value>>,
 }
 impl Runtime {
     pub(crate) fn new(config: &Path) -> Self {
-        let mut state = Self { child: None, config: config.into(), error: None, restarting: false, update: Default::default() };
+        let mut state = Self { child: None, config: config.into(), error: None, restarting: false, desktop: Default::default(), update: Default::default() };
+        let desktop = state.desktop.clone();
+        thread::spawn(move || { *desktop.lock().unwrap() = crate::remote_desktop::discover(); });
         if fs::read_to_string(config.join("keep-awake.json")).ok().is_some_and(|s| s.trim() == "true") {
             if let Err(error) = state.enable() { state.error = Some(error.to_string()); }
         }
@@ -47,7 +50,7 @@ impl Runtime {
             self.child.take();
             self.error = Some("Il blocco standby non è più attivo".into());
         }
-        json!({"available":true,"observed_at":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,"active":self.child.is_some(),"error":self.error,"restarting":self.restarting,"build":build(),"update":*self.update.lock().unwrap()})
+        json!({"available":true,"observed_at":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,"active":self.child.is_some(),"error":self.error,"restarting":self.restarting,"build":build(),"desktop":*self.desktop.lock().unwrap(),"update":*self.update.lock().unwrap()})
     }
     fn enable(&mut self) -> io::Result<()> {
         let mut child = Command::new(executable_path(std::env::current_exe()?)?).arg("keep-awake-hold")
@@ -162,8 +165,11 @@ mod tests {
     }
     #[test]
     fn status_and_invalid_commands_have_no_side_effects() {
-        let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false, update: Default::default() };
-        assert_eq!(state.action("status").unwrap()["active"], false);
+        let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false, desktop: Default::default(), update: Default::default() };
+        *state.desktop.lock().unwrap() = json!({"id":"96335341"});
+        let status = state.action("status").unwrap();
+        assert_eq!(status["active"], false);
+        assert_eq!(status["desktop"]["id"], "96335341");
         assert!(state.action("reboot-host").is_err());
         assert!(!state.restarting);
     }
@@ -171,7 +177,7 @@ mod tests {
     fn dead_inhibitor_is_never_reported_as_active() {
         let mut child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
         child.wait().unwrap();
-        let mut state = Runtime { child: Some(child), config: PathBuf::from("/unused"), error: None, restarting: false, update: Default::default() };
+        let mut state = Runtime { child: Some(child), config: PathBuf::from("/unused"), error: None, restarting: false, desktop: Default::default(), update: Default::default() };
         let status = state.status();
         assert_eq!(status["active"], false);
         assert!(status["error"].is_string());
@@ -185,7 +191,7 @@ mod update_tests {
     fn source_identity_is_available_and_bad_revision_never_starts_a_job() {
         assert_eq!(build()["source_id"].as_str().unwrap().len(),64);
         assert!(build()["version"].as_str().unwrap().starts_with('v'));
-        let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false, update: Default::default() };
+        let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false, desktop: Default::default(), update: Default::default() };
         let job = std::sync::Arc::new(std::sync::Mutex::new(json!({"status":"idle"})));
         assert!(state.start_update("HEAD; exit 1",job.clone()).is_err());
         assert_eq!(job.lock().unwrap()["status"],"idle");

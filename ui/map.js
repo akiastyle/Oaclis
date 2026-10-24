@@ -1,4 +1,4 @@
-// map.js v3.116.2628
+// map.js v3.116.2654
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -485,6 +485,19 @@ function renderMap(animate = false) {
       actions.append(button);
     }
     if (device.id !== "master" && data.role === "master") {
+      const desktop = document.createElement("a");
+      desktop.className = "node-color node-desktop icon-button";
+      desktop.title = "Desktop remoto";
+      desktop.setAttribute("aria-label", "Desktop remoto · " + device.name);
+      desktop.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8m-4-4v4"/></svg>';
+      desktop.hidden = true;
+      desktop.onclick = event => {
+        event.stopPropagation();
+        if (desktop.getAttribute("aria-disabled") === "true") event.preventDefault();
+      };
+      actions.append(desktop);
+    }
+    if (device.id !== "master" && data.role === "master") {
       const version = document.createElement("button");
       version.className = "node-color node-version icon-button";
       version.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 7 14L19 5"/></svg>';
@@ -589,7 +602,7 @@ function renderMap(animate = false) {
     let start,
       moved = false;
     node.onpointerdown = (e) => {
-      if (e.button !== 0 || e.target.closest("button"))
+      if (e.button !== 0 || e.target.closest("button, a"))
         return;
       start = {
         x: e.clientX,
@@ -681,6 +694,17 @@ function renderConnections() {
       awake.setAttribute("aria-pressed", known ? String(runtime.active) : "mixed");
       awake.title = (known ? runtime.active ? "Standby bloccato" : "Standby consentito" : "Stato standby non disponibile") + (runtime?.error ? " · " + runtime.error : "");
       awake.setAttribute("aria-label", deviceName(id) + " · " + awake.title);
+    }
+    const desktop = node.querySelector(".node-desktop");
+    if (desktop) {
+      const desktopId = runtime?.desktop?.id;
+      const known = typeof desktopId === "string" && /^\d{6,16}$/.test(desktopId);
+      desktop.hidden = !known;
+      const enabled = known && state === "online";
+      desktop.setAttribute("aria-disabled", String(!enabled));
+      desktop.tabIndex = enabled ? 0 : -1;
+      if (enabled) desktop.href = "rustdesk://connection/new/" + desktopId;
+      else desktop.removeAttribute("href");
     }
     const version = node.querySelector(".node-version");
     if (version) {

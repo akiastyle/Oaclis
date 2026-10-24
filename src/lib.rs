@@ -1,4 +1,4 @@
-// lib.rs v1.3.90
+// lib.rs v1.3.92
 pub mod state_store;
 mod chat_deletion;
 mod state_migration;
@@ -87,3 +87,5 @@ mod dependency_inventory;
 mod app_install;
 
 mod mobile;
+
+mod remote_desktop;
