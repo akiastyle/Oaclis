@@ -1,4 +1,4 @@
-// pairing.rs v1.53.714
+// pairing.rs v1.53.718
 //! Signed discovery and mutually approved SSH; persistent identities stay unchanged.
 use crate::{invalid, ssh_settings as ssh};
 use serde_json::{Value, json};
@@ -313,7 +313,7 @@ mod tests {
         assert!(request(&homes[0],"commit",&cards[1]).unwrap_err().to_string().contains("entrambe"));
         assert!(!homes[0].join(".ssh/authorized_keys").exists());
         request(&homes[1],"approve",&json!({"peer":cards[0],"accept":true})).unwrap();
-        let approved=homes.each_ref().map(|h|verify(&request(h,"sign",&cards[if h==&homes[0] {0} else {1}]).unwrap()).unwrap());
+        let mut approved=homes.each_ref().map(|h|verify(&request(h,"sign",&cards[if h==&homes[0] {0} else {1}]).unwrap()).unwrap());
         for i in 0..2 {
             fs::create_dir(homes[i].join(".ssh")).unwrap();fs::write(homes[i].join(".ssh/authorized_keys"),"existing-key\n").unwrap();fs::write(homes[i].join(".ssh/config"),"Host existing\n  HostName localhost\n").unwrap();
             for _ in 0..2 { request(&homes[i],"commit",&approved[1-i]).unwrap(); }
@@ -321,6 +321,8 @@ mod tests {
             assert!(authorized.starts_with("existing-key\n"));assert_eq!(authorized.matches(cards[1-i]["public_key"].as_str().unwrap()).count(),1);
             assert!(fs::read_to_string(homes[i].join(".ssh/config")).unwrap().contains("Host existing"));assert_eq!(crate::devices::load(configs[i].join("devices.json")).unwrap().len(),1);
         }
+        // This reused fixture may outlive the announcement TTL while the full suite is busy.
+        approved[1]["time"]=json!(now().unwrap());
         assert_ne!(fs::read(configs[0].join("pairing_ed25519")).unwrap(),fs::read(configs[1].join("pairing_ed25519")).unwrap());
         let id=cards[1]["id"].as_str().unwrap();let saved=state(&configs[0]).unwrap();let device=saved["approved"][id]["device_id"].clone();
         assert!(request(&homes[0],"approve",&json!({"peer":approved[1],"accept":false})).is_err());
