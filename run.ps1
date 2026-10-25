@@ -1,4 +1,4 @@
-# run.ps1 v1.6.250
+# run.ps1 v1.6.251
 # Windows checks; an explicitly selected WSL prepares and installs Oaclis.
 param([switch]$Check, [string]$Distro, [switch]$PrepareAwake, [switch]$PrepareNetwork, [switch]$DesktopTest)
 $ErrorActionPreference = 'Stop'
@@ -139,7 +139,6 @@ if ($Distro -notin $distros) { throw 'Distribuzione non presente. Scegliere un n
 if (-not $Check -and -not $PrepareNetwork) {
     $linuxUid = (& wsl -d $Distro -- id -u | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or $linuxUid -notmatch '^\d+$') { throw 'Impossibile verificare utente WSL.' }
-    if ($linuxUid -eq '0') { throw 'Selezionare un utente WSL normale come predefinito prima di installare Oaclis. Installazione root esistente viene conservata.' }
 }
 if (-not $Check -and -not $PrepareNetwork) {
     $reply = Read-Host "Preparare e installare Oaclis in WSL ($Distro)? [s/N]"

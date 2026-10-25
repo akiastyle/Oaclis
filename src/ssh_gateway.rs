@@ -1,4 +1,4 @@
-// ssh_gateway.rs v1.21.569
+// ssh_gateway.rs v1.21.575
 //! Forced SSH entry point: native Oaclis requests and rsync server mode, never a remote shell.
 use crate::{invalid, paths::validate_absolute, transfer::{self, Receipt}};
 use serde_json::Value;
@@ -17,9 +17,9 @@ fn arguments(command: &str) -> io::Result<Vec<&str>> {
 }
 
 pub fn run() -> io::Result<()> {
-    // A receiver with root privileges would also give rsync root filesystem access.
+    // Use the configured SSH account; command restrictions also apply to root.
     let identity = Command::new("id").arg("-u").output()?;
-    if identity.status.success() && String::from_utf8_lossy(&identity.stdout).trim() != "0" {
+    if identity.status.success() {
         match env::var("SSH_ORIGINAL_COMMAND").unwrap_or_default().as_str() {
             "$HOME/.local/bin/oaclis state-request" => return crate::state_transport::forward(&PathBuf::from(env::var_os("HOME").ok_or_else(||invalid("HOME non definita"))?)),
             "$HOME/.local/bin/oaclis environment-request" => return crate::environment::forward(),
@@ -32,7 +32,7 @@ pub fn run() -> io::Result<()> {
             }
         }
     }
-    Err(invalid("Installare Oaclis con un utente normale prima di attivare il canale SSH protetto"))
+    Err(invalid("Impossibile identificare l'utente del canale SSH"))
 }
 
 fn path<'a>(value: &'a Value, key: &str) -> io::Result<&'a Path> {

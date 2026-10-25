@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run.sh v1.5.223
+# run.sh v1.5.234
 # Prepare prerequisites, compile, configure and enable application startup.
 set -euo pipefail
 if [[ ${1:-} == --desktop-test ]]; then
@@ -7,10 +7,6 @@ if [[ ${1:-} == --desktop-test ]]; then
 fi
 case "${1:-}" in ''|--check|--prepare-awake) ;; *) echo 'Uso: bash run.sh [--check|--prepare-awake]' >&2; exit 2;; esac
 check_only=${1:-}
-if (( EUID == 0 )) && [[ "$check_only" != --check ]]; then
-    echo "Avviare Oaclis da un utente normale, senza sudo. Le operazioni di sistema richiederanno la password quando necessario. Installazione root esistente non viene modificata." >&2
-    exit 1
-fi
 if [[ "$check_only" == --prepare-awake ]]; then
     awake_binary="$HOME/.local/bin/oaclis"
     [[ -x "$awake_binary" ]] || { echo 'Installare prima Oaclis con bash run.sh.' >&2; exit 1; }
@@ -98,8 +94,11 @@ if [[ ${#packages[@]} -gt 0 ]]; then
     if ! confirm 'Installare questi pacchetti?'; then echo 'Installazione annullata.'; exit 1; fi
     if [[ "$system" == Linux ]]; then
         command -v apt-get >/dev/null || { echo 'Installazione automatica disponibile solo per Ubuntu/Debian. Nessuna modifica eseguita.' >&2; exit 1; }
-        command -v sudo >/dev/null || { echo 'Serve sudo per installare i pacchetti di sistema.' >&2; exit 1; }
-        elevate=(sudo)
+        elevate=()
+        if (( EUID != 0 )); then
+            command -v sudo >/dev/null || { echo 'Serve sudo per installare i pacchetti di sistema.' >&2; exit 1; }
+            elevate=(sudo)
+        fi
         "${elevate[@]}" apt-get update
         "${elevate[@]}" apt-get install -y "${packages[@]}" ca-certificates
     else

@@ -1,10 +1,6 @@
 #!/usr/bin/env bash
-# install.sh v1.0.47
+# install.sh v1.0.51
 set -euo pipefail
-if (( EUID == 0 )); then
-    echo "Installare Oaclis da un utente normale, senza sudo. Nessun dato esistente e stato modificato." >&2
-    exit 1
-fi
 role=${1:-client}
 case "$role" in client|master|--unconfigured) ;; *) echo 'Uso: bash scripts/install.sh [client|master|--unconfigured]' >&2; exit 2;; esac
 case $(uname -s) in Linux|Darwin) ;; *) echo 'Questo installer supporta Linux, WSL e macOS.' >&2; exit 1;; esac

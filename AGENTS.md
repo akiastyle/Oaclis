@@ -6,6 +6,8 @@
 - Work one agreed step at a time. A request to discuss or inspect does not authorize implementation, installation, deployment, or synchronization.
 - Normal operation has settings exchange, local checks and link matching enabled. Do not introduce development pauses unless the user asks. Transfers always require Play, including the first transfer.
 
+- The user explicitly chose to keep the ROG master running as root. Do not migrate its Codex archives, project paths or tools to kim. Bootstrap and the restricted SSH gateway must support the configured account, including root.
+
 ## Core Rule
 - Verify before changing.
 - Do not assume a file, DB function, query, wrapper, uploader, service, or scheduled task is unused.
