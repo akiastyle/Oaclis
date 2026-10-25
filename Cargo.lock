@@ -361,6 +361,7 @@ version = "0.1.0"
 dependencies = [
  "qrcode",
  "regex",
+ "ring",
  "rusqlite",
  "rustpython-ast",
  "rustpython-parser",

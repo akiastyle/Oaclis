@@ -1,6 +1,6 @@
 # Relay mobile
 
-Sorgenti della pagina gia' pubblicata su https://www.krprojects.it/oaclis/.
+Sorgenti della pagina gia' pubblicata su https://oaclis.krprojects.it/.
 Questo componente PHP gira sull'hosting; Oaclis continua a funzionare in Rust.
 
 I tre file pubblici sono index.php, app.js e style.css. La libreria lbuchs/WebAuthn v2.2.0
@@ -151,3 +151,7 @@ L'accesso normale senza abbinamento, in attesa, negato o annullato resta vuoto;
 per riprovare una passkey annullata ricaricare. L'invito di nuovo abbinamento
 conserva il modulo necessario a creare la passkey. La console non aggiunge
 logo o footer, per lasciare spazio al testo.
+
+Il sottodominio deve avere HTTPS valido e document root `www/oaclis`. Origin e RP ID sono esclusivamente `oaclis.krprojects.it`: richiedere nuovi abbinamenti e nuove passkey, senza importare le autorizzazioni precedenti. La sessione usa un cookie `__Host-` senza Domain, Secure e con path `/`, per impedire cookie di sessione impostati dagli altri sottodomini.
+
+Le richieste senza sessione valida o chiave amministrativa sono limitate a 60 al minuto per bucket derivato dall’IP di connessione (256 bucket fissi, senza fidarsi di X-Forwarded-For). Le richieste negate non acquisiscono il lock dello stato una volta raggiunto il limite; il traffico autenticato ne è esente. Il limite applicativo non sostituisce le protezioni anti-DDoS del provider.

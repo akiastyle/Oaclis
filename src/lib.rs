@@ -1,4 +1,4 @@
-// lib.rs v1.3.94
+// lib.rs v1.3.96
 pub mod state_store;
 mod chat_deletion;
 mod state_migration;
@@ -91,3 +91,5 @@ mod mobile;
 mod remote_desktop;
 
 pub mod ssh_gateway;
+
+mod mobile_auth;

@@ -1,22 +1,22 @@
 {
-  "id": "/oaclis/",
+  "id": "/",
   "name": "Oaclis",
   "short_name": "Oaclis",
   "lang": "it",
-  "start_url": "/oaclis/",
-  "scope": "/oaclis/",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#111314",
   "theme_color": "#111314",
   "icons": [
     {
-      "src": "/oaclis/icon-192.png",
+      "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/oaclis/icon-512.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"

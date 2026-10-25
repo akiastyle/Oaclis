@@ -1,20 +1,13 @@
-// mobile.rs v1.20.379
+// mobile.rs v1.21.487
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
-use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{io::{self, Read}, path::{Path, PathBuf}, sync::{Arc, Mutex, OnceLock}, thread, time::{Duration, Instant}};
 
-const ENDPOINT: &str = "https://www.krprojects.it/oaclis/auth";
-const ACCESS_URL: &str = "https://www.krprojects.it/oaclis/";
-const INVITE_PREFIX: &str = "https://www.krprojects.it/oaclis/auth#pair=";
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Settings {
-    admin_key: String,
-}
+const ENDPOINT: &str = "https://oaclis.krprojects.it/auth";
+const ACCESS_URL: &str = "https://oaclis.krprojects.it/";
+const INVITE_PREFIX: &str = "https://oaclis.krprojects.it/auth#pair=";
 
 fn invitation_qr(url: &str) -> io::Result<String> {
     let code = url.strip_prefix(INVITE_PREFIX).ok_or_else(|| invalid("Invito mobile non valido"))?;
@@ -26,11 +19,7 @@ fn invitation_qr(url: &str) -> io::Result<String> {
 }
 
 fn request(config: &Path, payload: Value) -> io::Result<Value> {
-    let settings: Settings = serde_json::from_reader(crate::open_regular(&config.join("mobile-relay.json"))?.0)
-        .map_err(|_| invalid("Collegamento mobile da configurare"))?;
-    if settings.admin_key.len() != 64 || !settings.admin_key.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(invalid("Collegamento mobile da configurare"));
-    }
+    let admin_key = crate::mobile_auth::at(config)?.admin_key();
     let body = serde_json::to_vec(&payload)?;
     if body.len() > 131072 { return Err(invalid("Selezione troppo ampia")); }
     let action = payload["action"].as_str().unwrap_or("");
@@ -42,9 +31,9 @@ fn request(config: &Path, payload: Value) -> io::Result<Value> {
         .max_redirects(0).build().into());
     let started = Instant::now();
     let response = client.post(ENDPOINT)
-        .header("Origin", "https://www.krprojects.it")
+        .header("Origin", "https://oaclis.krprojects.it")
         .header("Content-Type", "application/json")
-        .header("X-Admin-Key", &settings.admin_key)
+        .header("X-Admin-Key", &admin_key)
         .send(body);
     let mut response = response.map_err(|_| {
         crate::state_transport::log(format!("RECV mobile-relay {action} failed"));
@@ -64,8 +53,14 @@ pub(crate) fn access_qr() -> io::Result<Value> {
 }
 
 pub(crate) fn invite(config: &Path) -> io::Result<Value> {
-    let reply = request(config, json!({"action":"invite"}))?;
-    let qr = invitation_qr(reply["url"].as_str().unwrap_or(""))?;
+    let authority = crate::mobile_auth::at(config)?;
+    let (hash, secret) = authority.invitation()?;
+    let reply = request(config,json!({"action":"invite","invite_hash":hash}));
+    if !reply.as_ref().is_ok_and(|value|value["ok"]==true) {
+        let _ = authority.discard_invitation(&hash);
+        return Err(io::Error::other("Preparazione abbinamento mobile non riuscita"));
+    }
+    let qr = invitation_qr(&format!("{INVITE_PREFIX}{secret}"))?;
     Ok(json!({"qr_svg":qr,"expires_in":600}))
 }
 
@@ -84,8 +79,24 @@ fn listed_devices(reply: &Value, status: &str) -> io::Result<Value> {
     Ok(json!({"devices":pending}))
 }
 
+fn approved_devices(config:&Path,reply:&Value)->io::Result<Value> {
+    let mut listed=listed_devices(reply,"approved")?;
+    let authority=crate::mobile_auth::at(config)?.authority();
+    listed["devices"].as_array_mut().unwrap().retain_mut(|device| {
+        let id=device["id"].as_str().unwrap().strip_prefix("mobile-").unwrap();
+        if let Some(phone)=authority.phones.get(id){device["name"]=json!(phone.name);true}else{false}
+    });
+    Ok(listed)
+}
 pub(crate) fn pending(config: &Path) -> io::Result<Value> {
-    listed_devices(&request(config, json!({"action":"admin-list"}))?, "pending")
+    let reply=request(config,json!({"action":"admin-list"}))?;
+    let mut listed=listed_devices(&reply,"pending")?;
+    let authority=crate::mobile_auth::at(config)?;
+    listed["devices"].as_array_mut().unwrap().retain(|device| {
+        let remote=reply["devices"].as_array().unwrap().iter().find(|item|item["id"]==device["id"]).unwrap();
+        authority.pending(device["id"].as_str().unwrap(),device["name"].as_str().unwrap(),&remote["pairing"])
+    });
+    Ok(listed)
 }
 
 pub(crate) fn approve(config: &Path, value: &Value, registry: &Registry) -> io::Result<Value> {
@@ -93,10 +104,19 @@ pub(crate) fn approve(config: &Path, value: &Value, registry: &Registry) -> io::
     let id = value["id"].as_str().unwrap_or("");
     let accept = value["accept"].as_bool().ok_or_else(|| invalid("Conferma mobile richiesta"))?;
     if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) { return Err(invalid("Telefono non valido")); }
+    let authority=crate::mobile_auth::at(config)?;
+    let pending=if accept {
+        let roster=request(config,json!({"action":"admin-list"}))?;
+        listed_devices(&roster,"pending")?;
+        let device=roster["devices"].as_array().unwrap().iter().find(|device|device["id"]==id && device["status"]=="pending").cloned().ok_or_else(||invalid("Richiesta mobile non disponibile"))?;
+        if !authority.pending(id,device["name"].as_str().unwrap(),&device["pairing"]){return Err(invalid("Nuovo abbinamento mobile richiesto"));}
+        Some(device)
+    }else{authority.revoke(id)?;None};
     let reply = request(config, json!({"action":if accept {"approve"} else {"revoke"},"id":id}))?;
     if reply["ok"] != true { return Err(io::Error::other("Conferma non riuscita. Riprova.")); }
     if accept {
-        if let Ok(reply) = request(config, json!({"action":"admin-list"})).and_then(|r| listed_devices(&r, "approved")) {
+        let device=pending.unwrap();authority.approve(id,device["name"].as_str().unwrap(),&device["pairing"])?;
+        if let Ok(reply) = request(config, json!({"action":"admin-list"})).and_then(|r| approved_devices(config, &r)) {
             *registry.devices.lock().unwrap() = reply["devices"].as_array().unwrap().clone();
         }
     } else {
@@ -119,14 +139,19 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
         let console_config = config.clone();
         thread::spawn(move || {
             let mut results = Vec::<Value>::new();
+            let authority = match crate::mobile_auth::at(&console_config) { Ok(authority)=>authority,Err(_)=>return };
             loop {
                 let mut active = false;
-                if let Ok(reply) = request(&console_config, json!({"action":"console-exchange","results":results})) {
+                if let Ok(reply) = request(&console_config, json!({"action":"console-exchange","results":results,"security":authority.security()})) {
                     active = reply["console_active"] == true;
                     results.clear();
-                    for command in reply["commands"].as_array().into_iter().flatten() {
-                        let result = crate::terminal::request(None, &command["value"]);
-                        let mut answer = json!({"device":command["device"],"id":command["id"]});
+                    for command in reply["commands"].as_array().into_iter().flatten().take(1) {
+                        let Some(device)=command["device"].as_str().filter(|id|id.len()==64 && id.bytes().all(|b|b.is_ascii_hexdigit())) else {continue;};
+                        let Some(id)=command["id"].as_str().filter(|id|id.len()==32 && id.bytes().all(|b|b.is_ascii_hexdigit())) else {continue;};
+                        let checked=authority.command(command);
+                        if let Err(error)=&checked {crate::state_transport::log(format!("REJECT mobile-relay {error}"));}
+                        let result = checked.and_then(|value|crate::terminal::request(None, &value));
+                        let mut answer = json!({"device":device,"id":id});
                         match result { Ok(value) => answer["screen"] = json!(value["screen"].as_str().unwrap_or("").chars().rev().take(14000).collect::<String>().chars().rev().collect::<String>()), Err(_) => answer["error"] = json!(true) }
                         results.push(answer);
                     }
@@ -141,7 +166,7 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
          loop {
             {
                 let _exchange = worker.exchange.lock().unwrap();
-                match request(&config, json!({"action":"admin-list","app_version":env!("OACLIS_APP_VERSION")})).and_then(|r| listed_devices(&r, "approved")) {
+                match request(&config, json!({"action":"admin-list","app_version":env!("OACLIS_APP_VERSION")})).and_then(|r| approved_devices(&config, &r)) {
                     Ok(reply) => {
                         *worker.devices.lock().unwrap() = reply["devices"].as_array().unwrap().clone();
                         if let Ok(state)=crate::state_store::snapshot(&config) {
@@ -165,21 +190,17 @@ pub(crate) fn remove(config: &Path, value: &Value, registry: &Registry) -> io::R
     approve(config, &json!({"id":id,"accept":false}), registry)
 }
 
-fn refresh_chat_appearance(config:&Path,state:&crate::state_store::State,devices:&Value)->io::Result<()> {
+fn refresh_chat_appearance(config:&Path,_state:&crate::state_store::State,devices:&Value)->io::Result<()> {
+    let home=config.parent().and_then(Path::parent).ok_or_else(||invalid("Configurazione mobile non valida"))?;
+    let codex=std::env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(||home.join(".codex"));
+    let choices=chat_choices(config,&codex,&json!([]))?;
+    let authority=crate::mobile_auth::at(config)?.authority();
     for device in devices.as_array().into_iter().flatten() {
-        let Some(id)=device["id"].as_str().and_then(|id|id.strip_prefix("mobile-")) else {continue;};
+        let Some(phone)=device["id"].as_str().and_then(|id|id.strip_prefix("mobile-")).and_then(|id|authority.phones.get(id)) else {continue;};
+        let id=device["id"].as_str().unwrap().strip_prefix("mobile-").unwrap();
+        let chats:Vec<_>=phone.chats.iter().filter_map(|id|choices.get(id)).cloned().collect();
         let saved=request(config,json!({"action":"chat-access","id":id}))?;
-        let mut chats=saved["chats"].as_array().cloned().unwrap_or_default();
-        for chat in &mut chats {
-            if let Some(value)=chat["id"].as_str().and_then(|id|state.appearance.get(&format!("chat:{id}"))) {
-                if let Some(label)=value.value["label"].as_str().filter(|label|!label.trim().is_empty()) { chat["name"]=json!(label); }
-                chat["icon"]=json!(value.value["icon"].as_str().unwrap_or(""));
-                chat["color"]=json!(value.value["color"].as_str().unwrap_or(""));
-            }
-        }
-        if json!(chats)!=saved["chats"] {
-            if request(config,json!({"action":"set-chat-access","id":id,"chats":chats}))?["ok"]!=true { return Err(invalid("Aggiornamento aspetto chat non riuscito")); }
-        }
+        if json!(chats)!=saved["chats"] && request(config,json!({"action":"set-chat-access","id":id,"chats":chats}))?["ok"]!=true {return Err(invalid("Aggiornamento aspetto chat non riuscito"));}
     }
     Ok(())
 }
@@ -207,8 +228,9 @@ pub(crate) fn chat_access(config: &Path, codex: &Path, value: &Value, registry: 
     let id = value["id"].as_str().and_then(|s| s.strip_prefix("mobile-")).ok_or_else(|| invalid("Telefono non valido"))?;
     if id.len() != 64 || !id.bytes().all(|b| b.is_ascii_hexdigit()) { return Err(invalid("Telefono non valido")); }
     let _exchange = registry.exchange.lock().unwrap();
-    let saved = request(config, json!({"action":"chat-access","id":id}))?;
-    let choices = chat_choices(config, codex, &saved["chats"])?;
+    let authority=crate::mobile_auth::at(config)?;
+    let phone=authority.authority().phones.get(id).cloned().ok_or_else(||invalid("Nuovo abbinamento mobile richiesto"))?;
+    let choices = chat_choices(config, codex, &json!([]))?;
     if let Some(selected) = value.get("chats") {
         let selected = selected.as_array().filter(|a| a.len() <= 500).ok_or_else(|| invalid("Selezione chat non valida"))?;
         let mut ids = std::collections::BTreeSet::new();
@@ -219,11 +241,12 @@ pub(crate) fn chat_access(config: &Path, codex: &Path, value: &Value, registry: 
             if !ids.insert(chat_id) { return Err(invalid("Chat duplicata")); }
             chats.push(chat.clone());
         }
+        authority.grants(id,ids.into_iter().map(str::to_owned).collect())?;
         let reply = request(config, json!({"action":"set-chat-access","id":id,"chats":chats}))?;
         if reply["ok"] != true { return Err(io::Error::other("Salvataggio non riuscito. Riprova.")); }
         return Ok(json!({"ok":true}));
     }
-    Ok(json!({"chats":choices.into_values().collect::<Vec<_>>(),"selected":saved["chats"].as_array().into_iter().flatten().filter_map(|c|c["id"].as_str()).collect::<Vec<_>>()}))
+    Ok(json!({"chats":choices.into_values().collect::<Vec<_>>(),"selected":phone.chats}))
 }
 
 #[cfg(test)]
@@ -280,6 +303,7 @@ mod tests {
 
 pub(crate) fn forget_chat(config:&Path,id:&str)->io::Result<()> {
     if !config.join("mobile-relay.json").is_file(){return Ok(());}
+    crate::mobile_auth::at(config)?.forget_chat(id)?;
     let roster=request(config,json!({"action":"admin-list"}))?;
     listed_devices(&roster,"approved")?;
     for device in roster["devices"].as_array().into_iter().flatten().filter(|d|d["status"]=="approved") {

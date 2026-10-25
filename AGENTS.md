@@ -20,6 +20,8 @@
 - `ui/locale.js` is the single EN/IT settings, translation and voice-command source for native UI and mobile PWA. It follows browser preferences by default; source settings can pin a language. Publish this same file to the relay; do not create a separate mobile dictionary. Translate interface copy only, never user labels, chat content or terminal output.
 - `ui/icons.js` is the shared icon catalog; the relay uses the same published source.
 - `ui/badge-motion.js` and `ui/badge-motion.css` handle animation only. They do not decide or execute transfers, calculate progress, or access storage.
+- The OVH-hosted mobile relay remains PHP. Do not upload or execute Rust CGI, background-process or proxy capability probes on this shared hosting: a previous probe triggered OVH security suspension. Native Rust runs only locally and on the paired devices.
+- Mobile console requests require a phone signature checked by the master against locally pinned keys and local chat grants. Never execute relay-supplied `value` commands or fall back to unsigned requests. The QR pairing secret stays off the relay; `mobile-relay.json` is owned by the in-memory mobile authorization store and is never shared with peers or the browser.
 - Public HTTP access stays routed through the Rust adapter. Do not expose internal helpers, credentials, or configuration files directly.
 - Prefer existing reliable Linux tools for transport: SSH and rsync. Oaclis owns scheduling; do not add cron jobs or systemd scheduling as a side effect.
 
@@ -43,7 +45,7 @@
 - Do not use `rsync --relative` with absolute paths unless the resulting destination layout is explicitly intended and verified.
 - An unreachable device remains paused. Do not attempt transfers or remote test actions at every development step.
 - Reconnection follows the saved automatic/manual rule; it does not authorize repeating completed analysis.
-- Standing user authorization: after a verified code change, update file version headers, commit and push to Git. Updating remote devices requires an explicit user request; publication is not deployment authorization. Preserve user data and do not interrupt active transfers.
+- Standing user authorization: update file version headers for every source change, but keep changes local until the entire agreed work block is complete and verified. Then make one commit and push for that block; do not commit at intermediate steps. Updating remote devices requires an explicit user request; publication is not deployment authorization. Preserve user data and do not interrupt active transfers.
 
 ## Background Services
 - Background workers perform network probes and subprocess waits outside shared state locks. HTTP reads use the last committed immutable memory snapshot; JSON persistence serializes writers without blocking readers.
