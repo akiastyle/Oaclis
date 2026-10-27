@@ -1,4 +1,4 @@
-// app.js v1.42.431
+// app.js v1.51.437
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -22,7 +22,7 @@ function bindVoice(chat=null){
  if(!host)return;
  voice.bind({chatId:chat?.id,compose,fields:()=>[compose,search].filter(Boolean),chats:()=>authorizedChats,list:()=>visibleChatList,
   selectChat:async selected=>{if(!authorizedChats.some(item=>item.id===selected.id))return;await openConsole(selected);},
-  ...(chat?{send:async()=>{if(consoleActions?.chatId!==chat.id||!authorizedChats.some(item=>item.id===chat.id))throw Error();return consoleActions.submit();},back:()=>protectedView(),chatList:()=>protectedView(),sending:()=>consoleActions?.sending()===true||consoleActions?.speaking()===true}:{}),
+  ...(chat?{send:async()=>{if(consoleActions?.chatId!==chat.id||!authorizedChats.some(item=>item.id===chat.id))throw Error();return consoleActions.submit();},back:()=>protectedView(),chatList:()=>protectedView(),sending:()=>consoleActions?.sending()===true,commandOnly:()=>consoleActions?.commandOnly()===true,readOn:()=>consoleActions?.readOn(),readOff:()=>consoleActions?.readOff(),readStop:()=>consoleActions?.readStop()}:{}),
   ...(!chat?{searchChat:query=>{search.value=query;search.dispatchEvent(new Event('input',{bubbles:true}));}}:{}),
   scrollUp:()=>{const area=document.getElementById('console-screen')||document.getElementById('authorized-chats');area.scrollBy({top:-area.clientHeight*.75,behavior:'smooth'});},
   scrollDown:()=>{const area=document.getElementById('console-screen')||document.getElementById('authorized-chats');area.scrollBy({top:area.clientHeight*.75,behavior:'smooth'});},
@@ -158,13 +158,13 @@ async function openConsole(chat){
   const value=text.value;
   try{return await send('input',{text:value,key:'Enter'});}finally{inputBusy=false;if(!closed){voice.resume();timer=setTimeout(poll,200);}}
  };
- consoleActions={chatId:chat.id,submit,sending:()=>inputBusy||!consoleReady,speaking:()=>reader?.speaking()===true};
+ consoleActions={chatId:chat.id,submit,sending:()=>inputBusy||!consoleReady,commandOnly:()=>reader?.commandOnly()===true,readOn:()=>reader?.enable(),readOff:()=>reader?.disable(),readStop:()=>reader?.skip()};
  form.onsubmit=async event=>{event.preventDefault();await submit();};
  text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
  for(const [key,label] of [['Escape','Esc'],['Tab','Tab'],['Up','↑'],['Down','↓'],['C-c','Ctrl+C']]){
   const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{clearTimeout(timer);await send('input',{key});if(!closed)timer=setTimeout(poll,200);};document.getElementById('console-keys').append(button);
  }
- reader=OaclisReadAloud.create(document.getElementById('console-keys'),{pause:()=>voice.pause(),resume:()=>voice.resume()});
+ reader=OaclisReadAloud.create(document.getElementById('console-keys'));
  bindVoice(chat);
  const ready=await send('open');if(!closed){clearTimeout(timer);timer=setTimeout(poll,ready?200:1000);}
 }

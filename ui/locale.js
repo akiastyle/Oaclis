@@ -1,4 +1,4 @@
-// locale.js v1.3.373
+// locale.js v1.3.375
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -324,6 +324,7 @@ window.OaclisSettings=(()=>{
    ['send',['invia','invia messaggio']],['back',['indietro','torna indietro']],['chatList',['elenco chat','mostra chat']],
    ['selectChatNumber',/^seleziona\s+chat\s+numero\s+(.+)$/iu,'seleziona chat numero …'],['selectChat',/^(?:seleziona|apri)\s+chat\s+(.+)$/iu,'apri chat …'],['searchChat',/^cerca\s+chat\s+(.+)$/iu,'cerca chat …'],
    ['compose',['scrivi messaggio']],['newLine',['a capo','nuova riga']],['clearDraft',['svuota','cancella']],['scrollUp',['scorri su']],['scrollDown',['scorri giù','scorri in basso']],
+   ['readOn',['voce on']],['readOff',['voce off']],['readStop',['voce stop']],
    ['pauseRec',['pausa']],['resumeRec',['riprendi']],['help',['mostra comandi','aiuto vocale']],['closeHelp',['chiudi comandi','chiudi aiuto']],['stop',['ferma ascolto','disattiva microfono','spegni microfono']],
   ]
  };
@@ -335,6 +336,7 @@ window.OaclisSettings=(()=>{
    ['send',['send','send message']],['back',['back','go back']],['chatList',['chat list','show chats']],
    ['selectChatNumber',/^select\s+chat\s+number\s+(.+)$/iu,'select chat number …'],['selectChat',/^(?:select|open)\s+chat\s+(.+)$/iu,'open chat …'],['searchChat',/^search\s+chat\s+(.+)$/iu,'search chat …'],
    ['compose',['write message']],['newLine',['new line','line break']],['clearDraft',['clear message']],['scrollUp',['scroll up']],['scrollDown',['scroll down']],
+   ['readOn',['voice on']],['readOff',['voice off']],['readStop',['voice stop']],
    ['pauseRec',['pause']],['resumeRec',['resume']],['help',['show commands','voice help','help']],['closeHelp',['close commands','close help']],['stop',['stop listening','turn off microphone']],
   ]
  };

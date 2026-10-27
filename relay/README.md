@@ -165,3 +165,7 @@ codice e attivita degli strumenti. read-aloud.js usa gli eventi nativi del Codex
 inoltrati dallo stesso canale mobile firmato; nessun nuovo turno viene avviato.
 La lettura e disattivata inizialmente e si ferma uscendo dalla console o nascondendo la pagina.
 I comandi vocali brevi sono Pausa e Riprendi (Pause/Resume in inglese).
+
+Voce on/off controllano solo la lettura. Voce stop salta la risposta corrente,
+lasciando attiva la lettura delle successive. Durante la riproduzione il microfono
+accetta solo questi comandi con prefisso voce e non trascrive l'audio riprodotto.

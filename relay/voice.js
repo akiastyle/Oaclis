@@ -1,4 +1,4 @@
-// voice.js v1.34.415
+// voice.js v1.34.428
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -116,9 +116,12 @@ window.OaclisVoice=(()=>{
    if(adapter.compose.value!==choice.value){clearPending();feedback('La bozza è cambiata. Svuotamento annullato.');return;}
    clearPending();target=adapter.compose;target.select();insert('');feedback('Messaggio svuotato');
   }
-  async function route(segment){
+  async function route(segment,commandsOnly=false){
    if(blocked()){feedback('Operazione in corso');return;}
    const result=parse(segment);
+   const audio=result.type==='command'&&['readOn','readOff','readStop'].includes(result.id);
+   if((commandsOnly||adapter?.commandOnly?.())&&!audio)return;
+   if(audio){if(available(result.id))await action(()=>adapter[result.id]());else feedback('Comando non disponibile in questa schermata.');return;}
    if(result.type==='command'){
     if(result.id==='stop'){stop();return;}
     if(result.id==='pauseRec'){paused=true;clearPending();preview.textContent='';paint();return;}
@@ -165,12 +168,12 @@ window.OaclisVoice=(()=>{
   }
   function start(){
    if(!Recognition||!window.isSecureContext||disposed||!wanted||document.hidden||blocked()||recognition||retiring)return;
-   clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=new Recognition(),consumed=new Set();let sessionError=null;recognition=session;
+   clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=new Recognition(),consumed=new Set();let sessionError=null,commandsOnly=false;recognition=session;
    session.lang=locale.speechLanguage;session.continuous=!singleUtterance;session.interimResults=true;session.maxAlternatives=1;
    state='starting';paint();utteranceRevision=revision;
    const fresh=()=>!disposed&&recognition===session&&generation===current;
    session.onstart=()=>{if(fresh()){state='listening';paint();}};
-   session.onspeechstart=()=>{if(fresh()){utteranceRevision=revision;state='listening';paint();}};
+   session.onspeechstart=()=>{if(fresh()){commandsOnly=adapter?.commandOnly?.()===true;utteranceRevision=revision;state='listening';paint();}};
    session.onspeechend=()=>{if(fresh()){state='processing';paint();}};
    session.onresult=event=>{
     if(!fresh()||blocked()||utteranceRevision!==revision)return;
@@ -179,10 +182,10 @@ window.OaclisVoice=(()=>{
     for(let i=event.resultIndex;i<event.results.length;i++){
      if(!fresh()||blocked())break;
      const result=event.results[i];
-     if(result.isFinal){if(consumed.has(i))continue;consumed.add(i);retries=0;preview.textContent='';route(result[0].transcript);}
+     if(result.isFinal){if(consumed.has(i))continue;consumed.add(i);retries=0;preview.textContent='';route(result[0].transcript,commandsOnly);}
      else interim.push(result[0].transcript);
     }
-    if(fresh()){preview.textContent=paused?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
+    if(fresh()){preview.textContent=paused||commandsOnly||adapter?.commandOnly?.()?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
    };
    session.onerror=event=>{
     if(!fresh())return;
