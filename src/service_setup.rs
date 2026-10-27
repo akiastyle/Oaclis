@@ -1,4 +1,4 @@
-// service_setup.rs v1.8.198
+// service_setup.rs v1.8.205
 use crate::invalid;
 use std::{env, fs, io::{self, Write}, net::{TcpStream, SocketAddr}, path::Path, process::Command, time::Duration};
 
@@ -28,8 +28,8 @@ fn checked(command: &mut Command) -> io::Result<()> {
     Ok(())
 }
 
-pub fn prepare() -> io::Result<()> {
-    if !cfg!(target_os = "linux") || fs::read_to_string("/proc/1/comm").unwrap_or_default().trim() != "systemd" {
+pub fn prepare(keys_only: bool) -> io::Result<()> {
+    if !keys_only && (!cfg!(target_os = "linux") || fs::read_to_string("/proc/1/comm").unwrap_or_default().trim() != "systemd") {
         return Err(invalid("Avvio automatico richiede Linux/WSL con systemd attivo. In WSL impostare [boot] systemd=true in /etc/wsl.conf e riavviare la distribuzione. Nei container usare la politica di riavvio del container."));
     }
     let identity = Command::new("id").args(["-u"]).output()?;
@@ -47,8 +47,9 @@ pub fn prepare() -> io::Result<()> {
     if !home.join(".local/bin/oaclis").is_file() { return Err(invalid("Installare Oaclis prima di abilitare il servizio.")); }
     let name = format!("oaclis-{uid}.service");
     let privileged = uid != "0";
-    if privileged { checked(Command::new("sudo").arg("-v"))?; }
     crate::pairing::protect_keys(home)?;
+    if keys_only { return Ok(()); }
+    if privileged { checked(Command::new("sudo").arg("-v"))?; }
     let content = unit(home, &uid, fields[3], fields[0], &env::vars().collect::<Vec<_>>())?;
     let mut temporary = crate::staging::StagedFile::new(&env::temp_dir())?;
     // systemd-analyze requires a recognized unit suffix.

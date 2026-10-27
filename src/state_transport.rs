@@ -1,4 +1,4 @@
-// state_transport.rs v1.17.291
+// state_transport.rs v1.17.296
 //! A local Unix socket forwards approved SSH requests into the running Rust app.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -151,6 +151,11 @@ pub(crate) fn start(
                 Some("terminal")=>crate::terminal::local(&request["value"]),
                 Some("device-control")=>crate::device_runtime::control(&runtime,&job,&analyses,&role,request["action"].as_str().ok_or_else(||invalid("Comando richiesto"))?,request["revision"].as_str().unwrap_or("")),
                 Some("prepare-path")=>crate::path_access::prepare(request.clone()),
+                Some("chat-rename")=>{
+                    let home=std::env::var_os("HOME").ok_or_else(||invalid("HOME non definita"))?;
+                    crate::catalog::rename(Path::new(&home),&codex,request["chat_id"].as_str().ok_or_else(||invalid("Chat mancante"))?,request["name"].as_str().ok_or_else(||invalid("Nome chat mancante"))?)?;
+                    Ok(json!({"ok":true}))
+                },
                 Some("catalog")=>crate::catalog::local_at(request["root"].as_str().map(Path::new).unwrap_or(&codex),&config).map(|chats|json!({"root":request["root"].as_str().map(Path::new).unwrap_or(&codex),"chats":chats})),
                 Some("chat-proof")=>crate::chat::proof(Path::new(request["path"].as_str().ok_or_else(||invalid("Percorso chat mancante"))?),request["chat_id"].as_str().ok_or_else(||invalid("Chat mancante"))?,request["prefix_bytes"].as_u64().ok_or_else(||invalid("Prefisso non valido"))?),
                 Some("shared-exchange")=>{let mut value=crate::shared_settings::exchange(&config,Some(&request["value"]))?;value["runtime"]=runtime.lock().unwrap().status();Ok(value)},

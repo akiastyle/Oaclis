@@ -1,5 +1,5 @@
 <?php
-// index.php v1.5.371
+// index.php v1.5.393
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ini_set('session.gc_maxlifetime', '7200');
     session_set_cookie_params(['lifetime'=>0, 'path'=>'/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
     $sessionCookie=$_COOKIE[session_name()]??'';
-    if (is_string($sessionCookie) && preg_match('/^[A-Za-z0-9,-]{16,128}$/D',$sessionCookie) && is_file(PRIVATE_DIR.'/sessions/sess_'.$sessionCookie)) session_start();
+    if (is_string($sessionCookie) && preg_match('/^[A-Za-z0-9,-]{16,128}$/D',$sessionCookie)) session_start();
     $config = require PRIVATE_DIR . '/config.php';
     spl_autoload_register(function ($class) {
         $prefix = 'lbuchs\\WebAuthn\\';
@@ -122,8 +122,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
         case 'approve': case 'revoke':
             if (!$isAdmin) respond([],403);
+            if ($action==='revoke' && ($input['reset_all']??false)===true) {
+                $state['devices']=[]; $state['invitations']=[];
+                if (session_status()===PHP_SESSION_ACTIVE) session_destroy();
+                foreach (glob(PRIVATE_DIR.'/sessions/sess_*')?:[] as $session) {
+                    if (is_file($session) && !unlink($session)) throw new RuntimeException();
+                }
+                $result=['ok'=>true]; break;
+            }
             $id=$input['id']??'';
             if (!isset($state['devices'][$id])) throw new RuntimeException();
+            if ($action==='revoke' && ($input['forget']??false)===true) {
+                unset($state['devices'][$id]); $result=['ok'=>true]; break;
+            }
             if ($action==='approve' && $state['devices'][$id]['status']!=='pending') throw new RuntimeException();
             $state['devices'][$id]['status']=$action==='approve'?'approved':'revoked';
             if ($action==='revoke') $state['devices'][$id]['lastSeen']=0;
@@ -140,7 +151,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!is_array($pairing) || ($pairing['invite_hash']??null)!==$invite || !is_string($pairing['payload']??null) || strlen($pairing['payload'])>2048 || !is_string($pairing['proof']??null) || !preg_match('/^[a-f0-9]{64}$/D',$pairing['proof']) || !is_string($pairing['key_proof']??null) || !preg_match('/^[a-f0-9]{128}$/D',$pairing['key_proof'])) respond([],403);
             $binding=json_decode($pairing['payload'],true,8,JSON_THROW_ON_ERROR);
             if (!is_array($binding) || !array_is_list($binding) || count($binding)!==4 || $binding[0]!=='oaclis-pair-v1' || $binding[1]!==$deviceId || $binding[2]!==$name || !is_string($binding[3]) || !preg_match('/^04[a-f0-9]{128}$/D',$binding[3])) respond([],403);
-            if (session_status()!==PHP_SESSION_ACTIVE) session_start();
+            if (session_status()!==PHP_SESSION_ACTIVE && !session_start()) throw new RuntimeException(error_get_last()['message']??'Unable to open session');
             $args=$web->getCreateArgs(hex2bin($deviceId),$name,$name,60,true,true,false);
             $_SESSION['challenge']=['kind'=>'create','device'=>$deviceId,'until'=>time()+120,'bytes'=>base64_encode($web->getChallenge()->getBinaryString()),'invite'=>$invite,'name'=>$name,'pairing'=>$pairing];
             $result=$args;
@@ -162,7 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
         case 'login-options':
             if (!$record || $record['status']!=='approved') respond([],403);
-            if (session_status()!==PHP_SESSION_ACTIVE) session_start();
+            if (session_status()!==PHP_SESSION_ACTIVE && !session_start()) throw new RuntimeException(error_get_last()['message']??'Unable to open session');
             $args=$web->getGetArgs([base64_decode($record['credential'],true)],60,true,true,true,true,true,true);
             $_SESSION['challenge']=['kind'=>'get','device'=>$deviceId,'until'=>time()+120,'bytes'=>base64_encode($web->getChallenge()->getBinaryString())];
             $result=$args;
@@ -229,6 +240,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (($job['id']??'')!==($answer['id']??null) || ($job['until']??0)<time() || ($state['devices'][$target]['status']??'')!=='approved' || !in_array($job['chat_id'],array_column($state['devices'][$target]['chats']??[],'id'),true)) continue;
                 $screen=$answer['screen']??null;
                 $state['devices'][$target]['console']['result']=is_string($screen)&&strlen($screen)<=60000?['screen'=>$screen]:['error'=>'Console non disponibile. Riprova.'];
+                if (is_string($screen)&&strlen($screen)<=60000&&is_string($answer['screen_ansi']??null)&&strlen($answer['screen_ansi'])<=24000) $state['devices'][$target]['console']['result']['screen_ansi']=$answer['screen_ansi'];
             }
             $result=['commands'=>[], 'console_active'=>false];
             foreach ($state['devices'] as $id=>$phone) {
@@ -266,11 +278,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         flock($db,LOCK_UN); fclose($db);
         echo json_encode($result,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
-    } catch (Throwable $e) { error_log('Oaclis auth test: '.$e->getMessage()); http_response_code(400); echo '{"error":"Verifica non riuscita. Riprova."}'; }
+    } catch (Throwable $e) { @file_put_contents(PRIVATE_DIR.'/last-error.json',json_encode(['action'=>is_string($action??null)?substr($action,0,32):'','reason'=>substr($e->getMessage(),0,240),'line'=>$e->getLine(),'time'=>gmdate('c')]),LOCK_EX); error_log('Oaclis auth test: '.$e->getMessage()); http_response_code(400); echo '{"error":"Verifica non riuscita. Riprova."}'; }
     exit;
 }
 if ($_SERVER['REQUEST_METHOD']!=='GET') {http_response_code(405);exit;}
 ?>
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><meta name="theme-color" content="#111314"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-192.png"><link rel="stylesheet" href="/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/locale.js?v=<?= hash_file('sha256', __DIR__.'/locale.js') ?>"></script><script defer src="/icons.js?v=<?= hash_file('sha256', __DIR__.'/icons.js') ?>"></script><script defer src="/voice.js?v=<?= hash_file('sha256', __DIR__.'/voice.js') ?>"></script><script defer src="/security.js?v=<?= hash_file('sha256', __DIR__.'/security.js') ?>"></script><script defer src="/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><meta name="theme-color" content="#111314"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-192.png"><link rel="stylesheet" href="/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/locale.js?v=<?= hash_file('sha256', __DIR__.'/locale.js') ?>"></script><script defer src="/icons.js?v=<?= hash_file('sha256', __DIR__.'/icons.js') ?>"></script><script defer src="/voice.js?v=<?= hash_file('sha256', __DIR__.'/voice.js') ?>"></script><script defer src="/security.js?v=<?= hash_file('sha256', __DIR__.'/security.js') ?>"></script><script defer src="/terminal-format.js?v=<?= hash_file('sha256', __DIR__.'/terminal-format.js') ?>"></script><script defer src="/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
 <body><main id="app" hidden aria-live="polite"></main></body></html>

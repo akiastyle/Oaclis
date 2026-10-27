@@ -1,4 +1,4 @@
-// web.rs v2.26.1690
+// web.rs v2.26.1742
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -134,11 +134,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
     };
     if !matches!(role.as_str(), "master" | "client") { return Err(invalid("Ruolo Oaclis non valido")); }
     let brand_icon = if role == "master" { "oaclis-crown.svg" } else { "oaclis-particles.png" };
-    let mut random = [0u8; 32];
-    fs::File::open("/dev/urandom")?.read_exact(&mut random)?;
-    let token: String = random.iter().map(|byte| format!("{byte:02x}")).collect();
     let server = Server::http("0.0.0.0:23232").map_err(io::Error::other)?;
-    crate::open_ui::prepare_access(&config, &token)?;
     let peers = crate::peers::start(home.clone());
     let saved_transfers = environment::database(&config, "", "transfer-list", None)?;
     if let Some(records) = saved_transfers.as_object() {
@@ -217,7 +213,9 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 "/icons.js" => Some((include_str!("../ui/icons.js").into(), "text/javascript; charset=utf-8")),
                 "/badge-motion.js" => Some((include_str!("../ui/badge-motion.js").into(), "text/javascript; charset=utf-8")),
                 "/panels.js" => Some((include_str!("../ui/panels.js").into(), "text/javascript; charset=utf-8")),
+                "/background.js" => Some((include_str!("../ui/background.js").into(), "text/javascript; charset=utf-8")),
                 "/map.js" => Some((include_str!("../ui/map.js").into(), "text/javascript; charset=utf-8")),
+                "/terminal-format.js" => Some((include_str!("../ui/terminal-format.js").into(), "text/javascript; charset=utf-8")),
                 "/console.js" => Some((include_str!("../ui/console.js").into(), "text/javascript; charset=utf-8")),
                 "/app.js" => Some((
                     include_str!("../ui/app.js").into(),
@@ -230,27 +228,18 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 return;
             }
         }
-        let authorized = request
-            .headers()
-            .iter()
-            .any(|h| h.field.equiv("X-Oaclis-Token") && h.value.as_str() == token);
-        if !authorized {
-            answer(
-                request,
-                403,
-                "Sessione locale richiesta".into(),
-                "text/plain",
-            );
+        if request.method() != &Method::Post {
+            answer(request,405,json!({"error":"Metodo non consentito"}).to_string(),"application/json");
             return;
         }
         // Only legacy config-file edits need a route lock; state_store serializes metadata.
         let _configuration_edit = if request.method() == &Method::Post && matches!(url.as_str(), "/api/device" | "/api/device/delete" | "/api/rule") {
             Some(configuration_edits.lock().unwrap())
         } else { None };
-        if request.method() == &Method::Post { crate::state_transport::log(format!("HTTP POST {url}")); }
+        if !matches!(url.as_str(),"/api/state"|"/api/status"|"/api/log"|"/api/links"|"/api/peers"|"/api/mobile/qr"|"/api/mobile/pending") { crate::state_transport::log(format!("HTTP POST {url}")); }
         let result = (|| -> io::Result<Value> {
             match (request.method(), url.as_str()) {
-                (&Method::Get, "/api/mobile/qr") => {
+                (&Method::Post, "/api/mobile/qr") => {
                     if role != "master" { return Err(invalid("Comando disponibile dal master")); }
                     crate::mobile::access_qr()
                 }
@@ -258,7 +247,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     if role != "master" { return Err(invalid("Invito disponibile dal master")); }
                     crate::mobile::invite(&config)
                 }
-                (&Method::Get, "/api/mobile/pending") => {
+                (&Method::Post, "/api/mobile/pending") => {
                     if role != "master" { return Err(invalid("Conferma disponibile dal master")); }
                     crate::mobile::pending(&config)
                 }
@@ -274,7 +263,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     if role != "master" { return Err(invalid("Comando disponibile dal master")); }
                     crate::mobile::chat_access(&config, &codex, &body(&mut request)?, &mobile)
                 }
-                (&Method::Get, "/api/peers") => Ok(crate::peers::snapshot(&peers)),
+                (&Method::Post, "/api/peers") => Ok(crate::peers::snapshot(&peers)),
                 (&Method::Post, "/api/peers/approve") => crate::peers::approve(&peers, &home, &body(&mut request)?),
                 (&Method::Post, "/api/peers/network") => crate::peers::network(&peers),
                 (&Method::Post, "/api/peers/restore") => crate::peers::restore(&peers, &home),
@@ -287,7 +276,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     };
                     crate::terminal::request(device.as_ref(), &v)
                 }
-                (&Method::Get, "/api/state") => Ok(
+                (&Method::Post, "/api/state") => Ok(
                     json!({"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"deleted_chats":crate::chat_deletion::ids(crate::state_store::snapshot(&config)?.as_ref()),"ssh_settings":crate::ssh_settings::settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
                 ),
                 (&Method::Post, "/api/device/control") => {
@@ -298,8 +287,8 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     crate::device_runtime::control(&runtime,&job,&analyses,&role,action,value["revision"].as_str().unwrap_or(""))
                 }
                 (&Method::Post, "/api/path/authorize") => crate::path_access::authorize(body(&mut request)?),
-                (&Method::Get, "/api/log") => Ok(crate::state_transport::logs()),
-                (&Method::Get, "/api/status") => {
+                (&Method::Post, "/api/log") => Ok(crate::state_transport::logs()),
+                (&Method::Post, "/api/status") => {
                     let snapshot = environment::database(&config,"","status-read",None)?;
                     Ok(json!({"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
                         "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":snapshot["links"],"chat_settings":snapshot["preferences"],"deleted_chats":crate::chat_deletion::ids(crate::state_store::snapshot(&config)?.as_ref()),"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}))
@@ -314,7 +303,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     crate::shared_settings::save_positions(&config, &value)?;
                     Ok(json!({"ok":true}))
                 }
-                (&Method::Get, "/api/links") => {
+                (&Method::Post, "/api/links") => {
                     environment::database(&config, "", "links-get", None)
                 }
                 (&Method::Post, "/api/links/delete") => {
@@ -337,7 +326,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     crate::link_flow::save(&config,link,flow)?;
                     environment::database(&config,"","links-get",None)
                 }
-                (&Method::Post, "/api/links") => {
+                (&Method::Post, "/api/links/save") => {
                     let value = body(&mut request)?;
                     let (key, mut value) =
                         association(&value, &devices::load(config.join("devices.json"))?)?;
@@ -382,8 +371,21 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     let key = v["key"]
                         .as_str()
                         .ok_or_else(|| invalid("Oggetto richiesto"))?;
-                    let value: crate::appearance::Appearance =
+                    let mut value: crate::appearance::Appearance =
                         serde_json::from_value(v["value"].clone()).map_err(io::Error::other)?;
+                    value.label = value.label.trim().into();
+                    value.validate()?;
+                    if let Some(id) = key.strip_prefix("chat:") {
+                        let previous = crate::appearance::load(config.join("appearance.json"))?;
+                        if !value.label.is_empty() && (v["rename"] == true || previous.get(key).map(|v|v.label.as_str()) != Some(value.label.as_str())) {
+                            let source = v["source_device_id"].as_str().unwrap_or("master");
+                            if source == "master" { crate::catalog::rename(&home,&codex,id,&value.label)?; }
+                            else {
+                                let device = devices::load(config.join("devices.json"))?.into_iter().find(|device|device.id == source).ok_or_else(||invalid("Dispositivo non trovato"))?;
+                                crate::state_transport::remote(&device,&json!({"kind":"chat-rename","chat_id":id,"name":value.label}))?;
+                            }
+                        }
+                    }
                     crate::appearance::save(config.join("appearance.json"), &std::collections::BTreeMap::from([(key.into(), value)]))?;
                     Ok(json!({"ok":true}))
                 }

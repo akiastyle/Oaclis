@@ -1,4 +1,4 @@
-// terminal.rs v1.9.159
+// terminal.rs v1.12.208
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -91,8 +91,36 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         },
         _ => {},
     }
-    let screen=tmux(&["capture-pane","-p","-t",&target,"-S","-200"]).map_err(|_|invalid("Sessione terminata: riapri la chat"))?;
-    Ok(json!({"screen":String::from_utf8(screen).map_err(io::Error::other)?}))
+    let screen=tmux(&["capture-pane","-p","-e","-t",&target,"-S","-200"]).map_err(|_|invalid("Sessione terminata: riapri la chat"))?;
+    let ansi=String::from_utf8(screen).map_err(io::Error::other)?;
+    Ok(json!({"screen":sgr().replace_all(&ansi,""),"screen_ansi":ansi}))
+}
+fn sgr() -> &'static regex::Regex {
+    static SGR: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    SGR.get_or_init(||regex::Regex::new(r"\x1b\[[0-9;:]*m").unwrap())
+}
+pub(crate) fn mobile_screen(value: &Value) -> Value {
+    let plain=value["screen"].as_str().unwrap_or("");
+    let tail=plain.chars().rev().take(14000).collect::<String>().chars().rev().collect::<String>();
+    let mut result=json!({"screen":tail});
+    if let Some(ansi)=value["screen_ansi"].as_str() {
+        let skip=plain.len()-tail.len();
+        let (mut consumed,mut cursor,mut prefix)=(0,0,String::new());
+        for code in sgr().find_iter(ansi) {
+            let text=code.start()-cursor;
+            if consumed+text>=skip {break;}
+            consumed+=text;
+            if matches!(code.as_str(),"\x1b[m"|"\x1b[0m") {prefix.clear();}
+            prefix.push_str(code.as_str());
+            cursor=code.end();
+        }
+        if let Some(rest)=ansi.get(cursor+skip.saturating_sub(consumed)..) {
+            prefix.push_str(rest);
+            // Keep the existing relay request bounded; oversized styling falls back to plain text.
+            if prefix.len()<=24000 {result["screen_ansi"]=json!(prefix);}
+        }
+    }
+    result
 }
 pub fn request(device: Option<&Device>, value: &Value) -> io::Result<Value> {
     validate(value)?;
@@ -109,4 +137,21 @@ mod tests {
         for value in [json!({"action":"open","chat_id":"x;touch bad"}),json!({"action":"read","chat_id":"../chat"}),json!({"action":"input","chat_id":"chat-1","key":"run-shell"}),json!({"action":"input","chat_id":"chat-1","text":true}),json!({"action":"input","chat_id":"chat-1","text":"nul\0"}),json!({"action":"input","chat_id":"chat-1","text":"x".repeat(8001)}),json!({"action":"delete","chat_id":"chat-1"})] { assert!(request(None,&value).is_err()); }
         assert!(validate(&json!({"action":"input","chat_id":"chat-1","text":"$(touch bad)","key":"Enter"})).is_ok());
     }
+    #[test]
+    fn mobile_color_tail_keeps_style_and_unicode_without_splitting_escape_codes() {
+        let ansi=format!("\x1b[1;35m{}\x1b[38;2;12;34;56m尾🙂\x1b[0m", "x".repeat(15000));
+        let plain=sgr().replace_all(&ansi,"").into_owned();
+        let screen=mobile_screen(&json!({"screen":plain,"screen_ansi":ansi}));
+        assert_eq!(screen["screen"].as_str().unwrap().chars().count(),14000);
+        let styled=screen["screen_ansi"].as_str().unwrap();
+        assert!(styled.starts_with("\x1b[1;35m"));
+        assert!(styled.ends_with("尾🙂\x1b[0m"));
+        assert_eq!(sgr().replace_all(styled,""),screen["screen"].as_str().unwrap());
+        let excessive=format!("{}Text", "\x1b[31m".repeat(6000));
+        let fallback=mobile_screen(&json!({"screen":"Text","screen_ansi":excessive}));
+        assert_eq!(fallback["screen"],"Text");
+        assert!(fallback.get("screen_ansi").is_none());
+        assert_eq!(mobile_screen(&json!({"screen":"legacy"}))["screen"],"legacy");
+    }
+
 }

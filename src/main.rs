@@ -1,4 +1,4 @@
-// main.rs v1.2.183
+// main.rs v1.2.187
 use oaclis::{
     chat::Chat,
     compare,
@@ -27,8 +27,8 @@ fn run() -> Result<(), Box<dyn Error>> {
             if !["yes", "no"].iter().any(|v| container == v) || !["yes", "no"].iter().any(|v| wsl == v) { return Err("Scenario non valido".into()); }
             oaclis::bootstrap_settings::configure(system, container == "yes", wsl == "yes")?;
         }
-        [command] if command == "prepare-service" => oaclis::service_setup::prepare()?,
-        [command] if command == "ui-launch-path" => println!("{}", oaclis::open_ui::launch_path()?.display()),
+        [command] if command == "prepare-service" => oaclis::service_setup::prepare(false)?,
+        [command, option] if command == "prepare-service" && option == "--keys-only" => oaclis::service_setup::prepare(true)?,
         [command] if command == "open-ui" => oaclis::open_ui::open(),
         [command, path, uid, gid] if command == "prepare-path-root" => {
             oaclis::path_access::create_privileged(Path::new(path),uid.to_str().ok_or("UID non valido")?.parse()?,gid.to_str().ok_or("GID non valido")?.parse()?)?;

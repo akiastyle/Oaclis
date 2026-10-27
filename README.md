@@ -685,3 +685,7 @@ La passkey continua a proteggere l'accesso web; non viene richiesta a ogni messa
 Attivazione: aggiornare insieme master e relay (caricare `security.js` prima della pagina che lo include), quindi effettuare un nuovo abbinamento dei telefoni e scegliere le chat dal master. Non sono previsti import automatici di autorizzazioni dal relay o ripieghi su richieste senza firma. Le modifiche manuali alle credenziali del file richiedono il riavvio del servizio. I test di firma e del flusso passkey/console vengono eseguiti solo in locale, con sessioni e autenticatore virtuale isolati; non avviare eseguibili o prove CGI sull'hosting OVH.
 
 Il relay mobile è isolato su `https://oaclis.krprojects.it/`, con RP ID dedicato e cookie di sessione `__Host-Oaclis`. Nel passaggio dal precedente indirizzo sono necessari nuovi abbinamenti dei telefoni. Gli accessi anonimi sono limitati prima del lock sullo stato; console autenticata e master non passano dal contatore.
+
+Per applicare le restrizioni alle sole chiavi SSH Oaclis già approvate, senza modificare o riavviare il servizio: `oaclis prepare-service --keys-only`. Prima installare la build compatibile; le chiavi personali restano invariate.
+
+Il master locale si apre direttamente da `http://localhost:23232/`, senza token o sessione locale. Le API accettano solo connessioni loopback con Host locale e usano esclusivamente POST, anche per stato, statistiche e log, con i parametri nel corpo JSON. I processi locali sono considerati attendibili. Passkey, firme e autorizzazioni del relay remoto restano separate.

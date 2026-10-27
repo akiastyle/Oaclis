@@ -40,6 +40,7 @@
 - Read-only status/catalog requests must not rewrite JSON data. All mutations use `state_store`; do not reintroduce Python storage helpers, per-request subprocesses, independent writers or new databases. Native peer requests use `state_transport` over the existing approved SSH channel.
 
 ## Peer Access and Deployment
+- The mobile device named `test` is intentionally permanent. Reuse its private browser profile and virtual authenticator in `/root/.local/share/oaclis/mobile-test` via the ignored local test `tools/test_mobile_device.cjs`; do not remove this pairing during routine test cleanup unless the user requests it. Never commit its credentials or browser profile.
 - Use the configured SSH aliases and approved pairing. Keep identities and access details in their existing configuration locations.
 - Do not print credentials, commit them, or copy them into `AGENTS.md` or commands shown to the user.
 - Deploy only explicitly authorized files or builds, to explicitly authorized devices.

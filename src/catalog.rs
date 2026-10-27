@@ -1,5 +1,5 @@
-// catalog.rs v2.27.1419
-//! Read Codex archives natively; Oaclis metadata comes from its in-memory JSON state.
+// catalog.rs v2.33.1538
+//! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
 use std::{
@@ -161,6 +161,85 @@ fn walk(
     }
     Ok(())
 }
+// Keep one native Codex connection for explicit title edits, outside the state locks.
+struct NameClient {
+    child: std::process::Child,
+    input: std::process::ChildStdin,
+    replies: std::sync::mpsc::Receiver<Value>,
+    next: u64,
+}
+impl Drop for NameClient {
+    fn drop(&mut self) {
+        let _ = std::process::Command::new("kill").args(["-KILL", "--", &format!("-{}", self.child.id())]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+impl NameClient {
+    fn start(root: &Path, executable: &Path) -> io::Result<Self> {
+        use std::{os::unix::process::CommandExt, process::{Command, Stdio}};
+        let mut child = Command::new(executable).args(["app-server", "--listen", "stdio://"])
+            .env("CODEX_HOME", root).process_group(0).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
+        let input = child.stdin.take().unwrap();
+        let output = child.stdout.take().unwrap();
+        let (send, replies) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            for line in BufReader::new(output).lines() {
+                let Ok(line) = line else { break };
+                let Ok(value) = serde_json::from_str::<Value>(&line) else { break };
+                if value.get("id").is_some() && send.send(value).is_err() { break; }
+            }
+        });
+        let mut client = Self { child, input, replies, next: 0 };
+        client.request("initialize", json!({"clientInfo":{"name":"oaclis","version":env!("OACLIS_APP_VERSION")}}))?;
+        use std::io::Write;
+        client.input.write_all(b"{\"method\":\"initialized\",\"params\":{}}\n")?;
+        Ok(client)
+    }
+    fn request(&mut self, method: &str, params: Value) -> io::Result<Value> {
+        use std::io::Write;
+        let id = self.next;
+        self.next += 1;
+        serde_json::to_writer(&mut self.input, &json!({"id":id,"method":method,"params":params}))?;
+        self.input.write_all(b"\n")?;
+        self.input.flush()?;
+        let until = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        loop {
+            let value = self.replies.recv_timeout(until.saturating_duration_since(std::time::Instant::now()))
+                .map_err(|_|io::Error::new(io::ErrorKind::TimedOut,"Codex non risponde alla rinomina"))?;
+            if value["id"] != id { continue; }
+            if let Some(error) = value.get("error") { return Err(io::Error::other(error["message"].as_str().unwrap_or("Rinomina Codex non riuscita"))); }
+            return value.get("result").cloned().ok_or_else(||crate::invalid("Risposta rinomina Codex non valida"));
+        }
+    }
+}
+pub(crate) fn rename(home: &Path, root: &Path, id: &str, name: &str) -> io::Result<()> {
+    if id.len() != 36 || !id.bytes().enumerate().all(|(i,b)|if [8,13,18,23].contains(&i) {b==b'-'} else {b.is_ascii_hexdigit()}) {
+        return Err(crate::invalid("Identificativo chat non valido"));
+    }
+    if name.trim().is_empty() || name != name.trim() {
+        return Err(crate::invalid("Nome chat non valido"));
+    }
+    crate::appearance::Appearance { label: name.into(), ..Default::default() }.validate()?;
+    static CLIENT: std::sync::OnceLock<std::sync::Mutex<Option<(std::path::PathBuf, NameClient)>>> = std::sync::OnceLock::new();
+    let mut saved = CLIENT.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Rinomina Codex non disponibile"))?;
+    if saved.as_ref().is_some_and(|(path, _)|path != root) { *saved = None; }
+    let result = (|| {
+        if saved.is_none() {
+            let native = root.join("packages/app-server-daemon/current/bin/codex");
+            let executable = if native.is_file() { native } else { crate::terminal::codex(home)? };
+            *saved = Some((root.into(), NameClient::start(root, &executable)?));
+        }
+        saved.as_mut().unwrap().1.request("thread/name/set", json!({"threadId":id,"name":name})).map(|_|())
+    })();
+    if let Err(error) = result {
+        *saved = None;
+        crate::state_transport::log(format!("Codex rename {id}: {error}"));
+        return Err(io::Error::other("Impossibile rinominare la chat in Codex. Riprova."));
+    }
+    Ok(())
+}
+
 pub(crate) fn remote(device: &Device) -> io::Result<Value> {
     crate::state_transport::remote(device, &json!({"kind":"catalog"}))
 }
@@ -246,6 +325,44 @@ mod tests {
         catalogs.clear();
         assert!(cached(&mut catalogs,"offline",||Ok(vec![])).unwrap().is_empty());
         assert_eq!(cached(&mut catalogs,"master",||Ok(vec![json!({"id":"updated"})])).unwrap()[0]["id"],"updated");
+    }
+
+    #[test]
+    fn rename_rejects_invalid_identity_and_name_before_starting_codex() {
+        let home = Path::new("/oaclis-missing-home");
+        let id = "01a12618-f84f-76f3-a2f0-0db43170e78e";
+        for name in ["", " ", " title", "title\nline"] {
+            assert!(rename(home,home,id,name).is_err());
+        }
+        assert!(rename(home,home,id,&"a".repeat(161)).is_err());
+        assert!(rename(home,home,"../archive","Title").is_err());
+    }
+    #[test]
+    fn name_client_reuses_connection_ignores_notifications_and_reports_errors() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("oaclis-name-client-{}",std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let program = root.join("codex");
+        fs::write(&program, r#"#!/bin/sh
+n=0
+while IFS= read -r line; do
+ case "$line" in
+  *'"method":"initialize"'*) printf '{"id":0,"result":{}}\n';;
+  *'"method":"thread/name/set"'*) n=$((n+1)); printf '{"method":"thread/name/updated","params":{}}\n{"id":%s,"result":{}}\n' "$n";;
+  *'"method":"fail"'*) n=$((n+1)); printf '{"id":%s,"error":{"message":"name rejected"}}\n' "$n";;
+ esac
+done
+"#).unwrap();
+        fs::set_permissions(&program,fs::Permissions::from_mode(0o700)).unwrap();
+        let mut client = NameClient::start(&root,&program).unwrap();
+        let pid = client.child.id();
+        for name in ["First", "Second"] {
+            assert_eq!(client.request("thread/name/set",json!({"threadId":"id","name":name})).unwrap(),json!({}));
+            assert_eq!(client.child.id(),pid);
+        }
+        assert!(client.request("fail",json!({})).unwrap_err().to_string().contains("name rejected"));
+        drop(client);
+        fs::remove_dir_all(root).unwrap();
     }
 
 }

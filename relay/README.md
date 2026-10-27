@@ -155,3 +155,7 @@ logo o footer, per lasciare spazio al testo.
 Il sottodominio deve avere HTTPS valido e document root `www/oaclis`. Origin e RP ID sono esclusivamente `oaclis.krprojects.it`: richiedere nuovi abbinamenti e nuove passkey, senza importare le autorizzazioni precedenti. La sessione usa un cookie `__Host-` senza Domain, Secure e con path `/`, per impedire cookie di sessione impostati dagli altri sottodomini.
 
 Le richieste senza sessione valida o chiave amministrativa sono limitate a 60 al minuto per bucket derivato dall’IP di connessione (256 bucket fissi, senza fidarsi di X-Forwarded-For). Le richieste negate non acquisiscono il lock dello stato una volta raggiunto il limite; il traffico autenticato ne è esente. Il limite applicativo non sostituisce le protezioni anti-DDoS del provider.
+
+La console conserva colori ANSI, grassetto e colori RGB. Pubblicare anche terminal-format.js
+dalla stessa sorgente ui/terminal-format.js usata dal master, prima di index.php.
+Il testo resta separato dalla formattazione; nessun output della console viene interpretato come HTML.

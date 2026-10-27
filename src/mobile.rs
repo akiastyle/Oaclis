@@ -1,4 +1,4 @@
-// mobile.rs v1.21.487
+// mobile.rs v1.21.489
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -152,7 +152,7 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
                         if let Err(error)=&checked {crate::state_transport::log(format!("REJECT mobile-relay {error}"));}
                         let result = checked.and_then(|value|crate::terminal::request(None, &value));
                         let mut answer = json!({"device":device,"id":id});
-                        match result { Ok(value) => answer["screen"] = json!(value["screen"].as_str().unwrap_or("").chars().rev().take(14000).collect::<String>().chars().rev().collect::<String>()), Err(_) => answer["error"] = json!(true) }
+                        match result { Ok(value) => { let screen=crate::terminal::mobile_screen(&value); answer["screen"]=screen["screen"].clone(); if let Some(ansi)=screen.get("screen_ansi") {answer["screen_ansi"]=ansi.clone();} }, Err(_) => answer["error"] = json!(true) }
                         results.push(answer);
                     }
                     if !results.is_empty() { continue; }

@@ -1,4 +1,4 @@
-// console.js v2.95.1781
+// console.js v2.95.1783
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -69,7 +69,7 @@ function openChatTerminal(connection, anchor, deviceId) {
     try {
       const result = await api("terminal", { ...payload, ...value });
       if (!panel.isConnected) return false;
-      screen.textContent = result.screen;
+      OaclisTerminal.render(screen,result.screen,result.screen_ansi);
       screen.scrollTop = screen.scrollHeight;
       ready = true;
       form.querySelectorAll("textarea,button").forEach(e => e.disabled = false);

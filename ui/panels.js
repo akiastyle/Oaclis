@@ -1,4 +1,4 @@
-// panels.js v3.140.2738
+// panels.js v3.140.2745
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -498,13 +498,16 @@ function editChat(entry, anchor, origin = sourceId || "master", connection = nul
   const readAppearance = bindAppearanceFields(panel);
   const save = async value => {
     const key = "chat:" + entry.id;
-    await api("appearance", { key, value }); data.appearance ??= {}; data.appearance[key] = value;
+    await api("appearance", { key, value, source_device_id: origin }); data.appearance ??= {}; data.appearance[key] = value;
+    if (value.label) for (const chat of [entry, ...(data.chats || []), ...visibleChats, ...chatLinks.map(link => link.entry)]) {
+      if (chat.id === entry.id) chat.name = value.label;
+    }
     closeChatEditor(panel); renderLibrary(); renderLink(true);
   };
   panel.querySelector('form').onsubmit = guard(async event => { event.preventDefault(); const raw=event.target.elements.url.value.trim();
     let url="";
     if(raw){const parsed=new URL(raw);if(!["http:","https:"].includes(parsed.protocol)||parsed.username||parsed.password)throw new Error(OaclisSettings.text("Inserisci un URL http:// o https:// valido"));url=parsed.href;}
-    await save({ label: event.target.elements.label.value, ...readAppearance(), url }); });
+    await save({ label: event.target.elements.label.value.trim(), ...readAppearance(), url }); });
   panel.querySelector('.delete-presentation').onclick = guard(() => connection ? removeConnection(connection, panel) : removePresentation("chat", entry.id));
   panel.querySelectorAll('[data-scope]').forEach(button => button.onclick = guard(async () => {
     const previous = button.getAttribute('aria-pressed'); button.setAttribute('aria-pressed', String(previous !== 'true'));

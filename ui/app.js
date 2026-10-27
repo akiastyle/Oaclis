@@ -1,13 +1,9 @@
-// app.js v4.161.3001
+// app.js v4.161.3020
 "use strict";
 OaclisSettings.translate(document.body);
 const $ = (s) => document.querySelector(s);
-const launchToken = /^#access=([a-f0-9]{64})$/.exec(location.hash)?.[1];
-if (launchToken) {
-  sessionStorage.setItem('oaclis-local-access', launchToken);
-  history.replaceState(null, '', location.pathname + location.search);
-}
-const token = launchToken || sessionStorage.getItem('oaclis-local-access') || '';
+sessionStorage.removeItem('oaclis-local-access');
+if (/^#access=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
 const esc = (v) =>
   String(v ?? "").replace(
     /[&<>"']/g,
@@ -165,14 +161,11 @@ function beep() {
 }
 async function api(path, value) {
   const response = await fetch("/api/" + path, {
-    method: value === undefined ? "GET" : "POST",
-    headers: { "X-Oaclis-Token": token, "Content-Type": "application/json" },
-    body: value === undefined ? undefined : JSON.stringify(value),
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(value === undefined ? {} : value),
   });
-  if (response.status === 403) {
-    location.reload();
-    throw Error(OaclisSettings.text("Sessione scaduta."));
-  }
+  if (response.status === 403) throw Error(OaclisSettings.text("Operazione non riuscita"));
   const result = await response.json();
   if (!response.ok) throw Error(result.error || OaclisSettings.text("Operazione non riuscita"));
   return result;

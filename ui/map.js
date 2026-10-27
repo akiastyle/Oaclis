@@ -1,4 +1,4 @@
-// map.js v3.116.2744
+// map.js v3.121.2924
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -25,15 +25,116 @@ function updateBadgeMotion(marker, connection) {
   marker.badgeMotion.update({ phase, modules });
 }
 
+// Preview direction only: the original paths and transfer controls stay untouched.
+function previewLinkFlow(node) {
+  document.querySelectorAll('.link-flow-overlay').forEach(overlay => overlay.remove());
+  if (!node || node.dataset.dragging || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const id = node.dataset.id;
+  const paths = [...document.querySelectorAll('.chat-link')]
+    .filter(layer => layer.dataset.source === id || layer.dataset.target === id)
+    .map(layer => ({ path: layer.querySelector('.connection-lines > path'), both: layer.dataset.operation === 'sync' }));
+  for (const path of document.querySelectorAll('#mobile-links > path')) {
+    if (id === 'master' || path.dataset.id === id) paths.push({ path, both: false });
+  }
+  for (const { path, both } of paths) {
+    const overlay = document.createElementNS(path.namespaceURI, 'g');
+    overlay.classList.add('link-flow-overlay');
+    for (const reverse of both ? [false, true] : [false]) {
+      const trace = document.createElementNS(path.namespaceURI, 'path');
+      trace.setAttribute('d', path.getAttribute('d'));
+      trace.setAttribute('pathLength', '1');
+      if (path.dataset.id) trace.dataset.id = path.dataset.id;
+      trace.style.stroke = getComputedStyle(path).stroke;
+      trace.classList.add('link-flow-trace');
+      if (reverse) trace.classList.add('is-reverse');
+      overlay.append(trace);
+    }
+    path.parentNode.append(overlay);
+  }
+}
+
+// One shared group of ports per device; multiple links reuse the same buttons.
+let portMotionFrame = 0;
+function positionConnectionPorts() {
+  const nodes = [...document.querySelectorAll('.map-node[data-kind="computer"]')];
+  const now = performance.now(), reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let moving = false;
+  for (const node of nodes) {
+    const rect = node.getBoundingClientRect(), cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    const peers = nodes.filter(other => other !== node);
+    if (!peers.length) continue;
+    const linked = new Set(chatLinks.filter(value => value.source === node.dataset.id || value.target === node.dataset.id)
+      .map(value => value.source === node.dataset.id ? value.target : value.source));
+    const nearest = peers.slice().sort((a, b) => {
+      const ar = a.getBoundingClientRect(), br = b.getBoundingClientRect();
+      return Math.hypot(ar.left + ar.width / 2 - cx, ar.top + ar.height / 2 - cy) - Math.hypot(br.left + br.width / 2 - cx, br.top + br.height / 2 - cy);
+    });
+    const targets = peers.filter(other => linked.has(other.dataset.id));
+    if (!targets.length) targets.push(nearest[0]);
+    let tx = 0, ty = 0;
+    for (const peer of targets) {
+      const r = peer.getBoundingClientRect(), dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
+      const distance = Math.max(1, Math.hypot(dx, dy));
+      tx += dx / distance; ty += dy / distance;
+    }
+    if (Math.hypot(tx, ty) < 0.01) {
+      const r = nearest[0].getBoundingClientRect(); tx = r.left + r.width / 2 - cx; ty = r.top + r.height / 2 - cy;
+    }
+    const scale = Math.max(rect.width, rect.height) * 2 / Math.max(0.01, Math.hypot(tx, ty));
+    tx *= scale; ty *= scale;
+    const size = rect.width + ':' + rect.height;
+    let orbit = node.portOrbit;
+    if (!orbit || orbit.size !== size) {
+      const hx = rect.width / 2 + 24, hy = rect.height / 2 + 24;
+      const radius = Math.min(hx, hy, (parseFloat(getComputedStyle(node).borderRadius) || 10) + 24);
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', `M${-hx + radius} ${-hy} H${hx - radius} A${radius} ${radius} 0 0 1 ${hx} ${-hy + radius} V${hy - radius} A${radius} ${radius} 0 0 1 ${hx - radius} ${hy} H${-hx + radius} A${radius} ${radius} 0 0 1 ${-hx} ${hy - radius} V${-hy + radius} A${radius} ${radius} 0 0 1 ${-hx + radius} ${-hy} Z`);
+      const length = path.getTotalLength();
+      orbit = node.portOrbit = { size, path, length, samples: Array.from({ length: 129 }, (_, index) => path.getPointAtLength(index * length / 128)), time: now };
+    }
+    const wrap = value => (value % orbit.length + orbit.length) % orbit.length;
+    const delta = (a, b) => wrap(a - b + orbit.length / 2) - orbit.length / 2;
+    let ideal = 0, best = Infinity;
+    for (let index = 0; index < 128; index++) {
+      const a = orbit.samples[index], b = orbit.samples[index + 1], dx = b.x - a.x, dy = b.y - a.y;
+      const t = Math.max(0, Math.min(1, ((tx - a.x) * dx + (ty - a.y) * dy) / (dx * dx + dy * dy)));
+      const distance = (a.x + dx * t - tx) ** 2 + (a.y + dy * t - ty) ** 2;
+      if (distance < best) { best = distance; ideal = (index + t) * orbit.length / 128; }
+    }
+    if (orbit.phase === undefined) orbit.phase = orbit.target = ideal;
+    if (Math.abs(delta(ideal, orbit.target)) > 7) orbit.target = ideal;
+    const remaining = delta(orbit.target, orbit.phase);
+    if (reduced || Math.abs(remaining) <= 0.1) orbit.phase = orbit.target;
+    else { orbit.phase = wrap(orbit.phase + remaining * (1 - Math.exp(-Math.min(40, Math.max(1, now - orbit.time)) / 85))); moving = true; }
+    orbit.time = now;
+    const reverse = tx < 0 ? -1 : 1;
+    for (const [index, operation] of ['sync', 'send', 'receive'].entries()) {
+      const port = node.querySelector('.connection-port.' + operation);
+      if (!port) continue;
+      const position = orbit.phase + (index - 1) * 44 * reverse;
+      const point = orbit.path.getPointAtLength(wrap(position));
+      const before = orbit.path.getPointAtLength(wrap(position - 0.5)), after = orbit.path.getPointAtLength(wrap(position + 0.5));
+      const length = Math.hypot(after.x - before.x, after.y - before.y);
+      port.portNormal = { x: (after.y - before.y) / length, y: (before.x - after.x) / length };
+      port.dataset.orbit = 'true';
+      port.style.left = rect.width / 2 + point.x - node.clientLeft + 'px';
+      port.style.top = rect.height / 2 + point.y - node.clientTop + 'px';
+      port.querySelector('svg').style.transform = `rotate(${Math.atan2(port.portNormal.y, port.portNormal.x)}rad)`;
+    }
+  }
+  if (moving && !portMotionFrame) portMotionFrame = requestAnimationFrame(() => { portMotionFrame = 0; renderLink(true); });
+}
+
 function renderLink(force = false) {
   if (drawingMap) return;
   renderMobileLinks();
   if (document.querySelector('.link-badge[data-dragging="true"]')) return;
+  positionConnectionPorts();
   if (!force && document.querySelector(".link-badge:hover, .link-badge:focus-within")) return;
   const layers = new Map([...document.querySelectorAll(".chat-link")].map(node => [node.dataset.renderKey, node]));
   const geometry = Object.fromEntries([...document.querySelectorAll(".map-node")].map(node => {
     const rect = node.getBoundingClientRect();
-    return [node.dataset.id, [rect.x, rect.y, rect.width, rect.height]];
+    return [node.dataset.id, [rect.x, rect.y, rect.width, rect.height, node.portOrbit?.phase]];
   }));
   if(link && (data.deleted_chats || []).includes(link.entry.id))link=null;
   const links = chatLinks.filter(v => !(data.deleted_chats || []).includes(v.entry.id));
@@ -99,17 +200,22 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
   if (!fromPort || !toPort) return;
   const base = $("#nodes").getBoundingClientRect();
   const start = fromPort.getBoundingClientRect(), end = toPort.getBoundingClientRect();
-  const startSide = fromPort.classList.contains("sync") ? -1 : 1;
-  const endSide = toPort.classList.contains("sync") ? -1 : 1;
-  const x1 = start.left + start.width / 2 + startSide * (start.width / 2 + 2) - base.left,
-    x2 = end.left + end.width / 2 + endSide * (end.width / 2 + 2) - base.left,
-    y1 = start.top + start.height / 2 - base.top,
-    y2 = end.top + end.height / 2 - base.top;
+  const startNormal = fromPort.portNormal || { x: fromPort.classList.contains('sync') ? -1 : 1, y: 0 };
+  const endNormal = toPort.portNormal || { x: toPort.classList.contains('sync') ? -1 : 1, y: 0 };
+  const x1 = start.left + start.width / 2 + startNormal.x * (start.width / 2 + 2) - base.left,
+    x2 = end.left + end.width / 2 + endNormal.x * (end.width / 2 + 2) - base.left,
+    y1 = start.top + start.height / 2 + startNormal.y * (start.height / 2 + 2) - base.top,
+    y2 = end.top + end.height / 2 + endNormal.y * (end.height / 2 + 2) - base.top;
   const dx = x2 - x1, dy = y2 - y1, distance = Math.max(1, Math.hypot(dx, dy));
   const reach = Math.max(45, Math.min(150, distance * 0.35)) + lane * 80;
-  const curve = `M${x1} ${y1} C${x1 + startSide * reach} ${y1} ${x2 + endSide * reach} ${y2} ${x2} ${y2}`;
+  const controls = [{ x: x1, y: y1 }, { x: x1 + startNormal.x * reach, y: y1 + startNormal.y * reach },
+    { x: x2 + endNormal.x * reach, y: y2 + endNormal.y * reach }, { x: x2, y: y2 }];
+  const curve = `M${x1} ${y1} C${controls[1].x} ${controls[1].y} ${controls[2].x} ${controls[2].y} ${x2} ${y2}`;
   const layer = existing || document.createElement("div");
   layer.className = "chat-link";
+  layer.dataset.source = connection.source;
+  layer.dataset.target = connection.target;
+  layer.dataset.operation = connection.operation;
   layer.id = index === 0 ? "chat-link" : "";
   layer.style.color = appearance(connection.entry).color || "var(--ink)";
   if (!existing) layer.innerHTML =
@@ -207,8 +313,11 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
   path.setAttribute('stroke-dasharray', connection.operation === 'sync' ? 'none' : '7 6');
   path.setAttribute('d', curve);
   const midpoint = path.getPointAtLength(path.getTotalLength() / 2);
-  const bend = curveThroughBadge([{ x: x1, y: y1 }, { x: x1 + startSide * reach, y: y1 }, { x: x2 + endSide * reach, y: y2 }, { x: x2, y: y2 }], midpoint);
-  const updateCurve = () => path.setAttribute("d", bend({ x: parseFloat(marker.style.left), y: parseFloat(marker.style.top) }));
+  const bend = curveThroughBadge(controls, midpoint);
+  const updateCurve = () => {
+    path.setAttribute('d', bend({ x: parseFloat(marker.style.left), y: parseFloat(marker.style.top) }));
+    layer.querySelectorAll('.link-flow-trace').forEach(trace => trace.setAttribute('d', path.getAttribute('d')));
+  };
   const key = [connection.entry.id, ...[connection.source, connection.target].sort()].join(":");
   const offset = linkPositions[key] || { x: 0, y: 0 };
   marker.style.left = midpoint.x + offset.x + "px";
@@ -353,17 +462,12 @@ function mapLayout() {
   );
   const rows = Math.ceil(count / columns),
     gridHeight = rows * 90 + (rows - 1) * gap;
-  const canvasHeight = Math.max(
-    height,
-    gridHeight + 200,
-    ...Object.values(positions).map((p) => p.y + 180),
-  );
   return {
     nodeWidth,
     gap,
     columns,
     gridHeight,
-    canvasHeight,
+    canvasHeight: height,
     x: Math.max(55, (width - (columns * nodeWidth + (columns - 1) * gap)) / 2),
     y: Math.max(110, (height - gridHeight) / 2),
   };
@@ -378,13 +482,14 @@ function defaultPosition(index) {
 }
 
 function place(node, p) {
+  const edge = node.dataset.kind === 'computer' ? 55 : 0;
   node.style.left =
     Math.max(55, Math.min(p.x, $("#map").clientWidth - node.offsetWidth - 55)) +
     "px";
   node.style.top =
     Math.max(
-      0,
-      Math.min(p.y, $("#nodes").clientHeight - node.offsetHeight),
+      edge,
+      Math.min(p.y, $("#nodes").clientHeight - node.offsetHeight - edge),
     ) + "px";
   renderLink();
 }
@@ -599,6 +704,10 @@ function renderMap(animate = false) {
         node.append(port);
       }
     }
+    node.onpointerenter = event => { if (event.pointerType !== 'touch') previewLinkFlow(node); };
+    node.onpointerleave = () => previewLinkFlow(null);
+    node.onfocus = () => previewLinkFlow(node);
+    node.onblur = () => previewLinkFlow(null);
     let start,
       moved = false;
     node.onpointerdown = (e) => {
@@ -735,13 +844,34 @@ async function selectChat(entry, targetId, operation = "copy") {
     scopes: data.chat_settings?.[entry.id]?.scopes || { chat: true, paths: true, apps: true }, transfer_pending: true };
   try {
     await saveLinkChange(async () => {
-      chatLinks = await api("links", association);
+      chatLinks = await api("links/save", association);
       link = null;
       renderLink(true);
     });
   } catch (error) { notice(OaclisSettings.text("Associazione non salvata: ") + error.message); }
 }
 
+
+function mobileLinkCurve(from, to, base, radius = 0) {
+  const overlapX = [Math.max(from.left + radius, to.left + radius), Math.min(from.right - radius, to.right - radius)];
+  const overlapY = [Math.max(from.top + radius, to.top + radius), Math.min(from.bottom - radius, to.bottom - radius)];
+  const sides = [from, to].map((rect, index) => {
+    const other = index ? from : to;
+    const inset = Math.min(radius, rect.width / 2, rect.height / 2);
+    const x = overlapX[0] <= overlapX[1] ? (overlapX[0] + overlapX[1]) / 2 : Math.max(rect.left + inset, Math.min(rect.right - inset, other.left + other.width / 2));
+    const y = overlapY[0] <= overlapY[1] ? (overlapY[0] + overlapY[1]) / 2 : Math.max(rect.top + inset, Math.min(rect.bottom - inset, other.top + other.height / 2));
+    return [{x:rect.left - 2,y,nx:-1,ny:0}, {x:rect.right + 2,y,nx:1,ny:0},
+      {x,y:rect.top - 2,nx:0,ny:-1}, {x,y:rect.bottom + 2,nx:0,ny:1}];
+  });
+  let best;
+  for (const a of sides[0]) for (const b of sides[1]) {
+    const dx = b.x - a.x, dy = b.y - a.y, distance = Math.hypot(dx, dy);
+    const facing = a.nx * dx + a.ny * dy >= 0 && b.nx * dx + b.ny * dy <= 0;
+    if (!best || facing && !best.facing || facing === best.facing && distance < best.distance) best = {a,b,distance,facing};
+  }
+  const {a,b,distance} = best, reach = Math.min(150, distance * 0.35);
+  return `M${a.x - base.left} ${a.y - base.top}C${a.x + a.nx * reach - base.left} ${a.y + a.ny * reach - base.top} ${b.x + b.nx * reach - base.left} ${b.y + b.ny * reach - base.top} ${b.x - base.left} ${b.y - base.top}`;
+}
 
 function renderMobileLinks() {
   let svg = document.querySelector('#mobile-links');
@@ -755,6 +885,7 @@ function renderMobileLinks() {
     $('#nodes').prepend(svg);
   }
   const base = $('#nodes').getBoundingClientRect();
+  const radius = parseFloat(getComputedStyle(masterNode).borderTopLeftRadius) || 0;
   const keep = new Set();
   for (const device of phones) {
     const node = [...document.querySelectorAll('.map-node')].find(n => n.dataset.id === device.id);
@@ -769,11 +900,8 @@ function renderMobileLinks() {
       marker.innerHTML = '<path d="M1 1L9 5L1 9Z"/>'; svg.querySelector('defs').append(marker);
       path.setAttribute('marker-end','url(#' + marker.id + ')'); svg.append(path);
     }
-    const from = masterNode.getBoundingClientRect(), to = node.getBoundingClientRect();
-    const a = {x:from.left - base.left - 2, y:from.top + from.height / 2 - base.top};
-    const b = {x:to.left - base.left - 2, y:to.top + to.height / 2 - base.top};
-    const reach = Math.max(45, Math.min(150, Math.hypot(b.x - a.x, b.y - a.y) * 0.35));
-    path.setAttribute('d', `M${a.x} ${a.y}C${a.x - reach} ${a.y} ${b.x - reach} ${b.y} ${b.x} ${b.y}`);
+    path.setAttribute('d', mobileLinkCurve(masterNode.getBoundingClientRect(), node.getBoundingClientRect(), base, radius));
+    svg.querySelectorAll('.link-flow-trace[data-id="' + CSS.escape(device.id) + '"]').forEach(trace => trace.setAttribute('d', path.getAttribute('d')));
     path.dataset.active = String(device.active === true);
     [...svg.querySelector('defs').children].find(m => m.dataset.id === device.id).dataset.active = path.dataset.active;
   }

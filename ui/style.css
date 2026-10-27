@@ -1,4 +1,4 @@
-/* style.css v2.0.1361 */
+/* style.css v2.0.1436 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -103,6 +103,11 @@
   --grid-dot-edge: 1.4px;
   --grid-dot-size: 1px;
   --grid-spacing: 20px;
+  --ambient-blue: rgb(100 185 208 / 10%);
+  --ambient-cream: rgb(239 219 180 / 15%);
+  --particle-blue: #327f94;
+  --particle-cream: #9a7740;
+  --particle-opacity: 0.22;
   --status-online: #22c55e;
   --status-offline: #ef4444;
   --opacity-disabled: 0.45;
@@ -133,6 +138,11 @@
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --ambient-blue: rgb(100 185 208 / 8%);
+  --ambient-cream: rgb(239 219 180 / 6%);
+  --particle-blue: #64b9d0;
+  --particle-cream: #efdbb4;
+  --particle-opacity: 0.38;
   --bg: #111;
   --panel: #1b1b1b;
   --ink: #f5f5f5;
@@ -196,8 +206,9 @@ svg {
     circle at var(--grid-dot-size) var(--grid-dot-size),
     var(--dot) var(--grid-dot-size),
     transparent var(--grid-dot-edge)
-  );
-  background-size: var(--grid-spacing) var(--grid-spacing);
+  ), radial-gradient(ellipse at 8% 25%, var(--ambient-blue), transparent 55%),
+    radial-gradient(ellipse at 93% 80%, var(--ambient-cream), transparent 55%);
+  background-size: var(--grid-spacing) var(--grid-spacing), 100% 100%, 100% 100%;
 }
 .toolbar {
   position: fixed;
@@ -530,9 +541,7 @@ select {
 }
 
 #map {
-  overflow: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--line) transparent;
+  overflow: clip;
 }
 #nodes {
   position: relative;
@@ -608,6 +617,7 @@ select {
   pointer-events: none;
 }
 .connection-lines {
+  display: block;
   stroke-width: var(--connection-width);
   width: 100%;
   height: 100%;
@@ -1268,3 +1278,48 @@ select {
 .device-actions .node-desktop { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 .device-actions .node-desktop[hidden] { display: none; }
 .device-actions .node-desktop[aria-disabled="true"] { opacity: .4; cursor: default; }
+
+/* Geometry is animated together in map.js, without a second CSS delay. */
+.connection-port[data-orbit="true"] {
+  right: auto;
+  transform: translate(-50%, -50%);
+  transition: background var(--duration-ui) var(--ease-ui), border-color var(--duration-ui) var(--ease-ui);
+}
+.connection-port[data-orbit="true"] svg { transition: none; }
+.chat-link .connection-lines, .chat-link .connection-lines > path, .chat-link .link-badge {
+  transition: opacity var(--duration-ui) var(--ease-ui), color var(--duration-ui) var(--ease-ui);
+}
+
+#map-particles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  transition: none;
+}
+
+.link-flow-overlay { pointer-events: none; }
+.link-flow-trace {
+  fill: none;
+  stroke-width: calc(var(--connection-width) + 1px);
+  stroke-linecap: round;
+  stroke-dasharray: 0.08 0.92;
+  filter: drop-shadow(0 0 3px currentColor);
+  transition: none;
+  animation: link-flow-forward 2.15s linear infinite both;
+}
+.link-flow-trace.is-reverse { animation-name: link-flow-reverse; }
+@keyframes link-flow-forward {
+  0% { opacity: 0.28; stroke-dashoffset: 0; }
+  6.4186%, 41.7209% { opacity: 1; }
+  53.488372%, 100% { opacity: 0; stroke-dashoffset: -1; }
+}
+@keyframes link-flow-reverse {
+  0% { opacity: 0.28; stroke-dashoffset: 0.08; }
+  6.4186%, 41.7209% { opacity: 1; }
+  53.488372%, 100% { opacity: 0; stroke-dashoffset: 1.08; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .link-flow-overlay { display: none; }
+}

@@ -1,4 +1,4 @@
-// app.js v1.42.407
+// app.js v1.42.416
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -137,11 +137,8 @@ async function openConsole(chat){
    title.textContent=chat.name;
    if(completed.operation==='open'||completed.operation==='input')followOutput=true;
    const output=consoleScreen(result.screen);
-   const top=screen.scrollTop,left=screen.scrollLeft,current=screen.textContent;
-   if(current!==output){
-    if(current&&output.startsWith(current))screen.firstChild.appendData(output.slice(current.length));
-    else screen.textContent=output;
-   }
+   const top=screen.scrollTop,left=screen.scrollLeft;
+   OaclisTerminal.render(screen,output,result.screen_ansi);
    if(followOutput)screen.scrollTop=screen.scrollHeight;
    else {
     if(screen.scrollTop!==top)screen.scrollTop=top;
@@ -172,7 +169,7 @@ async function protectedView(){
  voice.pause();
  let x;try{x=await api('protected');}catch(error){voice.resume();throw error;}
  authorizedChats=x.chats||[];
- show(OaclisSettings.html('<header class="online-brand" aria-label="Oaclis"><img src="/icon-192.png" alt="" width="32" height="32"><span>aclis</span></header><h1>Chat autorizzate</h1><div id="chat-tools"><input id="chat-search" type="search" maxlength="160" aria-label="Cerca chat" placeholder="Cerca chat"></div><div id="authorized-chats" aria-live="polite"></div><button id="lock" class="secondary">Blocca accesso</button><small id="online-version" aria-label="Versione Oaclis"></small>'));
+ show(OaclisSettings.html('<header class="online-brand" aria-label="Oaclis"><img src="/icon-192.png" alt="" width="32" height="32"><span>aclis</span></header><div id="chat-tools"><input id="chat-search" type="search" maxlength="160" aria-label="Cerca chat" placeholder="Cerca chat"></div><div id="authorized-chats" aria-live="polite"></div><button id="lock" class="secondary">Blocca accesso</button><small id="online-version" aria-label="Versione Oaclis"></small>'));
  document.getElementById('chat-search').oninput=()=>renderAuthorizedChats(authorizedChats.filter(chat=>OaclisVoice.normalize(chat.name).includes(OaclisVoice.normalize(document.getElementById('chat-search').value))));
  document.getElementById('online-version').textContent=x.version||'';
  renderAuthorizedChats(authorizedChats);bindVoice();
