@@ -1,4 +1,4 @@
-// voice.js v1.33.400
+// voice.js v1.34.415
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -30,7 +30,7 @@ window.OaclisVoice=(()=>{
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   // Android continuous mode promotes cumulative partial results to final results.
   const singleUtterance=navigator.userAgentData?.platform==='Android'||/Android/i.test(navigator.userAgent);
-  let adapter=null,recognition=null,retiring=null,generation=0,revision=0,target=null,undo=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=false,paused=false,locked=false,state='idle',disposed=false,utteranceRevision=0;
+  let adapter=null,recognition=null,retiring=null,generation=0,revision=0,target=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=false,paused=false,locked=false,state='idle',disposed=false,utteranceRevision=0;
   let button,status,preview,options,help,root;
   const blocked=()=>locked||adapter?.sending?.();
   const valid=field=>field?.isConnected&&!field.disabled&&!field.readOnly&&adapter?.fields().includes(field)&&['textarea','input'].includes(field.localName)&&field.type!=='password';
@@ -50,7 +50,6 @@ window.OaclisVoice=(()=>{
    if(preview)preview.textContent='';if(!retiring)state='idle';paint();
   };
   const stop=()=>{wanted=false;paused=false;retries=0;clearPending();invalidate();feedback('Ascolto disattivato');};
-  const saveUndo=(field,value,start,end)=>{undo={field,value,start,end,after:field.value,revision,chat:adapter?.chatId};};
   function insert(value){
    const field=target;
    if(!valid(field)){feedback('Seleziona un campo oppure pronuncia un comando');return;}
@@ -64,7 +63,7 @@ window.OaclisVoice=(()=>{
    if(before.length-(end-start)+addition.length>limit){feedback('Limite del campo raggiunto.');return;}
    field.setRangeText(addition,start,end,'end');
    field.dispatchEvent(new Event('input',{bubbles:true}));
-   saveUndo(field,before,start,end);feedback('Testo aggiunto');
+   feedback('Testo aggiunto');
   }
   function showHelp(){
    if(help.open)return;
@@ -82,7 +81,6 @@ window.OaclisVoice=(()=>{
    if(id==='closeHelp')return !!help?.open;
    if(id==='send')return valid(adapter?.compose)&&typeof adapter?.send==='function';
    if(id==='compose')return typeof adapter?.composeFocus==='function';
-   if(id==='undoDictation')return !!undo;
    if(id==='newLine')return valid(target)&&target.localName==='textarea';
    if(id==='clearDraft')return !!adapter?.compose?.value;
    return typeof adapter?.[id]==='function';
@@ -144,9 +142,6 @@ window.OaclisVoice=(()=>{
    switch(id){
     case 'compose':adapter.composeFocus();target=adapter.compose;feedback('Compositore selezionato');break;
     case 'newLine':insert('\n');break;
-    case 'undoDictation':
-     if(!valid(undo?.field)||undo.revision!==revision||undo.chat!==adapter?.chatId||undo.field.value!==undo.after){feedback('Annullamento non disponibile dopo altre modifiche.');break;}
-     undo.field.value=undo.value;undo.field.setSelectionRange(undo.start,undo.end);undo.field.dispatchEvent(new Event('input',{bubbles:true}));undo=null;feedback('Dettatura annullata');break;
     case 'clearDraft':choices('clear',[{name:locale.text('Conferma svuotamento')}]);feedback('Confermare lo svuotamento del messaggio?');break;
     case 'selectChatNumber':{
      const n=number(normalize(args)),chat=adapter.list()[n-1];
@@ -210,7 +205,7 @@ window.OaclisVoice=(()=>{
   }
   function focus(event){
    if(valid(event.target)&&target!==event.target){
-    target=event.target;revision++;undo=null;clearPending();
+    target=event.target;revision++;clearPending();
     if(recognition){invalidate();if(wanted&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},0);}
    }
   }
@@ -219,7 +214,7 @@ window.OaclisVoice=(()=>{
   }
   function hidden(){if(document.hidden)stop();}
   function bind(next,host){
-   root?.remove();button?.remove();invalidate();clearPending();revision++;undo=null;target=null;adapter=next;
+   root?.remove();button?.remove();invalidate();clearPending();revision++;target=null;adapter=next;
    root=document.createElement('section');root.className='voice-panel';root.setAttribute('aria-label',locale.text('Controlli vocali'));
    status=document.createElement('span');status.className='voice-sr';status.setAttribute('aria-live','polite');status.setAttribute('role','status');
    preview=document.createElement('span');preview.className='voice-preview voice-sr';preview.setAttribute('aria-hidden','true');
@@ -233,7 +228,7 @@ window.OaclisVoice=(()=>{
    paint();
    if(wanted&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},0);
   }
-  function leave(){invalidate();clearPending();revision++;target=null;adapter=null;undo=null;root=null;button=null;status=null;preview=null;options=null;help=null;}
+  function leave(){invalidate();clearPending();revision++;target=null;adapter=null;root=null;button=null;status=null;preview=null;options=null;help=null;}
   function ready(){if(adapter?.compose&&valid(adapter.compose)&&!target)target=adapter.compose;}
   function destroy(){stop();disposed=true;leave();document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
   document.addEventListener('focusin',focus);document.addEventListener('input',input);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',stop);
