@@ -159,3 +159,9 @@ Le richieste senza sessione valida o chiave amministrativa sono limitate a 60 al
 La console conserva colori ANSI, grassetto e colori RGB. Pubblicare anche terminal-format.js
 dalla stessa sorgente ui/terminal-format.js usata dal master, prima di index.php.
 Il testo resta separato dalla formattazione; nessun output della console viene interpretato come HTML.
+
+Il pulsante audio legge solo nuovi messaggi dell'assistente, a frasi complete, escludendo
+codice e attivita degli strumenti. read-aloud.js usa gli eventi nativi del Codex gia attivo,
+inoltrati dallo stesso canale mobile firmato; nessun nuovo turno viene avviato.
+La lettura e disattivata inizialmente e si ferma uscendo dalla console o nascondendo la pagina.
+I comandi vocali brevi sono Pausa e Riprendi (Pause/Resume in inglese).

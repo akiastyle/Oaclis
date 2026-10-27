@@ -1,4 +1,4 @@
-// lib.rs v1.3.96
+// lib.rs v1.3.97
 pub mod state_store;
 mod chat_deletion;
 mod state_migration;
@@ -8,6 +8,7 @@ mod app_inventory;
 mod automation;
 mod link_flow;
 mod catalog;
+mod assistant_stream;
 mod initial_inventory;
 mod transfer_job;
 pub mod appearance;

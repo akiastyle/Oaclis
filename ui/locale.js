@@ -1,4 +1,4 @@
-// locale.js v1.3.359
+// locale.js v1.3.373
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -285,6 +285,10 @@ window.OaclisSettings=(()=>{
   "Controlli vocali": "Voice controls",
   "Conferma comando vocale": "Confirm voice command",
   "Comandi vocali": "Voice commands",
+  "Attiva lettura": "Enable read aloud",
+  "Disattiva lettura": "Disable read aloud",
+  "Lettura in collegamento": "Connecting read aloud",
+  "Lettura non disponibile": "Read aloud unavailable",
   "Chiudi comandi vocali": "Close voice commands",
   "Codice": "Code",
   "Cartella": "Folder",
@@ -315,29 +319,29 @@ window.OaclisSettings=(()=>{
  const it={
   literal:'scrivi',explicit:'comando',numbers:['uno','due','tre','quattro','cinque','sei','sette','otto','nove','dieci','undici','dodici','tredici','quattordici','quindici','sedici','diciassette','diciotto','diciannove','venti'],
   choose:/^scegli\s+(.+)$/iu,cancel:['annulla selezione','annulla operazione'],confirm:'conferma svuotamento',
-  tip:'“Pausa dettatura” sospende la scrittura. “Riprendi dettatura” riprende. Il pulsante microfono spegne tutto. Per dettare una parola comando: “scrivi invia”.',
+  tip:'“Pausa” sospende la scrittura. “Riprendi” riprende. Il pulsante microfono spegne tutto. Per dettare una parola comando: “scrivi invia”.',
   commands:[
    ['send',['invia','invia messaggio']],['back',['indietro','torna indietro']],['chatList',['elenco chat','mostra chat']],
    ['selectChatNumber',/^seleziona\s+chat\s+numero\s+(.+)$/iu,'seleziona chat numero …'],['selectChat',/^(?:seleziona|apri)\s+chat\s+(.+)$/iu,'apri chat …'],['searchChat',/^cerca\s+chat\s+(.+)$/iu,'cerca chat …'],
    ['compose',['scrivi messaggio']],['newLine',['a capo','nuova riga']],['clearDraft',['svuota','cancella']],['scrollUp',['scorri su']],['scrollDown',['scorri giù','scorri in basso']],
-   ['pauseRec',['pausa dettatura']],['resumeRec',['riprendi dettatura']],['help',['mostra comandi','aiuto vocale']],['closeHelp',['chiudi comandi','chiudi aiuto']],['stop',['ferma ascolto','disattiva microfono','spegni microfono']],
+   ['pauseRec',['pausa']],['resumeRec',['riprendi']],['help',['mostra comandi','aiuto vocale']],['closeHelp',['chiudi comandi','chiudi aiuto']],['stop',['ferma ascolto','disattiva microfono','spegni microfono']],
   ]
  };
  const english={
   literal:'write',explicit:'command',numbers:['one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty'],
   choose:/^choose\s+(.+)$/iu,cancel:['cancel selection','cancel operation'],confirm:'confirm clear',
-  tip:'“Pause dictation” stops writing. “Resume dictation” resumes. The microphone button turns listening off. To dictate a command word, say “write send”.',
+  tip:'“Pause” stops writing. “Resume” resumes. The microphone button turns listening off. To dictate a command word, say “write send”.',
   commands:[
    ['send',['send','send message']],['back',['back','go back']],['chatList',['chat list','show chats']],
    ['selectChatNumber',/^select\s+chat\s+number\s+(.+)$/iu,'select chat number …'],['selectChat',/^(?:select|open)\s+chat\s+(.+)$/iu,'open chat …'],['searchChat',/^search\s+chat\s+(.+)$/iu,'search chat …'],
    ['compose',['write message']],['newLine',['new line','line break']],['clearDraft',['clear message']],['scrollUp',['scroll up']],['scrollDown',['scroll down']],
-   ['pauseRec',['pause dictation']],['resumeRec',['resume dictation']],['help',['show commands','voice help','help']],['closeHelp',['close commands','close help']],['stop',['stop listening','turn off microphone']],
+   ['pauseRec',['pause']],['resumeRec',['resume']],['help',['show commands','voice help','help']],['closeHelp',['close commands','close help']],['stop',['stop listening','turn off microphone']],
   ]
  };
  const voice=language==='it'?it:english;
  function text(value){
   if(typeof value!=='string')return value;
-  if(language==='it')return value.replace('start rec per riprendere','pronuncia riprendi dettatura').replace('Italiano non disponibile.','Lingua vocale non disponibile.');
+  if(language==='it')return value.replace('start rec per riprendere','pronuncia riprendi').replace('Italiano non disponibile.','Lingua vocale non disponibile.');
   const trimmed=value.trim();
   return Object.hasOwn(en,trimmed)?value.replace(trimmed,en[trimmed]):value;
  }

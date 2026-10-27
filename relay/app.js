@@ -1,4 +1,4 @@
-// app.js v1.42.416
+// app.js v1.42.431
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -22,7 +22,7 @@ function bindVoice(chat=null){
  if(!host)return;
  voice.bind({chatId:chat?.id,compose,fields:()=>[compose,search].filter(Boolean),chats:()=>authorizedChats,list:()=>visibleChatList,
   selectChat:async selected=>{if(!authorizedChats.some(item=>item.id===selected.id))return;await openConsole(selected);},
-  ...(chat?{send:async()=>{if(consoleActions?.chatId!==chat.id||!authorizedChats.some(item=>item.id===chat.id))throw Error();return consoleActions.submit();},back:()=>protectedView(),chatList:()=>protectedView(),sending:()=>consoleActions?.sending()===true}:{}),
+  ...(chat?{send:async()=>{if(consoleActions?.chatId!==chat.id||!authorizedChats.some(item=>item.id===chat.id))throw Error();return consoleActions.submit();},back:()=>protectedView(),chatList:()=>protectedView(),sending:()=>consoleActions?.sending()===true||consoleActions?.speaking()===true}:{}),
   ...(!chat?{searchChat:query=>{search.value=query;search.dispatchEvent(new Event('input',{bubbles:true}));}}:{}),
   scrollUp:()=>{const area=document.getElementById('console-screen')||document.getElementById('authorized-chats');area.scrollBy({top:-area.clientHeight*.75,behavior:'smooth'});},
   scrollDown:()=>{const area=document.getElementById('console-screen')||document.getElementById('authorized-chats');area.scrollBy({top:area.clientHeight*.75,behavior:'smooth'});},
@@ -111,7 +111,7 @@ async function openConsole(chat){
  const screen=document.getElementById('console-screen'),form=document.getElementById('console-input'),text=form.querySelector('textarea');
  text.value=drafts.get(chat.id)||'';
  text.addEventListener('input',()=>saveDraft(chat.id,text.value));
- let busy=false,closed=false,idle=Promise.resolve(),pending=null,followOutput=true,inputBusy=false,consoleReady=false;
+ let busy=false,closed=false,idle=Promise.resolve(),pending=null,followOutput=true,inputBusy=false,consoleReady=false,reader=null;
  screen.addEventListener('scroll',()=>{followOutput=screen.scrollHeight-screen.clientHeight-screen.scrollTop<=24;},{passive:true});
  const fitConsole=()=>{
   const stick=followOutput||screen.scrollHeight-screen.clientHeight-screen.scrollTop<=24;
@@ -119,14 +119,15 @@ async function openConsole(chat){
   if(stick)requestAnimationFrame(()=>{if(!closed){followOutput=true;screen.scrollTop=screen.scrollHeight;}});
  };
  fitConsole();window.visualViewport?.addEventListener('resize',fitConsole);window.addEventListener('resize',fitConsole);
- closeConsole=()=>{if(closed)return;saveDraft(chat.id,text.value);closed=true;window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.documentElement.style.removeProperty('--console-height');document.removeEventListener('visibilitychange',resume);clearTimeout(timer);consoleActions=null;closeConsole=null;};
+ closeConsole=()=>{if(closed)return;reader?.destroy();saveDraft(chat.id,text.value);closed=true;window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.documentElement.style.removeProperty('--console-height');document.removeEventListener('visibilitychange',resume);clearTimeout(timer);consoleActions=null;closeConsole=null;};
  document.getElementById('back').onclick=()=>protectedView().catch(()=>location.replace('/auth'));
  const send=async(operation,body={})=>{
   if(busy&&operation==='input')await idle;
   if(busy||closed)return false;busy=true;
   let done;idle=new Promise(resolve=>{done=resolve;});
   try{
-   const request=operation==='read'&&pending?pending:Object.assign(await api('console',{chat_id:chat.id,operation,...body}),{operation,text:body.text});
+   const speechGeneration=reader?.stamp();
+   const request=operation==='read'&&pending?pending:Object.assign(await api('console',{chat_id:chat.id,operation,...body,...reader?.request()}),{operation,text:body.text,speechGeneration});
    pending=request;
    const deadline=Date.now()+23000;let result;
    do{if(closed)return false;result=await api('console-result',{chat_id:chat.id,request_id:request.request_id});}while(result.pending&&Date.now()<deadline);
@@ -139,6 +140,7 @@ async function openConsole(chat){
    const output=consoleScreen(result.screen);
    const top=screen.scrollTop,left=screen.scrollLeft;
    OaclisTerminal.render(screen,output,result.screen_ansi);
+   reader?.update(result.speech,completed.speechGeneration);
    if(followOutput)screen.scrollTop=screen.scrollHeight;
    else {
     if(screen.scrollTop!==top)screen.scrollTop=top;
@@ -156,12 +158,13 @@ async function openConsole(chat){
   const value=text.value;
   try{return await send('input',{text:value,key:'Enter'});}finally{inputBusy=false;if(!closed){voice.resume();timer=setTimeout(poll,200);}}
  };
- consoleActions={chatId:chat.id,submit,sending:()=>inputBusy||!consoleReady};
+ consoleActions={chatId:chat.id,submit,sending:()=>inputBusy||!consoleReady,speaking:()=>reader?.speaking()===true};
  form.onsubmit=async event=>{event.preventDefault();await submit();};
  text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
- for(const [key,label] of [['Enter','↵'],['Escape','Esc'],['Tab','Tab'],['Up','↑'],['Down','↓'],['C-c','Ctrl+C']]){
+ for(const [key,label] of [['Escape','Esc'],['Tab','Tab'],['Up','↑'],['Down','↓'],['C-c','Ctrl+C']]){
   const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{clearTimeout(timer);await send('input',{key});if(!closed)timer=setTimeout(poll,200);};document.getElementById('console-keys').append(button);
  }
+ reader=OaclisReadAloud.create(document.getElementById('console-keys'),{pause:()=>voice.pause(),resume:()=>voice.resume()});
  bindVoice(chat);
  const ready=await send('open');if(!closed){clearTimeout(timer);timer=setTimeout(poll,ready?200:1000);}
 }

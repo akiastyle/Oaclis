@@ -1,4 +1,4 @@
-// security.js v1.8.54
+// security.js v1.8.58
 'use strict';
 const OaclisMobileSecurity=(()=>{
  let database,keyCache,clock;
@@ -40,13 +40,13 @@ const OaclisMobileSecurity=(()=>{
  function update(security){
   if(security&&/^[a-f0-9]{64}$/.test(security.epoch)&&Number.isSafeInteger(security.time)&&security.time>0)clock={...security,received:Date.now()};
  }
- async function sign(code,{chat_id,operation,text='',key=''}){
+ async function sign(code,{chat_id,operation,text='',key='',speech=false,speech_cursor=null}){
   const identity=await deviceKey(code);
   if(!identity)throw failure(403);
   if(!clock)throw failure();
   const id=hex(crypto.getRandomValues(new Uint8Array(16)));
   const payload=JSON.stringify({purpose:'oaclis-console-v1',epoch:clock.epoch,device:identity.device,id,
-   issued:clock.time+Math.floor((Date.now()-clock.received)/1000),chat_id,action:operation,text,key});
+   issued:clock.time+Math.floor((Date.now()-clock.received)/1000),chat_id,action:operation,text,key,speech,speech_cursor});
   const signature=hex(await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},identity.privateKey,bytes.encode(payload)));
   return {payload,signature};
  }

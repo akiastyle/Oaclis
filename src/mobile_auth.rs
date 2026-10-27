@@ -1,4 +1,4 @@
-// mobile_auth.rs v1.45.583
+// mobile_auth.rs v1.46.602
 //! Local mobile authority: QR-bound keys, chat grants and signed, non-replayable requests.
 use crate::invalid;
 use ring::{hmac, rand::{SecureRandom, SystemRandom}, signature};
@@ -24,7 +24,7 @@ pub(crate) struct Phone { pub name:String, public_key:String, pub chats:BTreeSet
 struct Settings { admin_key:String, #[serde(default)] authorization:Authority }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct SignedRequest { purpose:String, epoch:String, device:String, id:String, issued:u64, chat_id:String, action:String, text:String, key:String }
+struct SignedRequest { purpose:String, epoch:String, device:String, id:String, issued:u64, chat_id:String, action:String, text:String, key:String, #[serde(default)] speech:bool, #[serde(default)] speech_cursor:Option<u64> }
 
 pub(crate) struct Store {
     config:PathBuf,
@@ -123,7 +123,7 @@ impl Store {
         let id=format!("{device}:{}",command.id);
         if seen.contains_key(&id) || seen.len()>=8192{return Err(invalid("Richiesta mobile gia' utilizzata"));}
         seen.insert(id,command.issued+30);
-        Ok(json!({"chat_id":command.chat_id,"action":command.action,"text":command.text,"key":command.key}))
+        Ok(json!({"chat_id":command.chat_id,"action":command.action,"text":command.text,"key":command.key,"speech":command.speech,"speech_cursor":command.speech_cursor}))
     }
 }
 
@@ -200,6 +200,21 @@ mod tests {
         let packet=&input["packet"];assert_eq!(store.command(packet).unwrap()["text"],"Ciao è 🇮🇹");
         assert!(store.command(packet).is_err());
         let mut tampered=packet.clone();let mut body:Value=serde_json::from_str(packet["signed"]["payload"].as_str().unwrap()).unwrap();body["text"]=json!("forged by relay");tampered["signed"]["payload"]=json!(body.to_string());assert!(store.command(&tampered).is_err());
+    }
+
+    #[test]
+    fn speech_subscription_and_cursor_are_covered_by_phone_signature_and_grants() {
+        let (root,store,key,binding)=fixture();let device="b".repeat(64);
+        store.approve(&device,"Phone",&binding).unwrap();store.grants(&device,BTreeSet::from(["allowed".into()])).unwrap();
+        let mut packet=command(&store,&key,&"c".repeat(32),"allowed",now());
+        let mut payload:Value=serde_json::from_str(packet["signed"]["payload"].as_str().unwrap()).unwrap();
+        payload["speech"]=json!(true);payload["speech_cursor"]=json!(7);
+        let text=payload.to_string();packet["signed"]["payload"]=json!(text);
+        packet["signed"]["signature"]=json!(hex(key.sign(&SystemRandom::new(),text.as_bytes()).unwrap().as_ref()));
+        let mut forged=packet.clone();payload["speech_cursor"]=json!(0);forged["signed"]["payload"]=json!(payload.to_string());
+        assert!(store.command(&forged).is_err());
+        let checked=store.command(&packet).unwrap();assert_eq!(checked["speech"],true);assert_eq!(checked["speech_cursor"],7);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
 }
