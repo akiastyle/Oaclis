@@ -1,4 +1,4 @@
-// app.js v1.51.437
+// app.js v1.51.441
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -161,11 +161,13 @@ async function openConsole(chat){
  consoleActions={chatId:chat.id,submit,sending:()=>inputBusy||!consoleReady,commandOnly:()=>reader?.commandOnly()===true,readOn:()=>reader?.enable(),readOff:()=>reader?.disable(),readStop:()=>reader?.skip()};
  form.onsubmit=async event=>{event.preventDefault();await submit();};
  text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
- for(const [key,label] of [['Escape','Esc'],['Tab','Tab'],['Up','↑'],['Down','↓'],['C-c','Ctrl+C']]){
+ for(const [key,label] of [['Escape','Esc'],['Up','↑'],['Down','↓'],['C-c','Ctrl+C']]){
   const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{clearTimeout(timer);await send('input',{key});if(!closed)timer=setTimeout(poll,200);};document.getElementById('console-keys').append(button);
  }
  reader=OaclisReadAloud.create(document.getElementById('console-keys'));
  bindVoice(chat);
+ const info=document.createElement('button');info.type='button';info.className='secondary';info.title=OaclisSettings.text('Comandi vocali');info.setAttribute('aria-label',info.title);
+ info.innerHTML='<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v2"/></svg>';info.onclick=()=>voice.showHelp();document.getElementById('console-keys').append(info);
  const ready=await send('open');if(!closed){clearTimeout(timer);timer=setTimeout(poll,ready?200:1000);}
 }
 async function protectedView(){

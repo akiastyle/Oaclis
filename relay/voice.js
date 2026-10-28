@@ -1,4 +1,4 @@
-// voice.js v1.34.428
+// voice.js v1.34.430
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -235,7 +235,7 @@ window.OaclisVoice=(()=>{
   function ready(){if(adapter?.compose&&valid(adapter.compose)&&!target)target=adapter.compose;}
   function destroy(){stop();disposed=true;leave();document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
   document.addEventListener('focusin',focus);document.addEventListener('input',input);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',stop);
-  return {bind,leave,ready,stop,destroy,pause:()=>{clearPending();invalidate();},resume:()=>{if(wanted&&!blocked()&&!retryTimer)start();}};
+  return {bind,leave,ready,stop,destroy,showHelp,pause:()=>{clearPending();invalidate();},resume:()=>{if(wanted&&!blocked()&&!retryTimer)start();}};
  }
  return {create,parse,resolve,commands,normalize,number};
 })();
