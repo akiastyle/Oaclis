@@ -1,4 +1,4 @@
-// voice.js v1.34.430
+// voice.js v1.34.440
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -77,11 +77,10 @@ window.OaclisVoice=(()=>{
    help.append(close,title,list,tip);help.showModal();
   }
   function available(id){
-   if(['stop','help','pauseRec','resumeRec','selectChat','selectChatNumber'].includes(id))return true;
+   if(['stop','help','pauseRec','resumeRec','selectChat'].includes(id))return true;
    if(id==='closeHelp')return !!help?.open;
    if(id==='send')return valid(adapter?.compose)&&typeof adapter?.send==='function';
    if(id==='compose')return typeof adapter?.composeFocus==='function';
-   if(id==='newLine')return valid(target)&&target.localName==='textarea';
    if(id==='clearDraft')return !!adapter?.compose?.value;
    return typeof adapter?.[id]==='function';
   }
@@ -144,13 +143,10 @@ window.OaclisVoice=(()=>{
    if(!available(id)){feedback('Comando non disponibile in questa schermata.');return;}
    switch(id){
     case 'compose':adapter.composeFocus();target=adapter.compose;feedback('Compositore selezionato');break;
-    case 'newLine':insert('\n');break;
     case 'clearDraft':choices('clear',[{name:locale.text('Conferma svuotamento')}]);feedback('Confermare lo svuotamento del messaggio?');break;
-    case 'selectChatNumber':{
-     const n=number(normalize(args)),chat=adapter.list()[n-1];
-     if(n<1||n>20||!chat){feedback('Numero fuori elenco.');break;}await openChat(chat);break;
-    }
     case 'selectChat':{
+     const n=number(normalize(args));
+     if(n>0){const chat=adapter.list()[n-1];if(!chat){feedback('Numero fuori elenco.');break;}await openChat(chat);break;}
      const matches=resolve(adapter.chats(),args);
      if(!matches.length){feedback('Chat non trovata.');break;}
      if(matches.length===1)await openChat(matches[0]);else{choices('select',matches.slice(0,20));feedback('Più chat corrispondono. Scegli un numero.');}break;
