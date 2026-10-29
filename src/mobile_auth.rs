@@ -1,4 +1,4 @@
-// mobile_auth.rs v1.46.602
+// mobile_auth.rs v1.46.609
 //! Local mobile authority: QR-bound keys, chat grants and signed, non-replayable requests.
 use crate::invalid;
 use ring::{hmac, rand::{SecureRandom, SystemRandom}, signature};
@@ -115,7 +115,7 @@ impl Store {
             || command.issued>current+5 || current.saturating_sub(command.issued)>30
             || !phone.chats.contains(&command.chat_id) || command.text.chars().count()>8000 || command.text.contains('\0')
             || !matches!(command.action.as_str(),"open"|"read"|"input")
-            || !matches!(command.key.as_str(),""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c")
+            || !matches!(command.key.as_str(),""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c"|"1"|"2"|"3")
             || (command.action!="input" && (!command.text.is_empty() || !command.key.is_empty())) {
             return Err(invalid("Richiesta mobile non autorizzata dal master"));
         }
@@ -199,6 +199,11 @@ mod tests {
         *store.settings.write().unwrap()=Arc::new(pinned);
         let packet=&input["packet"];assert_eq!(store.command(packet).unwrap()["text"],"Ciao è 🇮🇹");
         assert!(store.command(packet).is_err());
+        if let Some(packets)=input["number_packets"].as_array() {
+            for (packet,key) in packets.iter().zip(["1","2","3"]) {
+                let value=store.command(packet).unwrap();assert_eq!(value["key"],key);assert_eq!(value["text"],"");
+            }
+        }
         let mut tampered=packet.clone();let mut body:Value=serde_json::from_str(packet["signed"]["payload"].as_str().unwrap()).unwrap();body["text"]=json!("forged by relay");tampered["signed"]["payload"]=json!(body.to_string());assert!(store.command(&tampered).is_err());
     }
 

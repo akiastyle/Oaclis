@@ -1,5 +1,5 @@
 <?php
-// index.php v1.5.397
+// index.php v1.5.399
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -219,7 +219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
             }
             $operation=$input['operation']??''; $text=$input['text']??''; $key=$input['key']??'';
-            if (!in_array($operation,['open','read','input'],true) || !is_string($text) || mb_strlen($text)>8000 || str_contains($text,"\0") || !in_array($key,['','Enter','Escape','Tab','Up','Down','Left','Right','BSpace','C-c'],true)) throw new RuntimeException();
+            if (!in_array($operation,['open','read','input'],true) || !is_string($text) || mb_strlen($text)>8000 || str_contains($text,"\0") || !in_array($key,['','Enter','Escape','Tab','Up','Down','Left','Right','BSpace','C-c','1','2','3'],true)) throw new RuntimeException();
             $signed=$input['signed']??null;
             if (!is_array($signed) || !is_string($signed['payload']??null) || strlen($signed['payload'])>65536 || !is_string($signed['signature']??null) || !preg_match('/^[a-f0-9]{128}$/D',$signed['signature'])) respond([],403);
             $packet=json_decode($signed['payload'],true,16,JSON_THROW_ON_ERROR);

@@ -179,3 +179,7 @@ la stessa icona della lista.
 Dopo 5 secondi di silenzio viene inviato il messaggio dettato. Nuova voce rinvia
 l’invio; pausa, spegnimento, cambio chat, modifica manuale o invio esplicito lo annullano.
 Le bozze scritte soltanto da tastiera non vengono inviate automaticamente.
+
+Nella console mobile i pulsanti 1, 2 e 3 inviano direttamente il tasto numerico
+per scegliere una risposta, senza incollare testo o aggiungere Invio.
+Sostituiscono le frecce su/giu e non modificano la bozza del messaggio.

@@ -1,4 +1,4 @@
-// terminal.rs v1.14.245
+// terminal.rs v1.14.249
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -23,7 +23,7 @@ fn validate(value: &Value) -> io::Result<&str> {
             let text = value.get("text").map_or(Some(""),Value::as_str).ok_or_else(||invalid("Messaggio non valido"))?;
             if text.chars().count()>8000 || text.contains('\0') { return Err(invalid("Messaggio non valido")); }
             let key = value.get("key").map_or(Some(""),Value::as_str).ok_or_else(||invalid("Tasto non valido"))?;
-            if !matches!(key,""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c") { return Err(invalid("Tasto non valido")); }
+            if !matches!(key,""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c"|"1"|"2"|"3") { return Err(invalid("Tasto non valido")); }
         },
         _ => return Err(invalid("Azione non valida")),
     }
@@ -165,6 +165,8 @@ mod tests {
     fn step4_terminal_rejects_invalid_actions_keys_and_ids_before_commands() {
         for value in [json!({"action":"open","chat_id":"x;touch bad"}),json!({"action":"read","chat_id":"../chat"}),json!({"action":"input","chat_id":"chat-1","key":"run-shell"}),json!({"action":"input","chat_id":"chat-1","text":true}),json!({"action":"input","chat_id":"chat-1","text":"nul\0"}),json!({"action":"input","chat_id":"chat-1","text":"x".repeat(8001)}),json!({"action":"delete","chat_id":"chat-1"})] { assert!(request(None,&value).is_err()); }
         assert!(validate(&json!({"action":"input","chat_id":"chat-1","text":"$(touch bad)","key":"Enter"})).is_ok());
+        for key in ["1","2","3"] {assert!(validate(&json!({"action":"input","chat_id":"chat-1","key":key})).is_ok());}
+        assert!(validate(&json!({"action":"input","chat_id":"chat-1","key":"4"})).is_err());
     }
     #[test]
     fn mobile_color_tail_keeps_style_and_unicode_without_splitting_escape_codes() {

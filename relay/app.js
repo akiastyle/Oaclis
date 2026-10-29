@@ -1,4 +1,4 @@
-// app.js v1.52.462
+// app.js v1.52.466
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -164,8 +164,8 @@ async function openConsole(chat){
  consoleActions={chatId:chat.id,submit,sending:()=>inputBusy||!consoleReady,commandOnly:()=>reader?.commandOnly()===true,readOn:()=>reader?.enable(),readOff:()=>reader?.disable(),readStop:()=>reader?.skip()};
  form.onsubmit=async event=>{event.preventDefault();await submit();};
  text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
- for(const [key,label] of [['Escape','Esc'],['Up','↑'],['Down','↓'],['C-c','Ctrl+C']]){
-  const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{clearTimeout(timer);await send('input',{key});if(!closed)timer=setTimeout(poll,200);};document.getElementById('console-keys').append(button);
+ for(const [key,label] of [['Escape','Esc'],['1','1'],['2','2'],['3','3'],['C-c','Ctrl+C']]){
+  const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=async()=>{if(!consoleReady||inputBusy)return;inputBusy=true;voice.pause();clearTimeout(timer);try{await send('input',{key});}finally{inputBusy=false;if(!closed){voice.resume();timer=setTimeout(poll,200);}}};document.getElementById('console-keys').append(button);
  }
  reader=OaclisReadAloud.create(document.getElementById('console-keys'));
  bindVoice(chat);
