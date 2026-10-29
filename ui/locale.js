@@ -1,4 +1,4 @@
-// locale.js v1.3.405
+// locale.js v1.3.409
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -341,7 +341,7 @@ window.OaclisSettings=(()=>{
    ['selectChat',/^chat\s+(.+)$/iu,'chat 3 / chat Oaclis'],
    ['compose',['scrivi messaggio']],['clearDraft',['cancella']],
    ['readOn',['voce on']],['readOff',['voce off']],['readStop',['voce stop']],
-   ['pauseRec',['pausa']],['resumeRec',['riprendi']],['help',['mostra comandi','aiuto vocale']],['closeHelp',['chiudi comandi','chiudi aiuto']],['stop',['ferma ascolto','disattiva microfono','spegni microfono']],
+   ['pauseRec',['pausa']],['resumeRec',['riprendi']],['help',['comandi']],['stop',['ferma ascolto','disattiva microfono','spegni microfono']],
   ]
  };
  const english={
@@ -353,7 +353,7 @@ window.OaclisSettings=(()=>{
    ['selectChat',/^chat\s+(.+)$/iu,'chat 3 / chat Oaclis'],
    ['compose',['write message']],['clearDraft',['clear message']],
    ['readOn',['voice on']],['readOff',['voice off']],['readStop',['voice stop']],
-   ['pauseRec',['pause']],['resumeRec',['resume']],['help',['show commands','voice help','help']],['closeHelp',['close commands','close help']],['stop',['stop listening','turn off microphone']],
+   ['pauseRec',['pause']],['resumeRec',['resume']],['help',['commands']],['stop',['stop listening','turn off microphone']],
   ]
  };
  const voice=language==='it'?it:english;

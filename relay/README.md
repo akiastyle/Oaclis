@@ -71,7 +71,8 @@ Il microfono verde indica la dettatura attiva; arancione lampeggiante indica
 collegamento o elaborazione, giallo fisso indica la pausa di scrittura. Non ci
 sono righe di stato, anteprime o pulsanti “?” sotto i comandi della console.
 Le indicazioni di accessibilita restano disponibili ai lettori di schermo.
-`mostra comandi` apre la guida a tutto schermo; `chiudi comandi` o la X la chiudono.
+`comandi` apre o chiude la guida a tutto schermo; anche la X la chiude.
+I comandi vocali e la dettatura funzionano anche con la guida aperta.
 `pausa dettatura` mantiene il microfono in ascolto ma ignora dettatura e azioni di modifica;
 `riprendi dettatura` riprende la scrittura. In pausa restano utilizzabili i controlli di
 registrazione, help e spegnimento. Un clic sul microfono acceso spegne tutto;
@@ -85,7 +86,7 @@ usano pannelli a tutto schermo solo quando necessari.
   (oppure all'ultima lista mostrata dalla console); supporto da uno a venti.
 - Per nomi ambigui, scegliere un'opzione a schermo o pronunciare `scegli due`;
   `annulla selezione` interrompe, la scelta scade dopo 15 secondi.
-- `scorri su`, `scorri giù`, `aiuto vocale`, `ferma ascolto` o `spegni microfono`.
+- `comandi`, `ferma ascolto` o `spegni microfono`.
 
 Un segmento esegue una sola azione: i comandi non vengono cercati dentro frasi
 libere. `comando teletrasporto` segnala un errore senza scrivere nella bozza.
@@ -123,9 +124,9 @@ l'inglese. La lingua scelta imposta testi UI, attributo HTML lang, comandi,
 numeri parlati e SpeechRecognition.lang (it-IT / en-US). Non ci sono nuove
 preferenze su DB, scansioni periodiche o un pannello da gestire.
 
-Italiano: `pausa dettatura`, `riprendi dettatura`, `mostra comandi`,
-`chiudi comandi`, `scrivi invia`, `comando invia`. Inglese: `pause dictation`,
-`resume dictation`, `show commands`, `close commands`, `write send`,
+Italiano: `pausa`, `riprendi`, `comandi`,
+`scrivi invia`, `comando invia`. Inglese: `pause`,
+`resume`, `commands`, `write send`,
 `command send`. Gli ID delle azioni interne non cambiano. Nomi delle chat,
 bozze e output delle console non vengono tradotti.
 

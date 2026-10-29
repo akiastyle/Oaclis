@@ -1,4 +1,4 @@
-// voice.js v1.36.483
+// voice.js v1.36.493
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -39,7 +39,7 @@ window.OaclisVoice=(()=>{
    if(target!==field||!value?.trim()||typeof adapter?.send!=='function')return;
    autoSendTimer=setTimeout(()=>{
     autoSendTimer=null;
-    if(wanted&&!paused&&!document.hidden&&!blocked()&&!pending&&!help?.open&&valid(field)&&adapter?.compose===field&&adapter?.chatId===chat&&field.value===value)action(()=>adapter.send());
+    if(wanted&&!paused&&!document.hidden&&!blocked()&&!pending&&valid(field)&&adapter?.compose===field&&adapter?.chatId===chat&&field.value===value)action(()=>adapter.send());
    },5000);
   }
   const blocked=()=>locked||adapter?.sending?.();
@@ -82,13 +82,12 @@ window.OaclisVoice=(()=>{
    close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';close.onclick=()=>help.close();
    const title=document.createElement('h1');title.textContent=locale.text('Comandi vocali');
    const list=document.createElement('ul');
-   for(const command of commands.filter(command=>command.id==='closeHelp'||available(command.id))){const item=document.createElement('li');item.textContent=command.aliases?.join(' / ')||command.label;list.append(item);}
+   for(const command of commands.filter(command=>available(command.id))){const item=document.createElement('li');item.textContent=command.aliases?.join(' / ')||command.label;list.append(item);}
    const tip=document.createElement('p');tip.textContent=grammar.tip;
    help.append(close,title,list,tip);help.showModal();
   }
   function available(id){
    if(['stop','help','pauseRec','resumeRec','selectChat'].includes(id))return true;
-   if(id==='closeHelp')return !!help?.open;
    if(id==='send')return valid(adapter?.compose)&&typeof adapter?.send==='function';
    if(id==='compose')return typeof adapter?.composeFocus==='function';
    if(id==='clearDraft')return !!adapter?.compose?.value;
@@ -136,10 +135,9 @@ window.OaclisVoice=(()=>{
     if(result.id==='stop'){stop();return;}
     if(result.id==='pauseRec'){if(!paused)window.OaclisReadAloud?.feedback('pause');paused=true;clearPending();preview.textContent='';paint();return;}
     if(result.id==='resumeRec'){if(paused)window.OaclisReadAloud?.feedback('on');paused=false;paint();return;}
-    if(result.id==='help'){showHelp();return;}
-    if(result.id==='closeHelp'){if(help.open)help.close();return;}
+    if(result.id==='help'){if(help.open)help.close();else showHelp();return;}
    }
-   if(paused||help?.open)return;
+   if(paused)return;
    if(pending){
     const value=normalize(segment).replace(new RegExp('^'+grammar.explicit+' '),'');
     if(grammar.cancel.includes(value)){clearPending();feedback('Operazione annullata');return;}
