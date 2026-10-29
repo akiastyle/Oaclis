@@ -81,7 +81,7 @@ usano pannelli a tutto schermo solo quando necessari.
 
 - Dettatura: parlare nel messaggio o nel filtro selezionato. `scrivi invia` detta
   la parola riservata; una frase isolata uguale a un comando esegue quel comando.
-- `scrivi messaggio`, `invia`, `cancella`. Cancella svuota subito la bozza.
+- `invia`, `cancella`. Cancella svuota subito la bozza.
 - `cambia Santi`, `cambia 3`, `cambia tre`. I numeri corrispondono alla lista filtrata visibile
   (oppure all'ultima lista mostrata dalla console); supporto da uno a venti.
 - Per nomi ambigui, scegliere un'opzione a schermo o pronunciare `scegli due`;

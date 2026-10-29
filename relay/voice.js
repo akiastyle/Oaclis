@@ -1,4 +1,4 @@
-// voice.js v1.36.493
+// voice.js v1.36.496
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -8,7 +8,6 @@ window.OaclisVoice=(()=>{
  const commands=grammar.commands.map(([id,phrases,label])=>Array.isArray(phrases)?{id,aliases:phrases,label:phrases[0]}:{id,pattern:phrases,label});
  function parse(segment){
   const original=segment.trim(),text=normalize(original);
-  if(commands.find(command=>command.id==='compose').aliases.includes(text))return {type:'command',id:'compose',args:''};
   if(text.startsWith(grammar.literal+' '))return {type:'dictation',text:original.replace(new RegExp('^'+grammar.literal+'\\s+','iu'),'')};
   const explicit=text.startsWith(grammar.explicit+' '),value=explicit?text.slice(grammar.explicit.length+1):text;
   const raw=explicit?original.replace(new RegExp('^'+grammar.explicit+'\\s+','iu'),''):original;
@@ -89,7 +88,6 @@ window.OaclisVoice=(()=>{
   function available(id){
    if(['stop','help','pauseRec','resumeRec','selectChat'].includes(id))return true;
    if(id==='send')return valid(adapter?.compose)&&typeof adapter?.send==='function';
-   if(id==='compose')return typeof adapter?.composeFocus==='function';
    if(id==='clearDraft')return !!adapter?.compose?.value;
    return typeof adapter?.[id]==='function';
   }
@@ -151,7 +149,6 @@ window.OaclisVoice=(()=>{
    const {id,args}=result;
    if(!available(id)){feedback('Comando non disponibile in questa schermata.');return;}
    switch(id){
-    case 'compose':adapter.composeFocus();target=adapter.compose;feedback('Compositore selezionato');break;
     case 'clearDraft':clearPending();adapter.compose.value='';adapter.compose.dispatchEvent(new Event('input',{bubbles:true}));feedback('Messaggio svuotato');break;
     case 'selectChat':{
      const n=number(normalize(args));

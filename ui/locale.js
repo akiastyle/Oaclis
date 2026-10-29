@@ -1,4 +1,4 @@
-// locale.js v1.3.413
+// locale.js v1.3.417
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -339,7 +339,7 @@ window.OaclisSettings=(()=>{
   commands:[
    ['send',['invia','invia messaggio']],
    ['selectChat',/^cambia\s+(.+)$/iu,'cambia 3 / cambia Oaclis'],
-   ['compose',['scrivi messaggio']],['clearDraft',['cancella']],
+   ['clearDraft',['cancella']],
    ['readOn',['voce on']],['readOff',['voce off']],['readStop',['voce stop']],
    ['pauseRec',['pausa']],['resumeRec',['riprendi']],['help',['comandi']],['stop',['ferma ascolto','disattiva microfono','spegni microfono']],
   ]
@@ -351,7 +351,7 @@ window.OaclisSettings=(()=>{
   commands:[
    ['send',['send','send message']],
    ['selectChat',/^change\s+(.+)$/iu,'change 3 / change Oaclis'],
-   ['compose',['write message']],['clearDraft',['clear message']],
+   ['clearDraft',['clear message']],
    ['readOn',['voice on']],['readOff',['voice off']],['readStop',['voice stop']],
    ['pauseRec',['pause']],['resumeRec',['resume']],['help',['commands']],['stop',['stop listening','turn off microphone']],
   ]

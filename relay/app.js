@@ -1,4 +1,4 @@
-// app.js v1.52.461
+// app.js v1.52.462
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -26,7 +26,6 @@ function bindVoice(chat=null){
   ...(!chat?{searchChat:query=>{search.value=query;search.dispatchEvent(new Event('input',{bubbles:true}));}}:{}),
   scrollUp:()=>{const area=document.getElementById('console-screen')||document.getElementById('authorized-chats');area.scrollBy({top:-area.clientHeight*.75,behavior:'smooth'});},
   scrollDown:()=>{const area=document.getElementById('console-screen')||document.getElementById('authorized-chats');area.scrollBy({top:area.clientHeight*.75,behavior:'smooth'});},
-  ...(chat?{composeFocus:()=>compose.focus()}:{}),
  },host);
  voice.ready();
 }
