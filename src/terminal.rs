@@ -1,10 +1,20 @@
-// terminal.rs v1.12.208
+// terminal.rs v1.14.245
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
 use std::{env, fs, io::{self, BufRead, BufReader, Read}, os::unix::fs::PermissionsExt, path::{Path, PathBuf}, process::Command, sync::atomic::{AtomicU64, Ordering}, time::Duration};
 
+pub(crate) fn access_flags(access: &str) -> io::Result<&'static str> {
+    match access {
+        "default" => Ok(""),
+        "read-only" => Ok("--sandbox read-only --ask-for-approval on-request"),
+        "workspace-write" => Ok("--sandbox workspace-write --ask-for-approval on-request"),
+        "full" => Ok("--dangerously-bypass-approvals-and-sandbox"),
+        _ => Err(invalid("Autorizzazione console non valida")),
+    }
+}
 fn validate(value: &Value) -> io::Result<&str> {
+    if let Some(access)=value.get("access") { access_flags(access.as_str().ok_or_else(||invalid("Autorizzazione console non valida"))?)?; }
     let chat = value["chat_id"].as_str().filter(|s| !s.is_empty() && s.len()<=160 && s.bytes().all(|b|b.is_ascii_alphanumeric() || b"_-".contains(&b)))
         .ok_or_else(||invalid("Chat non valida"))?;
     match value["action"].as_str() {
@@ -49,7 +59,7 @@ fn archive(root: &Path, chat: &str) -> io::Result<PathBuf> {
     }
     Err(invalid("Chat non presente su questo dispositivo: trasferiscila prima"))
 }
-fn open(home: &Path, root: &Path, chat: &str, session: &str) -> io::Result<()> {
+fn open(home: &Path, root: &Path, chat: &str, session: &str, access: &str) -> io::Result<()> {
     if tmux(&["has-session","-t",session]).is_ok() { return Ok(()); }
     let path=archive(root,chat)?;
     let executable=codex(home)?;
@@ -59,8 +69,9 @@ fn open(home: &Path, root: &Path, chat: &str, session: &str) -> io::Result<()> {
     if line.len()>1024*1024 { return Err(invalid("Metadati chat troppo grandi")); }
     let meta:Value=serde_json::from_str(&line)?;
     let cwd=meta["payload"]["cwd"].as_str().map(Path::new).filter(|p|p.is_dir()).unwrap_or(home);
-    let command=format!("{} resume {} --no-alt-screen",crate::ssh::quote(executable.to_str().ok_or_else(||invalid("Percorso Codex non UTF-8"))?),crate::ssh::quote(chat));
+    let command=format!("{} resume {} --no-alt-screen {}",crate::ssh::quote(executable.to_str().ok_or_else(||invalid("Percorso Codex non UTF-8"))?),crate::ssh::quote(chat),access_flags(access)?);
     tmux(&["new-session","-d","-s",session,"-c",cwd.to_str().ok_or_else(||invalid("Cartella chat non UTF-8"))?,"-x","120","-y","36",&command])?;
+    tmux(&["set-option","-t",session,"@oaclis-access",access])?;
     Ok(())
 }
 pub(crate) fn local(value: &Value) -> io::Result<Value> {
@@ -74,7 +85,10 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
             if !env::split_paths(&env::var_os("PATH").unwrap_or_default()).any(|p|executable(&p.join("tmux"))) { return Err(invalid("Serve tmux sul dispositivo per aprire Codex")); }
             let home=env::var_os("HOME").map(PathBuf::from).ok_or_else(||invalid("HOME non definita"))?;
             let root=env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(||home.join(".codex"));
-            open(&home,&root,chat,&session)?;
+            let preferences=crate::state_store::database(&home.join(".config/oaclis"),"","preferences-get",None)?;
+            let access=value["access"].as_str().or_else(||preferences["preferences"][chat]["console_access"].as_str()).unwrap_or("default");
+            access_flags(access)?;
+            open(&home,&root,chat,&session,access)?;
         },
         "input" => {
             let text=value.get("text").and_then(Value::as_str).unwrap_or("");let key=value.get("key").and_then(Value::as_str).unwrap_or("");
@@ -93,7 +107,10 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
     }
     let screen=tmux(&["capture-pane","-p","-e","-t",&target,"-S","-200"]).map_err(|_|invalid("Sessione terminata: riapri la chat"))?;
     let ansi=String::from_utf8(screen).map_err(io::Error::other)?;
-    Ok(json!({"screen":sgr().replace_all(&ansi,""),"screen_ansi":ansi}))
+    let access=if value["action"]=="open" {
+        tmux(&["show-options","-v","-t",&session,"@oaclis-access"]).ok().and_then(|v|String::from_utf8(v).ok()).map(|v|v.trim().to_owned()).filter(|v|access_flags(v).is_ok()).unwrap_or_else(||"existing".into())
+    } else { String::new() };
+    Ok(json!({"screen":sgr().replace_all(&ansi,""),"screen_ansi":ansi,"active_access":access}))
 }
 fn sgr() -> &'static regex::Regex {
     static SGR: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
@@ -132,6 +149,18 @@ pub fn request(device: Option<&Device>, value: &Value) -> io::Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn console_access_only_accepts_explicit_presets() {
+        assert_eq!(access_flags("default").unwrap(),"");
+        assert_eq!(access_flags("full").unwrap(),"--dangerously-bypass-approvals-and-sandbox");
+        for access in ["read-only","workspace-write"] {
+            assert!(access_flags(access).unwrap().contains("--ask-for-approval on-request"));
+            assert!(validate(&json!({"chat_id":"chat-1","action":"open","access":access})).is_ok());
+        }
+        for access in [json!(true),json!("full; touch /tmp/bad"),json!("danger-full-access"),Value::Null] {
+            assert!(validate(&json!({"chat_id":"chat-1","action":"open","access":access})).is_err());
+        }
+    }
     #[test]
     fn step4_terminal_rejects_invalid_actions_keys_and_ids_before_commands() {
         for value in [json!({"action":"open","chat_id":"x;touch bad"}),json!({"action":"read","chat_id":"../chat"}),json!({"action":"input","chat_id":"chat-1","key":"run-shell"}),json!({"action":"input","chat_id":"chat-1","text":true}),json!({"action":"input","chat_id":"chat-1","text":"nul\0"}),json!({"action":"input","chat_id":"chat-1","text":"x".repeat(8001)}),json!({"action":"delete","chat_id":"chat-1"})] { assert!(request(None,&value).is_err()); }

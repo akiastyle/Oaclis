@@ -1,4 +1,4 @@
-// state_store.rs v2.36.1273
+// state_store.rs v2.37.1309
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -366,10 +366,9 @@ fn preferences(state: &State) -> Value {
         .iter()
         .filter_map(|(key, record)| {
             key.strip_prefix("chat:").map(|id| {
-                (
-                    id.to_owned(),
-                    json!({"hidden":record.hidden,"scopes":scopes(record)}),
-                )
+                let mut value=json!({"hidden":record.hidden,"scopes":scopes(record)});
+                if let Some(access)=record.sync.get("console_access") { value["console_access"]=access.clone(); }
+                (id.to_owned(),value)
             })
         })
         .collect()
@@ -586,6 +585,12 @@ fn write_operation(
             Arc::make_mut(&mut state.links).remove(key);
             read_operation(config, state, key, "links-get")
         }
+        "console-access" => {
+            let access=value.as_str().ok_or_else(||invalid("Autorizzazione console non valida"))?;
+            crate::terminal::access_flags(access)?;
+            chat_record(state,key).sync["console_access"]=json!(access);
+            read_operation(config,state,key,"preferences-get")
+        }
         "chat-visibility" | "chat-hide" | "chat-scopes" | "device-forget" => {
             if operation != "device-forget" {
                 let record = chat_record(state, key);
@@ -653,5 +658,28 @@ pub fn database(
         change(config, |state| {
             write_operation(config, state, key, operation, value.unwrap_or(&Value::Null))
         })
+    }
+}
+
+#[cfg(test)]
+mod console_access_tests {
+    use super::*;
+    #[test]
+    fn console_permissions_persist_without_changing_presentation_or_scopes() {
+        let root=std::env::temp_dir().join(format!("oaclis-console-access-{}",std::process::id()));
+        let _=std::fs::remove_dir_all(&root);
+        database(&root,"abc","chat-scopes",Some(&json!({"chat":true,"paths":false,"apps":true}))).unwrap();
+        let before=snapshot(&root).unwrap().appearance["chat:abc"].clone();
+        database(&root,"abc","console-access",Some(&json!("full"))).unwrap();
+        let preferences=database(&root,"","preferences-get",None).unwrap();
+        assert_eq!(preferences["preferences"]["abc"]["console_access"],"full");
+        let after=snapshot(&root).unwrap().appearance["chat:abc"].clone();
+        assert_eq!(before.value,after.value);assert_eq!(before.hidden,after.hidden);
+        assert_eq!(scopes(&before),scopes(&after));
+        let persisted:Value=serde_json::from_reader(File::open(root.join("appearance.json")).unwrap()).unwrap();
+        assert_eq!(persisted["chat:abc"]["sync"]["console_access"],"full");
+        assert!(database(&root,"abc","console-access",Some(&json!("bogus"))).is_err());
+        assert_eq!(snapshot(&root).unwrap().appearance["chat:abc"].sync["console_access"],"full");
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

@@ -1,4 +1,4 @@
-// console.js v2.95.1783
+// console.js v2.95.1807
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -62,13 +62,14 @@ function openChatTerminal(connection, anchor, deviceId) {
   panel.querySelector(".popover-close").onclick = () => closeChatTerminal(panel);
   const screen = panel.querySelector("pre"), form = panel.querySelector("form");
   const payload = { device_id: deviceId, chat_id: connection.entry.id };
-  let busy = false, ready = false;
+  let busy = false, ready = false, activeAccess = "existing";
   const send = async value => {
     if (busy || !panel.isConnected) return false;
     busy = true;
     try {
       const result = await api("terminal", { ...payload, ...value });
       if (!panel.isConnected) return false;
+      if(value.action === "open") activeAccess=result.active_access || "existing";
       OaclisTerminal.render(screen,result.screen,result.screen_ansi);
       screen.scrollTop = screen.scrollHeight;
       ready = true;
@@ -104,5 +105,24 @@ function openChatTerminal(connection, anchor, deviceId) {
     const keys = { ArrowUp: "Up", ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right", Enter: "Enter", Tab: "Tab", Backspace: "BSpace" };
     if (ready && keys[e.key]) { e.preventDefault(); send({ action: "input", key: keys[e.key] }); }
   };
-  send({ action: "open" }).then(ok => { if (ok && panel.isConnected) { form.elements.text.focus(); pollTerminal(); } });
+  const accessRow=document.createElement("div");
+  accessRow.className="terminal-access";
+  accessRow.innerHTML=OaclisSettings.html('<label class="field">Autorizzazione<select aria-label="Autorizzazione console"><option value="default">Configurazione Codex</option><option value="read-only">Sola lettura</option><option value="workspace-write">Modifica nel progetto</option><option value="full">Accesso completo</option></select></label><button type="button" class="primary">Apri console</button><small></small>');
+  panel.querySelector("h2").after(accessRow);
+  const access=accessRow.querySelector("select"), start=accessRow.querySelector("button"), note=accessRow.querySelector("small");
+  access.value=data.chat_settings?.[connection.entry.id]?.console_access || "default";
+  start.onclick=async()=>{
+    start.disabled=true;
+    const selected=access.value;
+    clearTimeout(panel.terminalTimer);
+    if(await send({action:"open",access:selected})) {
+      data.chat_settings ??= {};data.chat_settings[connection.entry.id] ??= {};data.chat_settings[connection.entry.id].console_access=selected;
+      start.hidden=true;
+      const activeLabel=[...access.options].find(option=>option.value===activeAccess)?.textContent || OaclisSettings.text("Sessione già attiva");
+      note.textContent=OaclisSettings.text("Console attiva: ")+activeLabel+(activeAccess!==selected?". "+OaclisSettings.text("Le modifiche valgono al prossimo avvio di Codex. La console attiva mantiene i suoi permessi."):"");
+      form.elements.text.focus();pollTerminal();
+    } else start.disabled=false;
+  };
+  access.onchange=()=>{start.hidden=false;start.disabled=false;start.textContent=OaclisSettings.text(ready?"Salva autorizzazione":"Apri console");};
+  screen.textContent=OaclisSettings.text("Scegli l’autorizzazione e apri la console.");
 }

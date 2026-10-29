@@ -1,4 +1,4 @@
-// locale.js v1.3.387
+// locale.js v1.3.399
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -284,6 +284,18 @@ window.OaclisSettings=(()=>{
   "Voce non disponibile in questo browser.": "Voice unavailable in this browser.",
   "Controlli vocali": "Voice controls",
   "Conferma comando vocale": "Confirm voice command",
+  "Console attiva:": "Running console:",
+  "Sessione già attiva": "Existing session",
+  "Autorizzazione": "Permissions",
+  "Autorizzazione console": "Console permissions",
+  "Configurazione Codex": "Codex configuration",
+  "Sola lettura": "Read only",
+  "Modifica nel progetto": "Edit project",
+  "Accesso completo": "Full access",
+  "Apri console": "Open console",
+  "Salva autorizzazione": "Save permissions",
+  "Scegli l’autorizzazione e apri la console.": "Choose permissions and open the console.",
+  "Le modifiche valgono al prossimo avvio di Codex. La console attiva mantiene i suoi permessi.": "Changes apply when Codex starts next. The running console keeps its permissions.",
   "Comandi vocali": "Voice commands",
   "Attiva lettura": "Enable read aloud",
   "Disattiva lettura": "Disable read aloud",

@@ -1,4 +1,4 @@
-// web.rs v2.26.1742
+// web.rs v2.26.1758
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -274,7 +274,21 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         Some(devices::load(config.join("devices.json"))?.into_iter()
                             .find(|d| d.id == id).ok_or_else(|| invalid("Dispositivo non trovato"))?)
                     };
-                    crate::terminal::request(device.as_ref(), &v)
+                    let mut v=v;
+                    let chat=v["chat_id"].as_str().ok_or_else(||invalid("Chat richiesta"))?.to_owned();
+                    let selected=v.get("access").cloned();
+                    if v["action"]=="open" {
+                        let preferences=environment::database(&config,"","preferences-get",None)?;
+                        let access=selected.as_ref().unwrap_or(&preferences["preferences"][&chat]["console_access"]);
+                        let access=if access.is_null() { "default" } else { access.as_str().ok_or_else(||invalid("Autorizzazione console non valida"))? };
+                        crate::terminal::access_flags(access)?;
+                        v["access"]=json!(access);
+                    }
+                    let result=crate::terminal::request(device.as_ref(), &v)?;
+                    if v["action"]=="open" && selected.is_some() {
+                        environment::database(&config,&chat,"console-access",Some(&v["access"]))?;
+                    }
+                    Ok(result)
                 }
                 (&Method::Post, "/api/state") => Ok(
                     json!({"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"deleted_chats":crate::chat_deletion::ids(crate::state_store::snapshot(&config)?.as_ref()),"ssh_settings":crate::ssh_settings::settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),

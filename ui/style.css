@@ -1,4 +1,4 @@
-/* style.css v2.0.1436 */
+/* style.css v2.0.1439 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1323,3 +1323,6 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .link-flow-overlay { display: none; }
 }
+
+.terminal-access{display:flex;flex-shrink:0;flex-wrap:wrap;align-items:end;gap:var(--space-8)}
+.terminal-access .field{flex:1;min-width:180px}.terminal-access small{flex-basis:100%}
