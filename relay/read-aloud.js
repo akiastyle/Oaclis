@@ -1,4 +1,4 @@
-// read-aloud.js v1.17.149
+// read-aloud.js v1.17.151
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -23,7 +23,7 @@ window.OaclisReadAloud=(()=>{
    audio??=new Audio();audio.resume().catch(()=>{});
    const tone=audio.createOscillator(),gain=audio.createGain(),now=audio.currentTime;
    tone.frequency.value=mode==='off'?440:mode==='pause'?660:880;
-   gain.gain.setValueAtTime(.2,now);gain.gain.exponentialRampToValueAtTime(.001,now+.09);
+   gain.gain.setValueAtTime(.35,now);gain.gain.exponentialRampToValueAtTime(.001,now+.09);
    tone.connect(gain);gain.connect(audio.destination);tone.start();tone.stop(now+.1);tone.onended=()=>{tone.disconnect();gain.disconnect();};
   }catch{}
  }
