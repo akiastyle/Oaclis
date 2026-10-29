@@ -1,4 +1,4 @@
-// locale.js v1.3.417
+// locale.js v1.3.419
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -341,7 +341,7 @@ window.OaclisSettings=(()=>{
    ['selectChat',/^cambia\s+(.+)$/iu,'cambia 3 / cambia Oaclis'],
    ['clearDraft',['cancella']],
    ['readOn',['voce on']],['readOff',['voce off']],['readStop',['voce stop']],
-   ['pauseRec',['pausa']],['resumeRec',['riprendi']],['help',['comandi']],['stop',['ferma ascolto','disattiva microfono','spegni microfono']],
+   ['pauseRec',['pausa']],['resumeRec',['riprendi']],['help',['comandi']],['stop',['spegni']],
   ]
  };
  const english={

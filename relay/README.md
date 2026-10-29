@@ -86,7 +86,7 @@ usano pannelli a tutto schermo solo quando necessari.
   (oppure all'ultima lista mostrata dalla console); supporto da uno a venti.
 - Per nomi ambigui, scegliere un'opzione a schermo o pronunciare `scegli due`;
   `annulla selezione` interrompe, la scelta scade dopo 15 secondi.
-- `comandi`, `ferma ascolto` o `spegni microfono`.
+- `comandi`, `spegni`. Spegni disattiva il microfono.
 
 Un segmento esegue una sola azione: i comandi non vengono cercati dentro frasi
 libere. `comando teletrasporto` segnala un errore senza scrivere nella bozza.
