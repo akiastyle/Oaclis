@@ -1,4 +1,4 @@
-// locale.js v1.3.421
+// locale.js v1.3.437
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -335,7 +335,13 @@ window.OaclisSettings=(()=>{
  const it={
   literal:'scrivi',explicit:'comando',numbers:['uno','due','tre','quattro','cinque','sei','sette','otto','nove','dieci','undici','dodici','tredici','quattordici','quindici','sedici','diciassette','diciotto','diciannove','venti'],
   choose:/^scegli\s+(.+)$/iu,cancel:['annulla selezione','annulla operazione'],confirm:'conferma svuotamento',
-  tip:'“Pausa” sospende la scrittura. “Riprendi” riprende. Il pulsante microfono spegne tutto. Per dettare una parola comando: “scrivi invia”.',
+  descriptions:{
+   send:'Invia il messaggio scritto.',selectChat:'Passa alla chat indicata dal numero o dal nome.',
+   clearDraft:'Svuota completamente il messaggio.',readOn:'Attiva la lettura delle risposte e degli aggiornamenti.',
+   readOff:'Disattiva la lettura.',readStop:'Interrompe la lettura corrente, lasciando attive le successive.',
+   pauseRec:'Mette in pausa la trascrizione senza spegnere il microfono.',resumeRec:'Riprende la trascrizione.',
+   help:'Apre o chiude questo pannello.',stop:'Spegne il microfono.'
+  },
   commands:[
    ['send',['invia']],
    ['selectChat',/^cambia\s+(.+)$/iu,'cambia 3 / cambia Oaclis'],
@@ -347,7 +353,13 @@ window.OaclisSettings=(()=>{
  const english={
   literal:'write',explicit:'command',numbers:['one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty'],
   choose:/^choose\s+(.+)$/iu,cancel:['cancel selection','cancel operation'],confirm:'confirm clear',
-  tip:'“Pause” stops writing. “Resume” resumes. The microphone button turns listening off. To dictate a command word, say “write send”.',
+  descriptions:{
+   send:'Sends the written message.',selectChat:'Switches to the chat identified by number or name.',
+   clearDraft:'Clears the entire message.',readOn:'Enables reading of responses and progress updates.',
+   readOff:'Disables reading.',readStop:'Stops the current reading, keeping subsequent responses enabled.',
+   pauseRec:'Pauses transcription without turning off the microphone.',resumeRec:'Resumes transcription.',
+   help:'Opens or closes this panel.',stop:'Turns off the microphone.'
+  },
   commands:[
    ['send',['send','send message']],
    ['selectChat',/^change\s+(.+)$/iu,'change 3 / change Oaclis'],

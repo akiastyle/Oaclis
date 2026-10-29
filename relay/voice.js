@@ -1,4 +1,4 @@
-// voice.js v1.36.496
+// voice.js v1.36.501
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -81,9 +81,8 @@ window.OaclisVoice=(()=>{
    close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';close.onclick=()=>help.close();
    const title=document.createElement('h1');title.textContent=locale.text('Comandi vocali');
    const list=document.createElement('ul');
-   for(const command of commands.filter(command=>available(command.id))){const item=document.createElement('li');item.textContent=command.aliases?.join(' / ')||command.label;list.append(item);}
-   const tip=document.createElement('p');tip.textContent=grammar.tip;
-   help.append(close,title,list,tip);help.showModal();
+   for(const command of commands.filter(command=>available(command.id))){const item=document.createElement('li'),name=document.createElement('strong'),detail=document.createElement('span');name.textContent=command.aliases?.join(' / ')||command.label;detail.textContent=grammar.descriptions[command.id]||'';item.append(name,detail);list.append(item);}
+   help.append(close,title,list);help.showModal();
   }
   function available(id){
    if(['stop','help','pauseRec','resumeRec','selectChat'].includes(id))return true;
