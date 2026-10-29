@@ -163,7 +163,8 @@ Esecuzione comando, Modifica file o Ricerca in corso. Se il lavoro prosegue, un 
 riscontro viene letto ogni 30 secondi, senza interrompere una risposta.
 read-aloud.js usa gli eventi nativi del Codex gia attivo,
 inoltrati dallo stesso canale mobile firmato; nessun nuovo turno viene avviato.
-La lettura e disattivata inizialmente e si ferma uscendo dalla console o nascondendo la pagina.
+La lettura e disattivata inizialmente. Cambiando chat interrompe la risposta precedente
+ma conserva la scelta acceso/spento; nascondendo la pagina si ferma.
 I comandi vocali brevi sono Pausa e Riprendi (Pause/Resume in inglese).
 
 Voce on/off controllano solo la lettura. Voce stop salta la risposta corrente,
@@ -173,3 +174,7 @@ accetta solo questi comandi con prefisso voce e non trascrive l'audio riprodotto
 Il microfono conserva lo stato nel cambio chat. Brevi suoni confermano attivazione,
 pausa e spegnimento del microfono e della lettura. Il titolo della console riusa
 la stessa icona della lista.
+
+Dopo 5 secondi di silenzio viene inviato il messaggio dettato. Nuova voce rinvia
+l’invio; pausa, spegnimento, cambio chat, modifica manuale o invio esplicito lo annullano.
+Le bozze scritte soltanto da tastiera non vengono inviate automaticamente.

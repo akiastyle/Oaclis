@@ -1,4 +1,4 @@
-// voice.js v1.34.450
+// voice.js v1.36.483
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -31,7 +31,17 @@ window.OaclisVoice=(()=>{
   // Android continuous mode promotes cumulative partial results to final results.
   const singleUtterance=navigator.userAgentData?.platform==='Android'||/Android/i.test(navigator.userAgent);
   let adapter=null,recognition=null,retiring=null,generation=0,revision=0,target=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=false,paused=false,locked=false,state='idle',disposed=false,utteranceRevision=0;
-  let button,status,preview,options,help,root;
+  let button,status,preview,options,help,root,autoSendTimer;
+  const cancelAutoSend=()=>{clearTimeout(autoSendTimer);autoSendTimer=null;};
+  function scheduleAutoSend(){
+   cancelAutoSend();
+   const field=adapter?.compose,value=field?.value,chat=adapter?.chatId;
+   if(target!==field||!value?.trim()||typeof adapter?.send!=='function')return;
+   autoSendTimer=setTimeout(()=>{
+    autoSendTimer=null;
+    if(wanted&&!paused&&!document.hidden&&!blocked()&&!pending&&!help?.open&&valid(field)&&adapter?.compose===field&&adapter?.chatId===chat&&field.value===value)action(()=>adapter.send());
+   },5000);
+  }
   const blocked=()=>locked||adapter?.sending?.();
   const valid=field=>field?.isConnected&&!field.disabled&&!field.readOnly&&adapter?.fields().includes(field)&&['textarea','input'].includes(field.localName)&&field.type!=='password';
   const feedback=text=>{if(status)status.textContent=locale.text(text);};
@@ -49,7 +59,7 @@ window.OaclisVoice=(()=>{
    if(old){retiring=old;state='stopping';try{old.abort();}catch{retiring=null;}}
    if(preview)preview.textContent='';if(!retiring)state='idle';paint();
   };
-  const stop=()=>{if(wanted)window.OaclisReadAloud?.feedback('off');wanted=false;paused=false;retries=0;clearPending();invalidate();feedback('Ascolto disattivato');};
+  const stop=()=>{cancelAutoSend();if(wanted)window.OaclisReadAloud?.feedback('off');wanted=false;paused=false;retries=0;clearPending();invalidate();feedback('Ascolto disattivato');};
   function insert(value){
    const field=target;
    if(!valid(field)){feedback('Seleziona un campo oppure pronuncia un comando');return;}
@@ -63,7 +73,7 @@ window.OaclisVoice=(()=>{
    if(before.length-(end-start)+addition.length>limit){feedback('Limite del campo raggiunto.');return;}
    field.setRangeText(addition,start,end,'end');
    field.dispatchEvent(new Event('input',{bubbles:true}));
-   feedback('Testo aggiunto');
+   feedback('Testo aggiunto');return true;
   }
   function showHelp(){
    if(help.open)return;
@@ -97,7 +107,7 @@ window.OaclisVoice=(()=>{
   }
   async function action(task){
    if(blocked()){feedback('Operazione in corso');return;}
-   locked=true;invalidate();clearPending();
+   cancelAutoSend();locked=true;invalidate();clearPending();
    try{const result=await task();feedback(result===false?'Operazione non completata. Riprova.':'Comando eseguito');}catch{feedback('Operazione non completata. Riprova.');}
    finally{locked=false;if(wanted&&!document.hidden&&!disposed)start();}
   }
@@ -122,6 +132,7 @@ window.OaclisVoice=(()=>{
    if((commandsOnly||adapter?.commandOnly?.())&&!audio)return;
    if(audio){if(available(result.id))await action(()=>adapter[result.id]());else feedback('Comando non disponibile in questa schermata.');return;}
    if(result.type==='command'){
+    cancelAutoSend();
     if(result.id==='stop'){stop();return;}
     if(result.id==='pauseRec'){if(!paused)window.OaclisReadAloud?.feedback('pause');paused=true;clearPending();preview.textContent='';paint();return;}
     if(result.id==='resumeRec'){if(paused)window.OaclisReadAloud?.feedback('on');paused=false;paint();return;}
@@ -138,7 +149,7 @@ window.OaclisVoice=(()=>{
     feedback(pending.kind==='select'?'Scegli uno dei numeri mostrati oppure annulla selezione.':'Pronuncia conferma svuotamento oppure annulla operazione.');return;
    }
    if(result.type==='error'){feedback(result.message);return;}
-   if(result.type==='dictation'){insert(result.text);return;}
+   if(result.type==='dictation'){if(insert(result.text))scheduleAutoSend();return;}
    const {id,args}=result;
    if(!available(id)){feedback('Comando non disponibile in questa schermata.');return;}
    switch(id){
@@ -169,7 +180,7 @@ window.OaclisVoice=(()=>{
    state='starting';paint();utteranceRevision=revision;
    const fresh=()=>!disposed&&recognition===session&&generation===current;
    session.onstart=()=>{if(fresh()){state='listening';paint();}};
-   session.onspeechstart=()=>{if(fresh()){commandsOnly=adapter?.commandOnly?.()===true;utteranceRevision=revision;state='listening';paint();}};
+   session.onspeechstart=()=>{if(fresh()){cancelAutoSend();commandsOnly=adapter?.commandOnly?.()===true;utteranceRevision=revision;state='listening';paint();}};
    session.onspeechend=()=>{if(fresh()){state='processing';paint();}};
    session.onresult=event=>{
     if(!fresh()||blocked()||utteranceRevision!==revision)return;
@@ -179,7 +190,7 @@ window.OaclisVoice=(()=>{
      if(!fresh()||blocked())break;
      const result=event.results[i];
      if(result.isFinal){if(consumed.has(i))continue;consumed.add(i);retries=0;preview.textContent='';route(result[0].transcript,commandsOnly);}
-     else interim.push(result[0].transcript);
+     else {cancelAutoSend();interim.push(result[0].transcript);}
     }
     if(fresh()){preview.textContent=paused||commandsOnly||adapter?.commandOnly?.()?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
    };
@@ -204,15 +215,17 @@ window.OaclisVoice=(()=>{
   }
   function focus(event){
    if(valid(event.target)&&target!==event.target){
-    target=event.target;revision++;clearPending();
+    cancelAutoSend();target=event.target;revision++;clearPending();
     if(recognition){invalidate();if(wanted&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},0);}
    }
   }
   function input(event){
+   if(event.target===adapter?.compose)cancelAutoSend();
    if(pending?.kind==='clear'&&event.target===adapter?.compose){clearPending();feedback('La bozza è cambiata. Svuotamento annullato.');}
   }
   function hidden(){if(document.hidden)stop();}
   function bind(next,host){
+   cancelAutoSend();
    root?.remove();button?.remove();invalidate();clearPending();revision++;target=null;adapter=next;
    root=document.createElement('section');root.className='voice-panel';root.setAttribute('aria-label',locale.text('Controlli vocali'));
    status=document.createElement('span');status.className='voice-sr';status.setAttribute('aria-live','polite');status.setAttribute('role','status');
@@ -227,11 +240,11 @@ window.OaclisVoice=(()=>{
    paint();
    if(wanted&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},0);
   }
-  function leave(){invalidate();clearPending();revision++;target=null;adapter=null;root=null;button=null;status=null;preview=null;options=null;help=null;}
+  function leave(){cancelAutoSend();invalidate();clearPending();revision++;target=null;adapter=null;root=null;button=null;status=null;preview=null;options=null;help=null;}
   function ready(){if(adapter?.compose&&valid(adapter.compose)&&!target)target=adapter.compose;}
   function destroy(){stop();disposed=true;leave();document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
   document.addEventListener('focusin',focus);document.addEventListener('input',input);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',stop);
-  return {bind,leave,ready,stop,destroy,showHelp,pause:()=>{clearPending();invalidate();},resume:()=>{if(wanted&&!blocked()&&!retryTimer)start();}};
+  return {bind,leave,ready,stop,destroy,showHelp,pause:()=>{cancelAutoSend();clearPending();invalidate();},resume:()=>{if(wanted&&!blocked()&&!retryTimer)start();}};
  }
  return {create,parse,resolve,commands,normalize,number};
 })();

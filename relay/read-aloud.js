@@ -1,4 +1,4 @@
-// read-aloud.js v1.17.132
+// read-aloud.js v1.17.147
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -16,7 +16,7 @@ window.OaclisReadAloud=(()=>{
   }
   return lines.join('\n');
  }
- let audio;
+ let audio,desired=false;
  function feedback(mode){
   try{
    const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
@@ -41,15 +41,16 @@ window.OaclisReadAloud=(()=>{
    const done=()=>{if(version!==generation||disposed)return;speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;if(queue.length)play();else resume();};
    utterance.onend=done;utterance.onerror=()=>{if(version!==generation||disposed)return;stop();button.title=OaclisSettings.text('Lettura non disponibile');button.setAttribute('aria-label',button.title);};engine.speak(utterance);
   }
-  function stop(){
-   if(enabled)feedback('off');
+  function stop(preserve=false,silent=false){
+   if(!preserve)desired=false;
+   if(enabled&&!silent)feedback('off');
    generation++;enabled=false;cursor=null;queue=[];items.clear();ignored.clear();speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;
    engine?.cancel();paint();resume();
   }
-  function enable(){
+  function enable(silent=false){
    if(disposed||!engine||!window.SpeechSynthesisUtterance)return false;
    if(enabled)return true;
-   feedback('on');enabled=true;cursor=null;lastWorkAt=0;button.dataset.ready='false';paint();return true;
+   if(!silent)feedback('on');desired=true;enabled=true;cursor=null;lastWorkAt=0;button.dataset.ready='false';paint();return true;
   }
   function skip(){
    feedback('pause');
@@ -94,8 +95,8 @@ window.OaclisReadAloud=(()=>{
   }
   button.onclick=()=>{if(enabled)stop();else enable();};
   if(!engine||!window.SpeechSynthesisUtterance){button.disabled=true;button.title=OaclisSettings.text('Lettura non disponibile');}else paint();
-  const hidden=()=>{if(document.hidden)stop();};document.addEventListener('visibilitychange',hidden);host.append(button);
-  return {enable,disable:stop,skip,commandOnly:()=>speaking||Date.now()<echoUntil,stamp:()=>generation,request:()=>({speech:enabled,speech_cursor:cursor}),update,speaking:()=>speaking,stop,destroy:()=>{stop();disposed=true;document.removeEventListener('visibilitychange',hidden);button.remove();}};
+  const hidden=()=>{if(document.hidden)stop();};document.addEventListener('visibilitychange',hidden);host.append(button);if(desired)enable(true);
+  return {enable,disable:stop,skip,commandOnly:()=>speaking||Date.now()<echoUntil,stamp:()=>generation,request:()=>({speech:enabled,speech_cursor:cursor}),update,speaking:()=>speaking,stop,destroy:()=>{stop(true,true);disposed=true;document.removeEventListener('visibilitychange',hidden);button.remove();}};
  }
  return {create,spokenText,feedback};
 })();
