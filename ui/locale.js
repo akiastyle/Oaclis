@@ -1,4 +1,4 @@
-// locale.js v1.3.419
+// locale.js v1.3.421
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -337,7 +337,7 @@ window.OaclisSettings=(()=>{
   choose:/^scegli\s+(.+)$/iu,cancel:['annulla selezione','annulla operazione'],confirm:'conferma svuotamento',
   tip:'“Pausa” sospende la scrittura. “Riprendi” riprende. Il pulsante microfono spegne tutto. Per dettare una parola comando: “scrivi invia”.',
   commands:[
-   ['send',['invia','invia messaggio']],
+   ['send',['invia']],
    ['selectChat',/^cambia\s+(.+)$/iu,'cambia 3 / cambia Oaclis'],
    ['clearDraft',['cancella']],
    ['readOn',['voce on']],['readOff',['voce off']],['readStop',['voce stop']],
