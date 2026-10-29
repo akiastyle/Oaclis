@@ -1,4 +1,4 @@
-// locale.js v1.3.409
+// locale.js v1.3.413
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -338,7 +338,7 @@ window.OaclisSettings=(()=>{
   tip:'“Pausa” sospende la scrittura. “Riprendi” riprende. Il pulsante microfono spegne tutto. Per dettare una parola comando: “scrivi invia”.',
   commands:[
    ['send',['invia','invia messaggio']],
-   ['selectChat',/^chat\s+(.+)$/iu,'chat 3 / chat Oaclis'],
+   ['selectChat',/^cambia\s+(.+)$/iu,'cambia 3 / cambia Oaclis'],
    ['compose',['scrivi messaggio']],['clearDraft',['cancella']],
    ['readOn',['voce on']],['readOff',['voce off']],['readStop',['voce stop']],
    ['pauseRec',['pausa']],['resumeRec',['riprendi']],['help',['comandi']],['stop',['ferma ascolto','disattiva microfono','spegni microfono']],
@@ -350,7 +350,7 @@ window.OaclisSettings=(()=>{
   tip:'“Pause” stops writing. “Resume” resumes. The microphone button turns listening off. To dictate a command word, say “write send”.',
   commands:[
    ['send',['send','send message']],
-   ['selectChat',/^chat\s+(.+)$/iu,'chat 3 / chat Oaclis'],
+   ['selectChat',/^change\s+(.+)$/iu,'change 3 / change Oaclis'],
    ['compose',['write message']],['clearDraft',['clear message']],
    ['readOn',['voice on']],['readOff',['voice off']],['readStop',['voice stop']],
    ['pauseRec',['pause']],['resumeRec',['resume']],['help',['commands']],['stop',['stop listening','turn off microphone']],
