@@ -1,4 +1,4 @@
-// locale.js v1.3.399
+// locale.js v1.3.405
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -296,6 +296,10 @@ window.OaclisSettings=(()=>{
   "Salva autorizzazione": "Save permissions",
   "Scegli l’autorizzazione e apri la console.": "Choose permissions and open the console.",
   "Le modifiche valgono al prossimo avvio di Codex. La console attiva mantiene i suoi permessi.": "Changes apply when Codex starts next. The running console keeps its permissions.",
+  "Esecuzione comando": "Running command",
+  "Modifica file": "Editing files",
+  "Ricerca in corso": "Searching",
+  "Elaborazione in corso": "Processing",
   "Comandi vocali": "Voice commands",
   "Attiva lettura": "Enable read aloud",
   "Disattiva lettura": "Disable read aloud",
@@ -335,7 +339,7 @@ window.OaclisSettings=(()=>{
   commands:[
    ['send',['invia','invia messaggio']],
    ['selectChat',/^chat\s+(.+)$/iu,'chat 3 / chat Oaclis'],
-   ['compose',['scrivi messaggio']],['clearDraft',['svuota','cancella']],
+   ['compose',['scrivi messaggio']],['clearDraft',['cancella']],
    ['readOn',['voce on']],['readOff',['voce off']],['readStop',['voce stop']],
    ['pauseRec',['pausa']],['resumeRec',['riprendi']],['help',['mostra comandi','aiuto vocale']],['closeHelp',['chiudi comandi','chiudi aiuto']],['stop',['ferma ascolto','disattiva microfono','spegni microfono']],
   ]

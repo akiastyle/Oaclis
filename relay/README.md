@@ -80,11 +80,8 @@ usano pannelli a tutto schermo solo quando necessari.
 
 - Dettatura: parlare nel messaggio o nel filtro selezionato. `scrivi invia` detta
   la parola riservata; una frase isolata uguale a un comando esegue quel comando.
-- `scrivi messaggio`, `a capo`, `annulla dettatura`, `invia`.
-- `svuota messaggio` richiede `conferma svuotamento` entro 10 secondi;
-  `annulla operazione` interrompe. Una modifica della bozza annulla la conferma.
-- `elenco chat`, `indietro`, `apri chat Santi`, `cerca chat Santi`,
-  `seleziona chat numero tre`. I numeri corrispondono alla lista filtrata visibile
+- `scrivi messaggio`, `invia`, `cancella`. Cancella svuota subito la bozza.
+- `chat Santi`, `chat 3`, `chat tre`. I numeri corrispondono alla lista filtrata visibile
   (oppure all'ultima lista mostrata dalla console); supporto da uno a venti.
 - Per nomi ambigui, scegliere un'opzione a schermo o pronunciare `scegli due`;
   `annulla selezione` interrompe, la scelta scade dopo 15 secondi.
@@ -161,7 +158,10 @@ dalla stessa sorgente ui/terminal-format.js usata dal master, prima di index.php
 Il testo resta separato dalla formattazione; nessun output della console viene interpretato come HTML.
 
 Il pulsante audio legge solo nuovi messaggi dell'assistente, a frasi complete, escludendo
-codice e attivita degli strumenti. read-aloud.js usa gli eventi nativi del Codex gia attivo,
+codice. Include i messaggi intermedi; gli strumenti sono annunciati soltanto come
+Esecuzione comando, Modifica file o Ricerca in corso. Se il lavoro prosegue, un breve
+riscontro viene letto ogni 30 secondi, senza interrompere una risposta.
+read-aloud.js usa gli eventi nativi del Codex gia attivo,
 inoltrati dallo stesso canale mobile firmato; nessun nuovo turno viene avviato.
 La lettura e disattivata inizialmente e si ferma uscendo dalla console o nascondendo la pagina.
 I comandi vocali brevi sono Pausa e Riprendi (Pause/Resume in inglese).
@@ -169,3 +169,7 @@ I comandi vocali brevi sono Pausa e Riprendi (Pause/Resume in inglese).
 Voce on/off controllano solo la lettura. Voce stop salta la risposta corrente,
 lasciando attiva la lettura delle successive. Durante la riproduzione il microfono
 accetta solo questi comandi con prefisso voce e non trascrive l'audio riprodotto.
+
+Il microfono conserva lo stato nel cambio chat. Brevi suoni confermano attivazione,
+pausa e spegnimento del microfono e della lettura. Il titolo della console riusa
+la stessa icona della lista.

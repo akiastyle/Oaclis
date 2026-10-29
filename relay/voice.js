@@ -1,4 +1,4 @@
-// voice.js v1.34.440
+// voice.js v1.34.450
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -49,7 +49,7 @@ window.OaclisVoice=(()=>{
    if(old){retiring=old;state='stopping';try{old.abort();}catch{retiring=null;}}
    if(preview)preview.textContent='';if(!retiring)state='idle';paint();
   };
-  const stop=()=>{wanted=false;paused=false;retries=0;clearPending();invalidate();feedback('Ascolto disattivato');};
+  const stop=()=>{if(wanted)window.OaclisReadAloud?.feedback('off');wanted=false;paused=false;retries=0;clearPending();invalidate();feedback('Ascolto disattivato');};
   function insert(value){
    const field=target;
    if(!valid(field)){feedback('Seleziona un campo oppure pronuncia un comando');return;}
@@ -123,8 +123,8 @@ window.OaclisVoice=(()=>{
    if(audio){if(available(result.id))await action(()=>adapter[result.id]());else feedback('Comando non disponibile in questa schermata.');return;}
    if(result.type==='command'){
     if(result.id==='stop'){stop();return;}
-    if(result.id==='pauseRec'){paused=true;clearPending();preview.textContent='';paint();return;}
-    if(result.id==='resumeRec'){paused=false;paint();return;}
+    if(result.id==='pauseRec'){if(!paused)window.OaclisReadAloud?.feedback('pause');paused=true;clearPending();preview.textContent='';paint();return;}
+    if(result.id==='resumeRec'){if(paused)window.OaclisReadAloud?.feedback('on');paused=false;paint();return;}
     if(result.id==='help'){showHelp();return;}
     if(result.id==='closeHelp'){if(help.open)help.close();return;}
    }
@@ -143,7 +143,7 @@ window.OaclisVoice=(()=>{
    if(!available(id)){feedback('Comando non disponibile in questa schermata.');return;}
    switch(id){
     case 'compose':adapter.composeFocus();target=adapter.compose;feedback('Compositore selezionato');break;
-    case 'clearDraft':choices('clear',[{name:locale.text('Conferma svuotamento')}]);feedback('Confermare lo svuotamento del messaggio?');break;
+    case 'clearDraft':clearPending();adapter.compose.value='';adapter.compose.dispatchEvent(new Event('input',{bubbles:true}));feedback('Messaggio svuotato');break;
     case 'selectChat':{
      const n=number(normalize(args));
      if(n>0){const chat=adapter.list()[n-1];if(!chat){feedback('Numero fuori elenco.');break;}await openChat(chat);break;}
@@ -222,7 +222,7 @@ window.OaclisVoice=(()=>{
    root.append(status,preview,options,help);document.getElementById('app').append(root);
    button=document.createElement('button');button.type='button';button.className='voice-mic secondary';button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8"/></svg>';
    host.append(button);
-   button.onclick=()=>{if(wanted)stop();else{wanted=true;paused=false;retries=0;start();}};
+   button.onclick=()=>{if(wanted)stop();else{window.OaclisReadAloud?.feedback('on');wanted=true;paused=false;retries=0;start();}};
    if(!Recognition||!window.isSecureContext){button.disabled=true;feedback('Voce non disponibile in questo browser.');}
    paint();
    if(wanted&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},0);

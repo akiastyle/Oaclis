@@ -1,4 +1,4 @@
-// app.js v1.51.441
+// app.js v1.52.461
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -63,6 +63,14 @@ async function registerView(){
  show(OaclisSettings.html('<h1>Abbina questo telefono</h1><p>Creerai una passkey e un codice casuale per questa installazione. Poi la richiesta dovrà essere approvata dal PC.</p><label for="name">Nome del telefono</label><input id="name" maxlength="60" value="Il mio telefono" autocomplete="off"><button id="register">Crea passkey e richiedi accesso</button>'));
  document.getElementById('register').onclick=e=>run(e.target,async()=>{const name=document.getElementById('name').value.trim();const pairing=await OaclisMobileSecurity.pairing(invite,code,name);const data=await api('register-options',{invite:pairing.invite_hash,name,pairing});const c=await navigator.credentials.create(options(data));await api('register',credential(c));invite='';sessionStorage.removeItem('oaclis-test-invite');await deviceView();});
 }
+function chatIcon(chat){
+ const icon=document.createElement('span');icon.className='authorized-icon';icon.setAttribute('aria-hidden','true');
+ if(typeof chat.icon==='string'&&/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/=]*$/.test(chat.icon)&&chat.icon.length<=48000){const image=document.createElement('img');image.src=chat.icon;image.alt='';icon.append(image);}
+ else if(Object.hasOwn(OaclisIcons,chat.icon))icon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">'+OaclisIcons[chat.icon]+'</svg>';
+ else icon.textContent=[...chat.name.trim()][0]?.toLocaleUpperCase()||'?';
+ if(/^#[a-f0-9]{6}$/i.test(chat.color||''))icon.style.color=chat.color;
+ return icon;
+}
 function renderAuthorizedChats(chats){
  const list=document.getElementById('authorized-chats');
  if(!list)return;
@@ -75,11 +83,7 @@ function renderAuthorizedChats(chats){
  for(const [index,chat] of chats.entries()){
   const li=document.createElement('li'),button=document.createElement('button');button.className='secondary authorized-chat';button.setAttribute('aria-label',String(index+1)+'. '+chat.name);
   const number=document.createElement('span');number.className='authorized-number';number.textContent=String(index+1);
-  const icon=document.createElement('span');icon.className='authorized-icon';icon.setAttribute('aria-hidden','true');
-  if(typeof chat.icon==='string'&&/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/=]*$/.test(chat.icon)&&chat.icon.length<=48000){const image=document.createElement('img');image.src=chat.icon;image.alt='';icon.append(image);}
-  else if(Object.hasOwn(OaclisIcons,chat.icon))icon.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">'+OaclisIcons[chat.icon]+'</svg>';
-  else icon.textContent=[...chat.name.trim()][0]?.toLocaleUpperCase()||'?';
-  if(/^#[a-f0-9]{6}$/i.test(chat.color||''))icon.style.color=chat.color;
+  const icon=chatIcon(chat);
   const name=document.createElement('span');name.className='authorized-name';name.textContent=chat.name;
   const play=document.createElement('span');play.className='authorized-play';play.setAttribute('aria-hidden','true');play.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m9 5 10 7-10 7z"/></svg>';
   button.append(number,icon,name,play);button.onclick=()=>openConsole(chat);li.append(button);ul.append(li);
@@ -106,7 +110,7 @@ function consoleScreen(value){
 async function openConsole(chat){
  clearTimeout(timer);
  show(OaclisSettings.html('<h1 id="console-title"></h1><pre id="console-screen" tabindex="0" aria-label="Console">Connessione…</pre><form id="console-input"><textarea aria-label="Messaggio" maxlength="8000" rows="2" placeholder="Scrivi un messaggio" disabled></textarea><button disabled aria-label="Invia messaggio"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></form><div id="console-keys"><button id="back" class="secondary" type="button" aria-label="Chat autorizzate" title="Chat autorizzate">&lt;</button></div>'));
- const title=document.getElementById('console-title');title.textContent=chat.name;
+ const title=document.getElementById('console-title'),name=document.createElement('span');name.textContent=chat.name;title.append(chatIcon(chat),name);
  keepConsoleAwake();
  const screen=document.getElementById('console-screen'),form=document.getElementById('console-input'),text=form.querySelector('textarea');
  text.value=drafts.get(chat.id)||'';
@@ -135,7 +139,7 @@ async function openConsole(chat){
    const completed=pending;pending=null;
    if(result.error)throw new Error(result.error);
    if(completed.operation==='input'&&text.value===completed.text){text.value='';saveDraft(chat.id,'');}
-   title.textContent=chat.name;
+   name.textContent=chat.name;
    if(completed.operation==='open'||completed.operation==='input')followOutput=true;
    const output=consoleScreen(result.screen);
    const top=screen.scrollTop,left=screen.scrollLeft;
@@ -147,7 +151,7 @@ async function openConsole(chat){
     if(screen.scrollLeft!==left)screen.scrollLeft=left;
    }
    consoleReady=true;form.querySelectorAll('textarea,button').forEach(element=>element.disabled=false);voice.ready();voice.resume();return true;
-  }catch(e){if(e.status===403){voice.stop();show('');closed=true;location.replace('/auth');}else if(!closed)title.textContent=chat.name+(operation==='input'?OaclisSettings.text(' · Invio non confermato'):OaclisSettings.text(' · Riconnessione…'));return false;}finally{busy=false;done();}
+  }catch(e){if(e.status===403){voice.stop();show('');closed=true;location.replace('/auth');}else if(!closed)name.textContent=chat.name+(operation==='input'?OaclisSettings.text(' · Invio non confermato'):OaclisSettings.text(' · Riconnessione…'));return false;}finally{busy=false;done();}
  };
  const poll=async()=>{if(closed)return;if(document.hidden||busy){timer=setTimeout(poll,1500);return;}const ok=await send('read');if(!closed){clearTimeout(timer);timer=setTimeout(poll,ok?200:1000);}};
  const resume=()=>{if(document.visibilityState==='visible'&&!closed){clearTimeout(timer);poll();}};

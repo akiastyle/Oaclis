@@ -1,4 +1,4 @@
-/* style.css v1.0.86 */
+/* style.css v1.0.88 */
 :root{color-scheme:dark;--bg:#111314;--panel:rgba(31,36,38,.85);--text:#f7f9fa;--muted:#b5bfc3;--accent:#54caba;--danger:#e0a2ac;--motion:.5s;--radius:14px;font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.6;color:var(--text);background:var(--bg)}
 *{box-sizing:border-box}body{margin:0;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}main{width:100%;min-height:100%;margin:0;background:var(--panel);backdrop-filter:blur(14px);padding:0;border-radius:0}main[hidden]{display:none}h1{font-size:25px;line-height:1.25;margin:0 0 14px;letter-spacing:-.025em}h2{font-size:17px;margin:0}p{color:var(--muted);margin:12px 0 24px}button,input{font:inherit;width:100%;border:0;border-radius:8px;padding:12px 14px}button{cursor:pointer;color:#08231f;background:var(--accent);font-weight:650;transition:background var(--motion),opacity var(--motion)}button:hover{background:#85dfd2}button:disabled{opacity:.5;cursor:wait}input{color:var(--text);background:#111719;margin:7px 0 18px}label{display:block;font-weight:550}button.secondary{background:#394247;color:var(--text)}button.danger{background:var(--danger);color:#301a21;margin-top:30px}.row{padding:20px 0;border-bottom:1px solid #ffffff1c}.row:last-child{border:0}.row p{margin:4px 0 12px}.row button{margin-top:8px}.status{margin-top:20px;color:var(--accent)}.error{color:#ffb9bd}.invite{overflow-wrap:anywhere;user-select:all;color:var(--text)}:focus-visible{outline:2px solid var(--accent);outline-offset:4px}::selection{background:var(--accent);color:#08231f}a{color:var(--accent);text-underline-offset:3px}small{color:var(--muted)}@media(prefers-reduced-motion:reduce){:root{--motion:0s}}
 
@@ -51,3 +51,5 @@ body:has(#console-screen){position:fixed;inset:0;height:var(--console-height,100
 #console-keys .read-aloud svg{width:22px;height:22px}
 #console-keys .read-aloud[aria-pressed="true"]{background:var(--accent);color:#08231f}
 #console-keys .read-aloud[aria-pressed="true"][data-ready="false"]{background:#fb923c}
+
+#console-title{display:flex;align-items:center;gap:10px}#console-title .authorized-icon{flex:none}#console-title>span:last-child{min-width:0;overflow:hidden;text-overflow:ellipsis}
