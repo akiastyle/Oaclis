@@ -1,4 +1,4 @@
-// voice.js v1.37.522
+// voice.js v1.37.524
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -173,7 +173,7 @@ window.OaclisVoice=(()=>{
   function start(){
    if(!Recognition||!window.isSecureContext||disposed||!wanted||document.hidden||blocked()||recognition||retiring)return;
    clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=(recorder??=new Recognition());let consumed=-1,sessionError=null,commandsOnly=false;recognition=session;
-   session.lang=locale.speechLanguage;session.continuous=!singleUtterance;session.interimResults=true;session.maxAlternatives=1;
+   session.lang=locale.speechLanguage;session.continuous=!singleUtterance;session.interimResults=false;session.maxAlternatives=1;
    state='starting';paint();utteranceRevision=revision;
    const fresh=()=>!disposed&&recognition===session&&generation===current;
    session.onstart=()=>{if(fresh()){state='listening';paint();}};
