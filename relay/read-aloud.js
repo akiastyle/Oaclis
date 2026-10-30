@@ -1,4 +1,4 @@
-// read-aloud.js v1.18.200
+// read-aloud.js v1.18.212
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -17,16 +17,10 @@ window.OaclisReadAloud=(()=>{
   return lines.join('\n');
  }
  const activityHeaders=new Set(['Running','Ran','Exploring','Explored','Calling','Called','Failed','Browsing the web','Searching the web','Searched the web','Opening','Opened','Opening page','Opened page','Searching for','Searched for','Searching page','Searched page','Added','Deleted','Edited','Failed to apply patch','Viewed image','Updated Plan']);
- let audio,desired=window.OaclisVoice?.preferences?.startVoice===true;
+ const audio=new Audio('/feedback.mp3');audio.preload='auto';audio.volume=1;
+ let desired=window.OaclisVoice?.preferences?.startVoice===true;
  function feedback(){
-  try{
-   const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
-   audio??=new Audio();audio.resume().catch(()=>{});
-   const tone=audio.createOscillator(),gain=audio.createGain(),now=audio.currentTime;
-   tone.frequency.value=880;
-   gain.gain.setValueAtTime(.55,now);
-   tone.connect(gain);gain.connect(audio.destination);tone.start();tone.stop(now+.1);tone.onended=()=>{tone.disconnect();gain.disconnect();};
-  }catch{}
+  try{audio.pause();audio.currentTime=0;audio.play().catch(()=>{});}catch{}
  }
  function create(host,{pause=()=>{},resume=()=>{}}={}){
   const engine=window.speechSynthesis,button=document.createElement('button');
