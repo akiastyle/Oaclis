@@ -1,4 +1,4 @@
-// read-aloud.js v1.18.189
+// read-aloud.js v1.18.200
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -17,7 +17,7 @@ window.OaclisReadAloud=(()=>{
   return lines.join('\n');
  }
  const activityHeaders=new Set(['Running','Ran','Exploring','Explored','Calling','Called','Failed','Browsing the web','Searching the web','Searched the web','Opening','Opened','Opening page','Opened page','Searching for','Searched for','Searching page','Searched page','Added','Deleted','Edited','Failed to apply patch','Viewed image','Updated Plan']);
- let audio,desired=false;
+ let audio,desired=window.OaclisVoice?.preferences?.startVoice===true;
  function feedback(){
   try{
    const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
@@ -32,14 +32,15 @@ window.OaclisReadAloud=(()=>{
   const engine=window.speechSynthesis,button=document.createElement('button');
   button.type='button';button.className='read-aloud secondary';
   button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4zM16 8a6 6 0 0 1 0 8m2-11a10 10 0 0 1 0 14"/></svg>';
-  let enabled=false,cursor=null,queue=[],speaking=false,current=null,generation=0,disposed=false,currentItem=null,echoUntil=0,quietUntil=0,playTimer=null;
+  let enabled=false,cursor=null,queue=[],speaking=false,current=null,generation=0,disposed=false,currentItem=null,echoUntil=0,quietUntil=0,playTimer=null,lastActivity='',lastActivityId=null,lastActivityAt=0;
   const items=new Map(),ignored=new Set();
   const paint=()=>{button.setAttribute('aria-pressed',String(enabled));button.title=OaclisSettings.text(enabled?(button.dataset.ready==='false'?'Lettura in collegamento':'Disattiva lettura'):'Attiva lettura');button.setAttribute('aria-label',button.title);};
   function play(){
    if(disposed||speaking||!enabled||!queue.length)return;
    const wait=quietUntil-Date.now();
    if(wait>0){if(!playTimer)playTimer=setTimeout(()=>{playTimer=null;play();},wait);return;}
-   const {text,id}=queue.shift(),version=generation,utterance=new SpeechSynthesisUtterance(text);currentItem=id;
+   const {text,id,activity}=queue.shift(),version=generation,utterance=new SpeechSynthesisUtterance(text);currentItem=id;
+   if(activity){lastActivity=text;lastActivityId=id;lastActivityAt=Date.now();}
    utterance.lang=OaclisSettings.speechLanguage;speaking=true;current=utterance;pause();
    const done=()=>{if(version!==generation||disposed)return;speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;if(queue.length)play();else resume();};
    utterance.onend=done;utterance.onerror=()=>{if(version!==generation||disposed)return;stop();button.title=OaclisSettings.text('Lettura non disponibile');button.setAttribute('aria-label',button.title);};engine.speak(utterance);
@@ -49,6 +50,7 @@ window.OaclisReadAloud=(()=>{
   }
   function stop(preserve=false,silent=false){
    clearTimeout(playTimer);playTimer=null;quietUntil=0;
+   lastActivity='';lastActivityId=null;lastActivityAt=0;
    if(!preserve)desired=false;
    if(enabled&&!silent)feedback('off');
    generation++;enabled=false;cursor=null;queue=[];items.clear();ignored.clear();speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;
@@ -94,6 +96,9 @@ window.OaclisReadAloud=(()=>{
    }
    if(data.ready===true&&typeof activity==='string'&&activityHeaders.has(activity)){
     queue=queue.filter(part=>!part.activity);queue.push({id:activityId,text:activity,activity:true});play();
+   }
+   if(data.ready===true&&!activity&&!speaking&&!queue.length&&data.activity===lastActivity&&lastActivity&&!ignored.has(lastActivityId)&&Date.now()-lastActivityAt>=10000){
+    queue.push({id:lastActivityId,text:lastActivity,activity:true});play();
    }
    if(Number.isSafeInteger(data.cursor))cursor=data.cursor;
    button.dataset.ready=String(data.ready===true);

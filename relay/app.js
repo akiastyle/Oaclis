@@ -1,4 +1,4 @@
-// app.js v1.52.467
+// app.js v1.52.469
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -160,7 +160,7 @@ async function openConsole(chat){
   if(inputBusy||closed)return false;
   inputBusy=true;voice.pause();clearTimeout(timer);
   const value=text.value;
-  try{return await send('input',{text:value,key:'Enter'});}finally{inputBusy=false;if(!closed){voice.resume();timer=setTimeout(poll,200);}}
+  try{const sent=await send('input',{text:value,key:'Enter'});if(sent)voice.afterSend();return sent;}finally{inputBusy=false;if(!closed){voice.resume();timer=setTimeout(poll,200);}}
  };
  consoleActions={chatId:chat.id,submit,sending:()=>inputBusy||!consoleReady,commandOnly:()=>reader?.commandOnly()===true,readOn:()=>reader?.enable(),readOff:()=>reader?.disable(),readStop:()=>reader?.skip()};
  form.onsubmit=async event=>{event.preventDefault();await submit();};

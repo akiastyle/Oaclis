@@ -161,12 +161,13 @@ Il testo resta separato dalla formattazione; nessun output della console viene i
 Il pulsante audio legge solo nuovi messaggi dell'assistente, a frasi complete, escludendo
 codice. Include i messaggi intermedi; per gli strumenti legge soltanto le intestazioni
 della console, come Running/Ran, Exploring/Explored, Calling/Called, Browsing the web
-e Opened. Non legge comandi, percorsi, argomenti o risultati tecnici e non ripete
-un annuncio generico ogni 30 secondi. Le attivita in attesa di lettura si accorpano
+e Opened. Non legge comandi, percorsi, argomenti o risultati tecnici. Se l’attivita resta
+in corso e invariata, ripete la stessa intestazione dopo 10 secondi; non la
+ripete quando il lavoro e terminato. Le attivita in attesa di lettura si accorpano
 alla piu recente per non accumulare una coda di annunci.
 read-aloud.js usa gli eventi nativi del Codex gia attivo,
 inoltrati dallo stesso canale mobile firmato; nessun nuovo turno viene avviato.
-La lettura e disattivata inizialmente. Cambiando chat interrompe la risposta precedente
+La lettura e disattivata inizialmente salvo la preferenza di avvio automatico. Cambiando chat interrompe la risposta precedente
 ma conserva la scelta acceso/spento; nascondendo la pagina si ferma.
 I comandi vocali brevi sono Pausa e Riprendi (Pause/Resume in inglese).
 
@@ -178,7 +179,7 @@ Il microfono conserva lo stato nel cambio chat. Brevi suoni confermano attivazio
 pausa e spegnimento del microfono e della lettura. Il titolo della console riusa
 la stessa icona della lista.
 
-Dopo 5 secondi di silenzio viene inviato il messaggio dettato. Nuova voce rinvia
+Se abilitato, l’invio automatico avviene dopo 3 o 5 secondi di silenzio. Nuova voce rinvia
 l’invio; pausa, spegnimento, cambio chat, modifica manuale o invio esplicito lo annullano.
 Le bozze scritte soltanto da tastiera non vengono inviate automaticamente.
 
@@ -193,3 +194,8 @@ con un solo indice, senza conservare una lista crescente durante l’ascolto con
 Il bip di conferma e unico, a volume fisso e senza sfumature. Dopo l’invio
 di un messaggio, la lettura attende due secondi prima della prima frase,
 lasciando disponibile il microfono per il comando pausa.
+
+Il pannello Comandi contiene cinque check locali, salvati nel browser: avvio
+del microfono, avvio della lettura, invio automatico, attesa di 5 secondi
+(in alternativa a 3) e pausa della dettatura dopo un invio riuscito.
+I permessi del browser restano necessari per avviare automaticamente microfono e voce.

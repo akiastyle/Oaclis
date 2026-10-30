@@ -1,7 +1,9 @@
-// voice.js v1.37.524
+// voice.js v1.38.548
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
+ const preferences={startMic:false,startVoice:false,autoSend:true,waitFive:true,pauseAfterSend:false};
+ try{const saved=JSON.parse(localStorage.getItem('oaclis-voice-preferences')||'{}');for(const key of Object.keys(preferences))if(typeof saved?.[key]==='boolean')preferences[key]=saved[key];}catch{}
  const numbers=grammar.numbers;
  const normalize=text=>text.normalize('NFKC').trim().toLocaleLowerCase(locale.speechLanguage).replace(/\s+/g,' ').replace(/[.!?,;:]+$/u,'').trim();
  const number=text=>/^\d+$/.test(text)?Number(text):numbers.indexOf(text)+1;
@@ -29,17 +31,18 @@ window.OaclisVoice=(()=>{
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   // Android continuous mode promotes cumulative partial results to final results.
   const singleUtterance=navigator.userAgentData?.platform==='Android'||/Android/i.test(navigator.userAgent);
-  let adapter=null,recognition=null,recorder=null,retiring=null,generation=0,revision=0,target=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=false,paused=false,locked=false,state='idle',disposed=false,utteranceRevision=0;
+  let adapter=null,recognition=null,recorder=null,retiring=null,generation=0,revision=0,target=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=preferences.startMic,paused=false,locked=false,state='idle',disposed=false,utteranceRevision=0;
   let button,status,preview,options,help,root,autoSendTimer;
   const cancelAutoSend=()=>{clearTimeout(autoSendTimer);autoSendTimer=null;};
   function scheduleAutoSend(){
    cancelAutoSend();
+   if(!preferences.autoSend)return;
    const field=adapter?.compose,value=field?.value,chat=adapter?.chatId;
    if(target!==field||!value?.trim()||typeof adapter?.send!=='function')return;
    autoSendTimer=setTimeout(()=>{
     autoSendTimer=null;
-    if(wanted&&!paused&&!document.hidden&&!blocked()&&!pending&&valid(field)&&adapter?.compose===field&&adapter?.chatId===chat&&field.value===value)action(()=>adapter.send());
-   },5000);
+    if(preferences.autoSend&&wanted&&!paused&&!document.hidden&&!blocked()&&!pending&&valid(field)&&adapter?.compose===field&&adapter?.chatId===chat&&field.value===value)action(()=>adapter.send());
+   },preferences.waitFive?5000:3000);
   }
   const blocked=()=>locked||adapter?.sending?.();
   const valid=field=>field?.isConnected&&!field.disabled&&!field.readOnly&&adapter?.fields().includes(field)&&['textarea','input'].includes(field.localName)&&field.type!=='password';
@@ -83,9 +86,15 @@ window.OaclisVoice=(()=>{
    const close=document.createElement('button');close.type='button';close.className='voice-close secondary';close.setAttribute('aria-label',locale.text('Chiudi comandi vocali'));
    close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';close.onclick=()=>help.close();
    const title=document.createElement('h1');title.textContent=locale.text('Comandi vocali');
+   const settings=document.createElement('div');settings.className='voice-settings';settings.setAttribute('role','group');settings.setAttribute('aria-label',locale.text('Impostazioni'));
+   for(const [key,label]of [['startMic',"Microfono acceso all'avvio"],['startVoice',"Voce accesa all'avvio"],['autoSend','Invio automatico'],['waitFive','Attesa di 5 secondi (altrimenti 3)'],['pauseAfterSend','Pausa dettatura dopo invio']]){
+    const row=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.checked=preferences[key];
+    check.onchange=()=>{preferences[key]=check.checked;try{localStorage.setItem('oaclis-voice-preferences',JSON.stringify(preferences));}catch{}if(!preferences.autoSend)cancelAutoSend();else if(key==='waitFive'&&autoSendTimer)scheduleAutoSend();};
+    row.append(check,document.createTextNode(locale.text(label)));settings.append(row);
+   }
    const list=document.createElement('ul');
    for(const command of commands.filter(command=>available(command.id))){const item=document.createElement('li'),name=document.createElement('strong'),detail=document.createElement('span');name.textContent=command.aliases?.join(' / ')||command.label;detail.textContent=grammar.descriptions[command.id]||'';item.append(name,detail);list.append(item);}
-   help.append(close,title,list);help.showModal();
+   help.append(close,title,settings,list);help.showModal();
   }
   function available(id){
    if(['stop','help','pauseRec','resumeRec','selectChat'].includes(id))return true;
@@ -239,9 +248,12 @@ window.OaclisVoice=(()=>{
   }
   function leave(){cancelAutoSend();invalidate();clearPending();revision++;target=null;adapter=null;root=null;button=null;status=null;preview=null;options=null;help=null;}
   function ready(){if(adapter?.compose&&valid(adapter.compose)&&!target)target=adapter.compose;}
+  function afterSend(){
+   if(preferences.pauseAfterSend&&wanted&&!paused){cancelAutoSend();paused=true;window.OaclisReadAloud?.feedback('pause');paint();}
+  }
   function destroy(){stop();disposed=true;leave();recorder=null;document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
   document.addEventListener('focusin',focus);document.addEventListener('input',input);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',stop);
-  return {bind,leave,ready,stop,destroy,showHelp,pause:()=>{cancelAutoSend();clearPending();invalidate();},resume:()=>{if(wanted&&!blocked()&&!retryTimer)start();}};
+  return {bind,leave,ready,stop,destroy,showHelp,afterSend,pause:()=>{cancelAutoSend();clearPending();invalidate();},resume:()=>{if(wanted&&!blocked()&&!retryTimer)start();}};
  }
- return {create,parse,resolve,commands,normalize,number};
+ return {create,parse,resolve,commands,normalize,number,preferences};
 })();

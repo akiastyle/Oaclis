@@ -1,4 +1,4 @@
-// locale.js v1.3.437
+// locale.js v1.3.442
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -300,6 +300,11 @@ window.OaclisSettings=(()=>{
   "Modifica file": "Editing files",
   "Ricerca in corso": "Searching",
   "Elaborazione in corso": "Processing",
+  "Microfono acceso all'avvio": "Microphone on at startup",
+  "Voce accesa all'avvio": "Read aloud on at startup",
+  "Invio automatico": "Automatic sending",
+  "Attesa di 5 secondi (altrimenti 3)": "Wait 5 seconds (otherwise 3)",
+  "Pausa dettatura dopo invio": "Pause dictation after sending",
   "Comandi vocali": "Voice commands",
   "Attiva lettura": "Enable read aloud",
   "Disattiva lettura": "Disable read aloud",
