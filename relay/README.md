@@ -159,9 +159,11 @@ dalla stessa sorgente ui/terminal-format.js usata dal master, prima di index.php
 Il testo resta separato dalla formattazione; nessun output della console viene interpretato come HTML.
 
 Il pulsante audio legge solo nuovi messaggi dell'assistente, a frasi complete, escludendo
-codice. Include i messaggi intermedi; gli strumenti sono annunciati soltanto come
-Esecuzione comando, Modifica file o Ricerca in corso. Se il lavoro prosegue, un breve
-riscontro viene letto ogni 30 secondi, senza interrompere una risposta.
+codice. Include i messaggi intermedi; per gli strumenti legge soltanto le intestazioni
+della console, come Running/Ran, Exploring/Explored, Calling/Called, Browsing the web
+e Opened. Non legge comandi, percorsi, argomenti o risultati tecnici e non ripete
+un annuncio generico ogni 30 secondi. Le attivita in attesa di lettura si accorpano
+alla piu recente per non accumulare una coda di annunci.
 read-aloud.js usa gli eventi nativi del Codex gia attivo,
 inoltrati dallo stesso canale mobile firmato; nessun nuovo turno viene avviato.
 La lettura e disattivata inizialmente. Cambiando chat interrompe la risposta precedente

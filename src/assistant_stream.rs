@@ -1,11 +1,36 @@
-// assistant_stream.rs v1.9.199
+// assistant_stream.rs v1.11.271
 //! Bounded, on-demand observation of already loaded Codex threads; never starts a turn.
 use serde_json::{Value,json};
 use std::{collections::{BTreeMap,VecDeque},io,os::unix::net::UnixStream,path::Path,sync::{Arc,Mutex,OnceLock,atomic::{AtomicBool,Ordering}},thread,time::{Duration,Instant}};
 use tungstenite::{Message,WebSocket};
 #[derive(Default)]
-struct Feed { sequence:u64, events:VecDeque<Value>, items:BTreeMap<String,(bool,String)>, work:BTreeMap<String,String>, busy:bool, ready:bool }
+struct Feed { sequence:u64, events:VecDeque<Value>, items:BTreeMap<String,(bool,String)>, work:BTreeMap<String,String>, ready:bool }
 struct Reader { touched:Mutex<Instant>, started:Mutex<Instant>, running:AtomicBool, feed:Mutex<Feed> }
+fn activity_header(item:&Value,completed:bool)->Option<&'static str> {
+    match item["type"].as_str()? {
+        "commandExecution"=>{
+            let exploratory=item["commandActions"].as_array().is_some_and(|actions|!actions.is_empty()&&actions.iter().all(|a|matches!(a["type"].as_str(),Some("read"|"listFiles"|"search"))));
+            Some(match (exploratory,completed) {(true,false)=>"Exploring",(true,true)=>"Explored",(false,false)=>"Running",(false,true)=>"Ran"})
+        },
+        "webSearch"=>Some(match item["action"]["type"].as_str() {
+            Some("openPage")=>match (completed,item["action"]["url"].as_str().is_none_or(str::is_empty)) {(false,false)=>"Opening",(true,false)=>"Opened",(false,true)=>"Opening page",(true,true)=>"Opened page"},
+            Some("findInPage")=>match (completed,item["action"]["pattern"].as_str().is_none_or(str::is_empty)) {(false,false)=>"Searching for",(true,false)=>"Searched for",(false,true)=>"Searching page",(true,true)=>"Searched page"},
+            _ if completed=>"Searched the web",
+            _ if item["query"].as_str().is_some_and(|q|!q.is_empty())=>"Searching the web",
+            _=>"Browsing the web",
+        }),
+        "mcpToolCall"=>Some(if completed {"Called"} else {"Calling"}),
+        "dynamicToolCall"=>Some(if completed&&(item["success"]==false||item["status"]=="failed") {"Failed"} else if completed {"Called"} else {"Calling"}),
+        "fileChange" if completed=>{
+            if item["status"]=="failed" {return Some("Failed to apply patch");}
+            let changes=item["changes"].as_array()?;
+            Some(if changes.len()==1 {match changes[0]["kind"]["type"].as_str() {Some("add")=>"Added",Some("delete")=>"Deleted",_=>"Edited"}} else {"Edited"})
+        },
+        "imageView" if completed=>Some("Viewed image"),
+        "plan" if completed=>Some("Updated Plan"),
+        _=>None,
+    }
+}
 impl Feed {
     fn push(&mut self,id:&str,kind:&str,text:&str) {
         if kind=="text" && text.is_empty(){return;}
@@ -24,15 +49,19 @@ impl Feed {
         let item=&params["item"];
         let eligible=item["type"]=="agentMessage";
         match value["method"].as_str() {
-            Some("turn/started")=>{self.busy=true;},
-            Some("turn/completed")=>{self.busy=false;self.work.clear();},
-            Some("thread/status/changed")=>{self.busy=params["status"]["type"]=="active";if !self.busy {self.work.clear();}},
-            Some("item/completed") if item["type"]!="agentMessage"=>{if let Some(id)=item["id"].as_str(){self.work.remove(id);}},
-            Some("item/started") if matches!(item["type"].as_str(),Some("commandExecution"|"fileChange"|"mcpToolCall"|"dynamicToolCall"|"webSearch")) => {
+            Some("turn/completed")=>{self.work.clear();},
+            Some("thread/status/changed")=>{if params["status"]["type"]!="active" {self.work.clear();}},
+            Some("item/started"|"item/completed") if item["type"]!="agentMessage"=>{
                 if let Some(id)=item["id"].as_str() {
-                    if self.work.len()>=16 {self.work.clear();}
-                    self.work.insert(id.into(),item["type"].as_str().unwrap().into());self.push(id,"working","");
-                    self.events.back_mut().unwrap()["activity"]=item["type"].clone();
+                    let completed=value["method"]=="item/completed";
+                    if completed {self.work.remove(id);}
+                    if let Some(header)=activity_header(item,completed) {
+                        if !completed {
+                            if self.work.len()>=16 {self.work.clear();}
+                            self.work.insert(id.into(),header.into());
+                        }
+                        self.push(id,"working","");self.events.back_mut().unwrap()["activity"]=json!(header);
+                    }
                 }
             },
             Some("item/started") if item["type"]=="agentMessage" => {
@@ -64,7 +93,7 @@ impl Feed {
         }
     }
     fn snapshot(&self,after:Option<u64>)->Value {
-        let activity=self.work.values().next().cloned().or_else(||self.busy.then(||"processing".into()));
+        let activity=self.work.values().next().cloned();
         let reset=after.is_some_and(|after|after>self.sequence || self.events.front().is_some_and(|v|after.saturating_add(1)<v["seq"].as_u64().unwrap_or(0)));
         if after.is_none() || reset {return json!({"ready":self.ready,"cursor":self.sequence,"reset":reset,"events":[],"activity":activity});}
         let mut events=Vec::new();let mut bytes=0;let mut cursor=after.unwrap();
@@ -101,8 +130,8 @@ fn follow(root:&Path,chat:&str,reader:&Reader)->io::Result<()> {
     send(&mut socket,json!({"method":"initialized","params":{}}))?;
     let loaded=rpc(&mut socket,1,"thread/loaded/list",json!({}))?;
     if !loaded["data"].as_array().is_some_and(|ids|ids.iter().any(|id|id==chat)) {return Err(io::Error::other("Chat non attiva"));}
-    let resumed=rpc(&mut socket,2,"thread/resume",json!({"threadId":chat,"excludeTurns":true}))?;
-    {let mut feed=reader.feed.lock().unwrap();feed.work.clear();feed.busy=resumed["thread"]["status"]["type"]=="active";feed.ready=true;}
+    rpc(&mut socket,2,"thread/resume",json!({"threadId":chat,"excludeTurns":true}))?;
+    {let mut feed=reader.feed.lock().unwrap();feed.work.clear();feed.ready=true;}
     while reader.touched.lock().unwrap().elapsed()<Duration::from_secs(30) {
         match socket.read() {
             Ok(Message::Text(text))=>{if let Ok(value)=serde_json::from_str(&text){reader.feed.lock().unwrap().event(chat,&value);}},
@@ -137,6 +166,19 @@ pub(crate) fn snapshot(chat:&str,after:Option<u64>)->Value {
 mod tests {
     use super::*;
     #[test]
+    fn activity_headers_match_console_without_reading_command_details() {
+        for (item,label) in [
+            (json!({"type":"commandExecution","command":"secret-command","commandActions":[{"type":"unknown"}]}),"Ran"),
+            (json!({"type":"commandExecution","commandActions":[{"type":"read"},{"type":"search"}]}),"Explored"),
+            (json!({"type":"webSearch","query":"secret query"}),"Searched the web"),
+            (json!({"type":"webSearch","action":{"type":"openPage","url":"https://private.invalid/secret"}}),"Opened"),
+            (json!({"type":"mcpToolCall","tool":"private-tool","arguments":{"password":"secret"}}),"Called"),
+            (json!({"type":"fileChange","changes":[{"kind":{"type":"add"},"path":"secret"}]}),"Added"),
+        ] {assert_eq!(activity_header(&item,true),Some(label));}
+        assert_eq!(activity_header(&json!({"type":"webSearch"}),false),Some("Browsing the web"));
+        assert!(activity_header(&json!({"type":"reasoning","text":"private"}),true).is_none());
+    }
+    #[test]
     fn feed_keeps_only_answer_items_and_uses_bounded_replay_cursors() {
         let mut feed=Feed::default();let chat="chat";
         for (id,kind,phase) in [("tool","commandExecution",""),("status","agentMessage","commentary"),("answer","agentMessage","final_answer")] {
@@ -145,7 +187,7 @@ mod tests {
             feed.event(chat,&json!({"method":"item/completed","params":{"threadId":chat,"item":{"id":id,"type":kind,"phase":phase,"text":"hello. final"}}}));
         }
         assert!(feed.events.iter().all(|v|(v["item"]=="answer" || v["item"]=="status") || (v["item"]=="tool" && v["kind"]=="working")));
-        assert_eq!(feed.events.iter().filter(|v|v["kind"]=="working").count(),1);
+        assert_eq!(feed.events.iter().filter(|v|v["kind"]=="working").count(),2);
         assert_eq!(feed.events.iter().filter_map(|v|v["text"].as_str()).collect::<String>(),"hello. finalhello. final");
         assert_eq!(feed.snapshot(None)["events"],json!([]));
         let result=feed.snapshot(Some(0));let cursor=result["cursor"].as_u64().unwrap();
@@ -153,9 +195,9 @@ mod tests {
         for _ in 0..300 {feed.push("later","text","part");}
         assert_eq!(feed.events.len(),256);assert_eq!(feed.snapshot(Some(0))["reset"],true);
         feed.event(chat,&json!({"method":"turn/started","params":{"threadId":chat}}));
-        assert_eq!(feed.snapshot(None)["activity"],"processing");
+        assert!(feed.snapshot(None)["activity"].is_null());
         feed.event(chat,&json!({"method":"item/started","params":{"threadId":chat,"item":{"id":"long","type":"commandExecution"}}}));
-        assert_eq!(feed.snapshot(None)["activity"],"commandExecution");
+        assert_eq!(feed.snapshot(None)["activity"],"Running");
         feed.event(chat,&json!({"method":"turn/completed","params":{"threadId":chat}}));
         assert!(feed.snapshot(None)["activity"].is_null());
     }
