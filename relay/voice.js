@@ -1,4 +1,4 @@
-// voice.js v1.38.548
+// voice.js v1.38.558
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -86,15 +86,19 @@ window.OaclisVoice=(()=>{
    const close=document.createElement('button');close.type='button';close.className='voice-close secondary';close.setAttribute('aria-label',locale.text('Chiudi comandi vocali'));
    close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';close.onclick=()=>help.close();
    const title=document.createElement('h1');title.textContent=locale.text('Comandi vocali');
-   const settings=document.createElement('div');settings.className='voice-settings';settings.setAttribute('role','group');settings.setAttribute('aria-label',locale.text('Impostazioni'));
+   const header=document.createElement('header');header.className='voice-help-header';header.append(title,close);
+   const settings=document.createElement('details');settings.className='voice-settings';settings.setAttribute('aria-label',locale.text('Impostazioni'));
+   const summary=document.createElement('summary');summary.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">'+(window.OaclisIcons?.settings||'')+'</svg>';
+   summary.append(document.createTextNode(locale.text('Impostazioni')));
+   const chevron=document.createElementNS('http://www.w3.org/2000/svg','svg');chevron.setAttribute('viewBox','0 0 24 24');chevron.setAttribute('aria-hidden','true');chevron.innerHTML='<path d="m9 5 7 7-7 7"/>';summary.append(chevron);settings.append(summary);
    for(const [key,label]of [['startMic',"Microfono acceso all'avvio"],['startVoice',"Voce accesa all'avvio"],['autoSend','Invio automatico'],['waitFive','Attesa di 5 secondi (altrimenti 3)'],['pauseAfterSend','Pausa dettatura dopo invio']]){
     const row=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.checked=preferences[key];
     check.onchange=()=>{preferences[key]=check.checked;try{localStorage.setItem('oaclis-voice-preferences',JSON.stringify(preferences));}catch{}if(!preferences.autoSend)cancelAutoSend();else if(key==='waitFive'&&autoSendTimer)scheduleAutoSend();};
     row.append(check,document.createTextNode(locale.text(label)));settings.append(row);
    }
-   const list=document.createElement('ul');
+   const list=document.createElement('ul');list.className='voice-command-list';
    for(const command of commands.filter(command=>available(command.id))){const item=document.createElement('li'),name=document.createElement('strong'),detail=document.createElement('span');name.textContent=command.aliases?.join(' / ')||command.label;detail.textContent=grammar.descriptions[command.id]||'';item.append(name,detail);list.append(item);}
-   help.append(close,title,settings,list);help.showModal();
+   help.append(header,settings,list);help.showModal();
   }
   function available(id){
    if(['stop','help','pauseRec','resumeRec','selectChat'].includes(id))return true;
