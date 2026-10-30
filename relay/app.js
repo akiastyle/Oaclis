@@ -1,4 +1,4 @@
-// app.js v1.52.466
+// app.js v1.52.467
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -143,6 +143,7 @@ async function openConsole(chat){
    const output=consoleScreen(result.screen);
    const top=screen.scrollTop,left=screen.scrollLeft;
    OaclisTerminal.render(screen,output,result.screen_ansi);
+   if(completed.operation==='input'&&typeof completed.text==='string')reader?.defer(2000);
    reader?.update(result.speech,completed.speechGeneration);
    if(followOutput)screen.scrollTop=screen.scrollHeight;
    else {

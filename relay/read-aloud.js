@@ -1,4 +1,4 @@
-// read-aloud.js v1.17.169
+// read-aloud.js v1.18.189
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -18,31 +18,37 @@ window.OaclisReadAloud=(()=>{
  }
  const activityHeaders=new Set(['Running','Ran','Exploring','Explored','Calling','Called','Failed','Browsing the web','Searching the web','Searched the web','Opening','Opened','Opening page','Opened page','Searching for','Searched for','Searching page','Searched page','Added','Deleted','Edited','Failed to apply patch','Viewed image','Updated Plan']);
  let audio,desired=false;
- function feedback(mode){
+ function feedback(){
   try{
    const Audio=window.AudioContext||window.webkitAudioContext;if(!Audio)return;
    audio??=new Audio();audio.resume().catch(()=>{});
    const tone=audio.createOscillator(),gain=audio.createGain(),now=audio.currentTime;
-   tone.frequency.value=mode==='off'?440:mode==='pause'?660:880;
-   gain.gain.setValueAtTime(.55,now);gain.gain.setValueAtTime(.55,now+.07);gain.gain.exponentialRampToValueAtTime(.001,now+.12);
-   tone.connect(gain);gain.connect(audio.destination);tone.start();tone.stop(now+.13);tone.onended=()=>{tone.disconnect();gain.disconnect();};
+   tone.frequency.value=880;
+   gain.gain.setValueAtTime(.55,now);
+   tone.connect(gain);gain.connect(audio.destination);tone.start();tone.stop(now+.1);tone.onended=()=>{tone.disconnect();gain.disconnect();};
   }catch{}
  }
  function create(host,{pause=()=>{},resume=()=>{}}={}){
   const engine=window.speechSynthesis,button=document.createElement('button');
   button.type='button';button.className='read-aloud secondary';
   button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4zM16 8a6 6 0 0 1 0 8m2-11a10 10 0 0 1 0 14"/></svg>';
-  let enabled=false,cursor=null,queue=[],speaking=false,current=null,generation=0,disposed=false,currentItem=null,echoUntil=0;
+  let enabled=false,cursor=null,queue=[],speaking=false,current=null,generation=0,disposed=false,currentItem=null,echoUntil=0,quietUntil=0,playTimer=null;
   const items=new Map(),ignored=new Set();
   const paint=()=>{button.setAttribute('aria-pressed',String(enabled));button.title=OaclisSettings.text(enabled?(button.dataset.ready==='false'?'Lettura in collegamento':'Disattiva lettura'):'Attiva lettura');button.setAttribute('aria-label',button.title);};
   function play(){
    if(disposed||speaking||!enabled||!queue.length)return;
+   const wait=quietUntil-Date.now();
+   if(wait>0){if(!playTimer)playTimer=setTimeout(()=>{playTimer=null;play();},wait);return;}
    const {text,id}=queue.shift(),version=generation,utterance=new SpeechSynthesisUtterance(text);currentItem=id;
    utterance.lang=OaclisSettings.speechLanguage;speaking=true;current=utterance;pause();
    const done=()=>{if(version!==generation||disposed)return;speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;if(queue.length)play();else resume();};
    utterance.onend=done;utterance.onerror=()=>{if(version!==generation||disposed)return;stop();button.title=OaclisSettings.text('Lettura non disponibile');button.setAttribute('aria-label',button.title);};engine.speak(utterance);
   }
+  function defer(milliseconds=2000){
+   quietUntil=Date.now()+milliseconds;clearTimeout(playTimer);playTimer=null;play();
+  }
   function stop(preserve=false,silent=false){
+   clearTimeout(playTimer);playTimer=null;quietUntil=0;
    if(!preserve)desired=false;
    if(enabled&&!silent)feedback('off');
    generation++;enabled=false;cursor=null;queue=[];items.clear();ignored.clear();speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;
@@ -74,7 +80,7 @@ window.OaclisReadAloud=(()=>{
   }
   function update(data,version=generation){
    if(version!==generation||!enabled||!data||!Array.isArray(data.events))return;
-   if(data.reset){generation++;queue=[];items.clear();speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;engine.cancel();resume();}
+   if(data.reset){clearTimeout(playTimer);playTimer=null;generation++;queue=[];items.clear();speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;engine.cancel();resume();}
    let activity=cursor===null||data.reset?data.activity:null,activityId='working-status';
    for(const event of data.events){
     if(!Number.isSafeInteger(event.seq)||event.seq<0||typeof event.item!=='string'||(cursor!==null&&event.seq<=cursor))continue;
@@ -96,7 +102,7 @@ window.OaclisReadAloud=(()=>{
   button.onclick=()=>{if(enabled)stop();else enable();};
   if(!engine||!window.SpeechSynthesisUtterance){button.disabled=true;button.title=OaclisSettings.text('Lettura non disponibile');}else paint();
   const hidden=()=>{if(document.hidden)stop();};document.addEventListener('visibilitychange',hidden);host.append(button);if(desired)enable(true);
-  return {enable,disable:stop,skip,commandOnly:()=>speaking||Date.now()<echoUntil,stamp:()=>generation,request:()=>({speech:enabled,speech_cursor:cursor}),update,speaking:()=>speaking,stop,destroy:()=>{stop(true,true);disposed=true;document.removeEventListener('visibilitychange',hidden);button.remove();}};
+  return {enable,disable:stop,skip,defer,commandOnly:()=>speaking||Date.now()<echoUntil,stamp:()=>generation,request:()=>({speech:enabled,speech_cursor:cursor}),update,speaking:()=>speaking,stop,destroy:()=>{stop(true,true);disposed=true;document.removeEventListener('visibilitychange',hidden);button.remove();}};
  }
  return {create,spokenText,feedback};
 })();

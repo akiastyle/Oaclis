@@ -189,3 +189,7 @@ Sostituiscono le frecce su/giu e non modificano la bozza del messaggio.
 La dettatura riusa un solo riconoscitore tra le frasi e gli invii. A ogni fine
 ascolto scollega i gestori precedenti; i risultati gia elaborati sono segnati
 con un solo indice, senza conservare una lista crescente durante l’ascolto continuo.
+
+Il bip di conferma e unico, a volume fisso e senza sfumature. Dopo l’invio
+di un messaggio, la lettura attende due secondi prima della prima frase,
+lasciando disponibile il microfono per il comando pausa.
