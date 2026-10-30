@@ -1,4 +1,4 @@
-// voice.js v1.36.501
+// voice.js v1.37.522
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -29,7 +29,7 @@ window.OaclisVoice=(()=>{
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   // Android continuous mode promotes cumulative partial results to final results.
   const singleUtterance=navigator.userAgentData?.platform==='Android'||/Android/i.test(navigator.userAgent);
-  let adapter=null,recognition=null,retiring=null,generation=0,revision=0,target=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=false,paused=false,locked=false,state='idle',disposed=false,utteranceRevision=0;
+  let adapter=null,recognition=null,recorder=null,retiring=null,generation=0,revision=0,target=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=false,paused=false,locked=false,state='idle',disposed=false,utteranceRevision=0;
   let button,status,preview,options,help,root,autoSendTimer;
   const cancelAutoSend=()=>{clearTimeout(autoSendTimer);autoSendTimer=null;};
   function scheduleAutoSend(){
@@ -52,10 +52,13 @@ window.OaclisVoice=(()=>{
    button.setAttribute('aria-label',button.title);
   };
   const clearPending=()=>{clearTimeout(pendingTimer);pending=null;if(options){if(options.open)options.close();options.replaceChildren();}};
+  function releaseSession(session){
+   for(const name of ['onstart','onspeechstart','onspeechend','onresult','onerror','onend'])session[name]=null;
+  }
   const invalidate=()=>{
    clearTimeout(retryTimer);retryTimer=null;generation++;
    const old=recognition;recognition=null;
-   if(old){retiring=old;state='stopping';try{old.abort();}catch{retiring=null;}}
+   if(old){retiring=old;state='stopping';try{old.abort();}catch{releaseSession(old);recorder=null;retiring=null;}}
    if(preview)preview.textContent='';if(!retiring)state='idle';paint();
   };
   const stop=()=>{cancelAutoSend();if(wanted)window.OaclisReadAloud?.feedback('off');wanted=false;paused=false;retries=0;clearPending();invalidate();feedback('Ascolto disattivato');};
@@ -169,7 +172,7 @@ window.OaclisVoice=(()=>{
   }
   function start(){
    if(!Recognition||!window.isSecureContext||disposed||!wanted||document.hidden||blocked()||recognition||retiring)return;
-   clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=new Recognition(),consumed=new Set();let sessionError=null,commandsOnly=false;recognition=session;
+   clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=(recorder??=new Recognition());let consumed=-1,sessionError=null,commandsOnly=false;recognition=session;
    session.lang=locale.speechLanguage;session.continuous=!singleUtterance;session.interimResults=true;session.maxAlternatives=1;
    state='starting';paint();utteranceRevision=revision;
    const fresh=()=>!disposed&&recognition===session&&generation===current;
@@ -183,7 +186,7 @@ window.OaclisVoice=(()=>{
     for(let i=event.resultIndex;i<event.results.length;i++){
      if(!fresh()||blocked())break;
      const result=event.results[i];
-     if(result.isFinal){if(consumed.has(i))continue;consumed.add(i);retries=0;preview.textContent='';route(result[0].transcript,commandsOnly);}
+     if(result.isFinal){if(i<=consumed)continue;consumed=i;retries=0;preview.textContent='';route(result[0].transcript,commandsOnly);}
      else {cancelAutoSend();interim.push(result[0].transcript);}
     }
     if(fresh()){preview.textContent=paused||commandsOnly||adapter?.commandOnly?.()?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
@@ -198,14 +201,14 @@ window.OaclisVoice=(()=>{
     if(terminal){wanted=false;invalidate();state='error';paint();}
    };
    session.onend=()=>{
-    if(retiring===session){retiring=null;state='idle';paint();if(wanted&&!blocked()&&!disposed)retryTimer=setTimeout(()=>{retryTimer=null;start();},0);return;}
+    if(retiring===session){releaseSession(session);retiring=null;state='idle';paint();clearTimeout(retryTimer);retryTimer=null;if(wanted&&!document.hidden&&!blocked()&&!disposed)retryTimer=setTimeout(()=>{retryTimer=null;start();},0);return;}
     if(!fresh())return;
-    recognition=null;state='idle';preview.textContent='';paint();
+    releaseSession(session);recognition=null;state='idle';preview.textContent='';paint();
     const normalEnd=singleUtterance&&(!sessionError||sessionError==='no-speech');
-    if(normalEnd&&wanted&&!document.hidden&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},consumed.size?200:750);
+    if(normalEnd&&wanted&&!document.hidden&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},consumed>=0?200:750);
     else retry();
    };
-   try{session.start();}catch{if(fresh()){recognition=null;state='error';paint();feedback('Microfono non avviato.');retry();}}
+   try{session.start();}catch{if(fresh()){releaseSession(session);recognition=null;state='error';paint();feedback('Microfono non avviato.');retry();}}
   }
   function focus(event){
    if(valid(event.target)&&target!==event.target){
@@ -236,7 +239,7 @@ window.OaclisVoice=(()=>{
   }
   function leave(){cancelAutoSend();invalidate();clearPending();revision++;target=null;adapter=null;root=null;button=null;status=null;preview=null;options=null;help=null;}
   function ready(){if(adapter?.compose&&valid(adapter.compose)&&!target)target=adapter.compose;}
-  function destroy(){stop();disposed=true;leave();document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
+  function destroy(){stop();disposed=true;leave();recorder=null;document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
   document.addEventListener('focusin',focus);document.addEventListener('input',input);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',stop);
   return {bind,leave,ready,stop,destroy,showHelp,pause:()=>{cancelAutoSend();clearPending();invalidate();},resume:()=>{if(wanted&&!blocked()&&!retryTimer)start();}};
  }

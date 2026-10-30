@@ -183,3 +183,7 @@ Le bozze scritte soltanto da tastiera non vengono inviate automaticamente.
 Nella console mobile i pulsanti 1, 2 e 3 inviano direttamente il tasto numerico
 per scegliere una risposta, senza incollare testo o aggiungere Invio.
 Sostituiscono le frecce su/giu e non modificano la bozza del messaggio.
+
+La dettatura riusa un solo riconoscitore tra le frasi e gli invii. A ogni fine
+ascolto scollega i gestori precedenti; i risultati gia elaborati sono segnati
+con un solo indice, senza conservare una lista crescente durante l’ascolto continuo.
