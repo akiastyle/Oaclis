@@ -85,7 +85,7 @@
 - Calculate the displayed application version directly from maintained source headers at compilation, without a fixed baseline or offset.
 - X is the arithmetic mean of all included X values; Y is the mean of only positive Y values; Z is the mean of all included Z values, including zeros.
 - Round each mean to the nearest integer, with halves rounded up. Display vX.Y.Z in small absolute-positioned text at the bottom right of the page.
-- build.rs includes versioned source files in src, ui, tools, scripts, tests, and the root bootstrap/build scripts. File Versioning exclusions still apply; documents and binary assets are excluded. Standalone local tests and diagnostic scripts ignored by Git are excluded from both the application version and source fingerprint, so installed devices match the development build.
+- build.rs includes versioned source files in src, ui, relay (including PHP), tools, scripts, tests, and the root bootstrap/build scripts. Public MP3 assets participate in the source fingerprint, while binary assets remain excluded from the version means. File Versioning exclusions still apply; documents and binary assets are excluded. Standalone local tests and diagnostic scripts ignored by Git are excluded from both the application version and source fingerprint, so installed devices match the development build.
 - This calculated display does not change Cargo package versions, individual file counters, or asset cache URLs.
 
 ## Presentation Deletion

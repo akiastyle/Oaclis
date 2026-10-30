@@ -1,4 +1,4 @@
-// build.rs v1.3.83
+// build.rs v1.3.89
 use std::{env, fs, path::Path, process::Command};
 use sha2::{Digest, Sha256};
 
@@ -14,12 +14,12 @@ fn collect(path: &Path, root: &Path, versions: &mut Vec<[u64; 3]>, digest: &mut 
         return;
     }
     let extension = path.extension().and_then(|value| value.to_str()).unwrap_or("");
-    if matches!(extension, "rs" | "py" | "js" | "cjs" | "html" | "css" | "sh" | "ps1" | "svg" | "png" | "ttf") {
+    if matches!(extension, "rs" | "py" | "js" | "cjs" | "html" | "css" | "sh" | "ps1" | "svg" | "png" | "ttf" | "php" | "mp3") {
         let bytes = fs::read(path).unwrap();
         digest.update(path.strip_prefix(root).unwrap().to_string_lossy().as_bytes());
         digest.update([0]); digest.update((bytes.len() as u64).to_be_bytes()); digest.update(&bytes);
     }
-    if !matches!(extension, "rs" | "py" | "js" | "cjs" | "html" | "css" | "sh" | "ps1") { return; }
+    if !matches!(extension, "rs" | "py" | "js" | "cjs" | "html" | "css" | "sh" | "ps1" | "php") { return; }
     let source = fs::read_to_string(path).unwrap();
     let marker = format!("{} v", path.file_name().unwrap().to_str().unwrap());
     for line in source.lines().take(3) {
@@ -50,7 +50,7 @@ fn main() {
     if root.join("src/state_tests.rs").is_file() { println!("cargo:rustc-cfg=oaclis_local_tests"); }
     let mut versions = Vec::new();
     let mut digest = Sha256::new();
-    for name in ["src", "ui", "tools", "scripts", "run.sh", "run.ps1", "build.rs"] {
+    for name in ["src", "ui", "relay", "tools", "scripts", "run.sh", "run.ps1", "build.rs"] {
         collect(&root.join(name), root, &mut versions, &mut digest);
     }
     for name in ["Cargo.toml", "Cargo.lock"] {
