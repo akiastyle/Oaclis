@@ -212,3 +212,9 @@ I comandi «affianca 3 / affianca nome» e «attiva sopra / attiva sotto» riusa
 vocabolario IT/EN. «Cambia» sostituisce la chat attiva o seleziona quella già visibile.
 Le due viste condividono una coda di richieste firmate: non vengono creati canali
 concorrenti né modificati abbinamenti o autorizzazioni sul relay.
+
+La lista delle chat mostra la release autonoma della PWA (`PWA_RELEASE` in
+`app.js`), incrementata a ogni blocco pubblicato che modifica la parte mobile.
+I contatori dei file web restano inclusi nella versione generale del master.
+La release mostrata identifica il codice caricato: per caricare una nuova
+release occorre ricaricare la pagina.

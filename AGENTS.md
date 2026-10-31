@@ -104,3 +104,5 @@
 ## Unified Device Status
 - Carry app availability, installed build, keep-awake state and app update progress in the existing approved SSH settings exchange. Treat this as runtime telemetry, not replicated preferences.
 - Use this same snapshot in the UI, with a 30-second freshness limit. Do not create independent automatic SSH checks on hover or update-monitoring timers, or rely on LAN announcements for build comparison.
+
+- The PWA has its own public release in `PWA_RELEASE` in `relay/app.js`, shown only in the authorized chat list. Increment its patch once per completed published block affecting the PWA, including shared web assets. Never copy the master's averaged version into this label. All PWA source headers still contribute to the general master calculation unchanged.
