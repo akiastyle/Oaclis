@@ -1,4 +1,4 @@
-// voice-local.js v1.15.26
+// voice-local.js v1.15.30
 'use strict';
 window.OaclisLocalVoice=(()=>{
  const host=document.createElement('span');host.id='local-voice-controls';document.querySelector('.toolbar').append(host);
@@ -21,7 +21,7 @@ window.OaclisLocalVoice=(()=>{
  info.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v2"/></svg>';info.onclick=()=>voice.showHelp();host.append(info);
  document.addEventListener('focusin',event=>{const panel=event.target.closest('.chat-terminal');if(panel?.voiceAdapter)bind(panel);else if(event.target.id==='search')bind(null);},true);
  bind(null);
- return {activate:bind,library:()=>bind(null),close:panel=>{if(panel===active)bind(null);},request:panel=>panel===active?reader?.request()||{}:{},stamp:panel=>panel===active?reader?.stamp():undefined,
-  update:(panel,result,stamp,input)=>{if(panel===active){if(input)reader?.defer(2000);reader?.update(result.speech,stamp);}},sent:panel=>{if(panel===active)voice.afterSend();},
+ return {activate:bind,library:()=>bind(null),close:panel=>{if(panel===active)bind(null);},request:panel=>panel===active?reader?.request()||{}:{},stamp:panel=>panel===active&&reader?{reader,generation:reader.stamp()}:null,
+  update:(panel,result,stamp,input)=>{if(panel===active&&stamp?.reader===reader){if(input)reader.defer(2000);reader.update(result.speech,stamp.generation);}},sent:panel=>{if(panel===active)voice.afterSend();},
  };
 })();
