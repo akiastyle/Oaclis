@@ -689,3 +689,22 @@ Il relay mobile è isolato su `https://oaclis.krprojects.it/`, con RP ID dedicat
 Per applicare le restrizioni alle sole chiavi SSH Oaclis già approvate, senza modificare o riavviare il servizio: `oaclis prepare-service --keys-only`. Prima installare la build compatibile; le chiavi personali restano invariate.
 
 Il master locale si apre direttamente da `http://localhost:23232/`, senza token o sessione locale. Le API accettano solo connessioni loopback con Host locale e usano esclusivamente POST, anche per stato, statistiche e log, con i parametri nel corpo JSON. I processi locali sono considerati attendibili. Passkey, firme e autorizzazioni del relay remoto restano separate.
+
+## Attese e concorrenza del runtime
+
+Lo stato derivato per la UI riusa lo snapshot in memoria finché i dati o la
+mappatura dei device non cambiano. Le analisi manuali e automatiche condividono
+la prenotazione dei due posti disponibili; la stessa chat non viene analizzata
+due volte in parallelo.
+
+Percorsi e app partono in parallelo. Un indicatore temporaneo nella directory
+degli ambienti comunica all'installer quando i percorsi terminano o falliscono;
+è rimosso alla fine del lavoro. I client precedenti restano compatibili, ma
+ricevono questa gestione delle attese soltanto dopo l'aggiornamento esplicito.
+Un errore nel salvataggio finale non viene mostrato come trasferimento completato.
+
+L'attivazione del blocco standby attende fuori dal lock dello stato del device.
+Le richieste SSH hanno un limite complessivo: 60 secondi per i comandi ordinari,
+240 secondi per l'analisi dell'ambiente e 2 ore per l'installazione delle app.
+Le scadenze interrompono il gruppo del processo SSH locale; non costituiscono
+un annullamento transazionale di eventuali installazioni già avviate sul device.

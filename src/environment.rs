@@ -1,4 +1,4 @@
-// environment.rs v1.21.726
+// environment.rs v1.21.729
 //! Chat environment analysis and destination preparation, independent of the UI.
 use crate::{
     devices::{self, Device},
@@ -228,6 +228,7 @@ pub(crate) fn request(device: Option<&Device>, operation: &str, value: Value) ->
 fn native(request:&Value)->io::Result<Value>{
     let value=&request["value"];
     match request["operation"].as_str(){
+        Some("paths-status")=>crate::app_install::paths_status(value),
         Some("identity")=>crate::environment_setup::identity(),
         Some("verify")=>{let items:Vec<Fingerprint>=serde_json::from_value(value.clone()).map_err(io::Error::other)?;Ok(json!({"fresh":crate::environment_setup::fresh(&items)?}))},
         Some("analyze")=>serde_json::to_value(crate::environment_analysis::analyze(Path::new(value["path"].as_str().ok_or_else(||invalid("Archivio richiesto"))?),value["chat_id"].as_str().ok_or_else(||invalid("Chat richiesta"))?)?).map_err(io::Error::other),
@@ -408,7 +409,7 @@ pub fn execute(
             if content.len() > 131072 { return Err(invalid("Configurazione troppo grande")); }
             configs.push(json!({"path":config.path,"service":config.service,"modules":config.modules,"content":content}));
         }
-        let definition = json!({"paths":manifest.paths,"wait_for_paths":inventory["paths_pending"]==true,"requirements":inventory["requirements"],"configs":configs,"plugins":manifest.plugins});
+        let definition = json!({"paths":manifest.paths,"wait_for_paths":inventory["paths_pending"]==true,"paths_status":inventory["paths_status"],"requirements":inventory["requirements"],"configs":configs,"plugins":manifest.plugins});
         let directory = target_home.join(".config/oaclis/environments");
         let target = directory.join(format!("{}.json",state.file_name().and_then(|v|v.to_str()).ok_or_else(||invalid("Identificativo ambiente assente"))?));
         if incoming {

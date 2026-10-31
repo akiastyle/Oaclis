@@ -1,4 +1,4 @@
-// transfer_job.rs v2.28.1606
+// transfer_job.rs v2.30.1667
 //! Executes an authorized transfer; independent of routes and scheduling.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid,rules};
 use serde_json::{Value,json};
@@ -31,6 +31,25 @@ fn begin(config: &Path, key: Option<&str>, job: &Mutex<Value>, pending: Value) -
         }
     }
     Ok(())
+}
+
+fn finish(config: &Path, transfer_key: Option<&str>, flow_key: Option<&str>, generation: &Value, finished: &mut Value) {
+    let result=(|| -> io::Result<()> {
+        if let Some(key)=transfer_key { environment::database(config,key,"transfer-save",Some(finished))?; }
+        if let Some(key)=flow_key { crate::link_flow::finish(config,key,generation,finished["status"]=="completed",finished["message"].as_str().unwrap_or("Trasferimento non completato"))?; }
+        Ok(())
+    })();
+    if let Err(error)=result {
+        crate::state_transport::log(format!("TRANSFER FINAL SAVE FAILED {error}"));
+        finished["status"]=json!("failed");
+        finished["message"]=json!("Esito del trasferimento non salvato. Dettagli nel log.");
+        if let Some(key)=transfer_key {
+            if let Err(error)=environment::database(config,key,"transfer-save",Some(finished)) {crate::state_transport::log(format!("TRANSFER SAVE RETRY FAILED {error}"));}
+        }
+        if let Some(key)=flow_key {
+            if let Err(error)=crate::link_flow::finish(config,key,generation,false,finished["message"].as_str().unwrap()) {crate::state_transport::log(format!("TRANSFER FLOW SAVE FAILED {error}"));}
+        }
+    }
 }
 
 pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value>>) -> io::Result<Value> {
@@ -211,6 +230,16 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                 fs::create_dir_all(&state)?;
                 let mut installation_inventory=app_inventory.clone();
                 installation_inventory["paths_pending"]=json!(scopes.paths);
+                let path_status=format!("environment-{}-{}-apps",device.id,chat["id"].as_str().unwrap());
+                let target=if incoming {None} else {Some(&device)};
+                if scopes.paths && scopes.apps {
+                    match environment::request(target,"paths-status",json!({"id":path_status,"status":"pending"})) {
+                        Ok(_) => installation_inventory["paths_status"]=json!(path_status),
+                        // Older clients keep their existing installer until explicitly updated.
+                        Err(error) if error.to_string().contains("Operazione ambiente non valida") => crate::state_transport::log("PATH STATUS unavailable on installed client".into()),
+                        Err(error) => return Err(error),
+                    }
+                }
                 thread::scope(|scope| -> io::Result<Value> {
                 let mut workers = Vec::new();
                 for (module, enabled) in [("paths",scopes.paths),("apps",scopes.apps)] {
@@ -222,15 +251,21 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                     let state = &state;
                     let chat = &chat;
                     let job = &job;
+                    let path_status = &path_status;
                     workers.push((module, scope.spawn(move || -> io::Result<Value> {
                         let selected = environment::Scopes {chat:false,paths:module=="paths",apps:module=="apps"};
-                        let result = environment::execute(
+                        let mut result = environment::execute(
                             device,manifest.as_ref().unwrap(),app_inventory,selected,incoming,
                             v["operation"].as_str().unwrap_or("copy"),
                             &state.join(format!("environment-{}-{}{}",device.id,chat["id"].as_str().unwrap(),if module == "apps" { "-apps" } else { "" })),
                             |target,path| crate::path_access::ensure(target,path,job),
                             |progress| module_event(job,module,progress),
                         );
+                        if module=="paths" && app_inventory["paths_status"].is_string() {
+                            if let Err(error)=environment::request(if incoming {None} else {Some(device)},"paths-status",json!({"id":path_status,"status":if result.is_ok(){"completed"}else{"failed"}})) {
+                                if result.is_ok() {result=Err(error);} else {crate::state_transport::log(format!("PATH STATUS FAILED {error}"));}
+                            }
+                        }
                         match &result {
                             Ok(_) => module_event(job,module,json!({"event":{"phase":"completed"}})),
                             Err(error) => job.lock().unwrap()["module_progress"][module]["error"] = json!(error.to_string()),
@@ -314,6 +349,9 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                         Err(error) => errors.push(format!("{module}: {error}")),
                     }
                 }
+                if installation_inventory["paths_status"].is_string() {
+                    if let Err(error)=environment::request(target,"paths-status",json!({"id":path_status,"status":"remove"})) {crate::state_transport::log(format!("PATH STATUS CLEANUP FAILED {error}"));}
+                }
                 if errors.is_empty() { Ok(results) } else { Err(io::Error::other(errors.join("; "))) }
                 })
             }
@@ -330,8 +368,7 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
             }
         }
         if crate::automation::conflict(&finished["results"]) {finished["status"]=json!("failed");finished["message"]=json!("Copie divergenti: nessuna sovrascrittura");}
-        if let Some(key) = &transfer_key { let _ = environment::database(&transfer_config, key, "transfer-save", Some(&finished)); }
-        if let Some(key) = &flow_key { let _ = crate::link_flow::finish(&transfer_config,key,&flow_generation,finished["status"]=="completed",finished["message"].as_str().unwrap_or("Trasferimento non completato")); }
+        finish(&transfer_config,transfer_key.as_deref(),flow_key.as_deref(),&flow_generation,&mut finished);
         *job.lock().unwrap() = finished;
     });
     Ok(json!({"ok":true}))
@@ -407,4 +444,22 @@ mod tests {
         fs::remove_dir_all(path).unwrap();
     }
 
+}
+
+#[cfg(test)]
+mod optimization_tests {
+    use super::*;
+    #[test]
+    fn failed_final_save_never_reports_completion_or_discards_transfer_results() {
+        let root=std::env::temp_dir().join(format!("oaclis-finish-failure-{}",std::process::id()));
+        environment::database(&root,"","migrate",None).unwrap();
+        fs::remove_file(root.join("transfers.json")).unwrap();
+        fs::create_dir(root.join("transfers.json")).unwrap();
+        let mut result=json!({"status":"completed","results":{"paths":"transferred"}});
+        finish(&root,Some("master:fixture"),None,&Value::Null,&mut result);
+        assert_eq!(result["status"],"failed");
+        assert_eq!(result["results"]["paths"],"transferred");
+        assert!(result["message"].as_str().unwrap().contains("non salvato"));
+        fs::remove_dir_all(root).unwrap();
+    }
 }

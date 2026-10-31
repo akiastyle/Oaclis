@@ -1,4 +1,4 @@
-// app_install.rs v1.33.891
+// app_install.rs v1.35.939
 //! Install the dependencies described by an explicitly transferred environment definition.
 use crate::{environment_setup as setup, invalid};
 use serde_json::{Value,json};
@@ -52,15 +52,31 @@ fn command_version(path: &Path, node_bin: Option<&Path>) -> io::Result<String> {
     if let Some(bin)=node_bin {command.env("PATH",format!("{}:{}",bin.display(),std::env::var("PATH").unwrap_or_default()));}
     Ok(crate::app_update::run(&mut command,Duration::from_secs(15))?.trim().trim_start_matches('v').to_owned())
 }
+pub(crate) fn paths_status(value: &Value) -> io::Result<Value> {
+    let id=value["id"].as_str().filter(|id|id.len()<=240 && crate::devices::identifier(id)).ok_or_else(||invalid("Identificativo ambiente non valido"))?;
+    let status=value["status"].as_str().filter(|status|matches!(*status,"pending"|"completed"|"failed"|"remove")).ok_or_else(||invalid("Stato percorsi non valido"))?;
+    let directory=setup::home()?.join(".config/oaclis/environments");
+    crate::rules::ensure_local(&directory)?;
+    let path=directory.join(format!("{id}.paths.json"));
+    if status=="remove" {
+        match fs::remove_file(path) { Ok(())=>{},Err(error) if error.kind()==io::ErrorKind::NotFound=>{},Err(error)=>return Err(error) }
+    } else { crate::staging::save_json(&path,&json!({"status":status}))?; }
+    Ok(json!({"ok":true}))
+}
 fn manifest_ready(definition: &Value, item: &Value, done: usize, total: usize, notify: &mut impl FnMut(Value)) -> io::Result<()> {
     let manifest=Path::new(item["evidence"].as_str().unwrap());
     let deadline=Instant::now()+Duration::from_secs(1800);let mut waiting=false;
     loop {
+        let status = if let Some(id)=definition["paths_status"].as_str() {
+            if id.len()>240 || !crate::devices::identifier(id) { return Err(invalid("Identificativo ambiente non valido")); }
+            crate::state_store::read_json(&setup::home()?.join(".config/oaclis/environments").join(format!("{id}.paths.json")),Value::Null)?
+        } else { Value::Null };
+        if status["status"]=="failed" { return Err(invalid("Trasferimento dei percorsi non riuscito: installazione interrotta")); }
         if setup::regular(manifest) && setup::regular(&manifest.with_file_name("package-lock.json")) {
             let lock:Value=serde_json::from_slice(&fs::read(manifest.with_file_name("package-lock.json"))?)?;
             if lock["packages"][format!("node_modules/{}",item["name"].as_str().unwrap())]["version"]==item["version"] {return Ok(());}
         }
-        if definition["wait_for_paths"]!=true || Instant::now()>=deadline {return Err(invalid("Manifest o lock del progetto non disponibili nella versione richiesta"));}
+        if status["status"]=="completed" || definition["wait_for_paths"]!=true || Instant::now()>=deadline {return Err(invalid("Manifest o lock del progetto non disponibili nella versione richiesta"));}
         if !waiting {emit(notify,done,total,format!("APP WAIT MANIFEST {}",manifest.display()));waiting=true;}
         std::thread::sleep(Duration::from_millis(250));
     }
@@ -185,5 +201,35 @@ printf '{"version":"1.2.3"}' > node_modules/test-library/package.json
         invalid=definition.clone();invalid["requirements"][0]["evidence"]=json!(project.join("../elsewhere/package.json"));assert!(validate(&invalid).is_err());
         invalid=definition.clone();invalid["requirements"][0]["kind"]=json!("python");assert!(validate(&invalid).is_err());
         fs::remove_dir_all(home).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod optimization_tests {
+    use super::*;
+    #[test]
+    fn failed_paths_stop_manifest_wait() {
+        if std::env::var_os("OACLIS_WAIT_FIXTURE").is_some() {
+            let home=setup::home().unwrap();
+            let id="fixture-wait";
+            paths_status(&json!({"id":id,"status":"pending"})).unwrap();
+            let writer=std::thread::spawn(move||{std::thread::sleep(Duration::from_millis(50));paths_status(&json!({"id":id,"status":"failed"})).unwrap();});
+            let item=json!({"name":"test","version":"1.0.0","evidence":home.join("project/package.json")});
+            let started=Instant::now();
+            let error=manifest_ready(&json!({"wait_for_paths":true,"paths_status":id}),&item,0,1,&mut |_|{}).unwrap_err();
+            writer.join().unwrap();
+            assert!(error.to_string().contains("percorsi non riuscito"));
+            assert!(started.elapsed()<Duration::from_secs(15));
+            paths_status(&json!({"id":id,"status":"completed"})).unwrap();
+            assert!(manifest_ready(&json!({"wait_for_paths":true,"paths_status":id}),&item,0,1,&mut |_|{}).is_err());
+            paths_status(&json!({"id":id,"status":"remove"})).unwrap();
+            assert!(!home.join(".config/oaclis/environments/fixture-wait.paths.json").exists());
+            return;
+        }
+        let root=std::env::temp_dir().join(format!("oaclis-path-wait-{}",std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let result=crate::app_update::run(Command::new(std::env::current_exe().unwrap()).args(["--exact","app_install::optimization_tests::failed_paths_stop_manifest_wait","--nocapture"]).env("HOME",&root).env("OACLIS_WAIT_FIXTURE","1"),Duration::from_secs(20));
+        fs::remove_dir_all(root).unwrap();
+        result.unwrap();
     }
 }

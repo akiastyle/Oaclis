@@ -1,4 +1,4 @@
-// state_store.rs v2.37.1309
+// state_store.rs v2.38.1362
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -53,9 +53,15 @@ impl Default for State {
         }
     }
 }
+struct StatusCache {
+    state: Arc<State>,
+    mapping: Vec<(u64, Option<std::time::SystemTime>)>,
+    value: Value,
+}
 pub(crate) struct Store {
     state: RwLock<Arc<State>>,
     writer: Mutex<()>,
+    status: Mutex<Option<StatusCache>>,
     pub shared_lock: Mutex<()>,
     persisted: AtomicBool,
     _lock: File,
@@ -129,6 +135,7 @@ pub(crate) fn store(config: &Path) -> io::Result<Arc<Store>> {
     let result = Arc::new(Store {
         state: RwLock::new(Arc::new(state)),
         writer: Mutex::new(()),
+        status: Mutex::new(None),
         shared_lock: Mutex::new(()),
         persisted: AtomicBool::new(native),
         _lock: lock,
@@ -204,7 +211,8 @@ pub(crate) fn change_with_files<T>(
     let mut files = json!({});
     let result = action(&mut next, &mut files)?;
     crate::chat_deletion::purge(&mut next,&mut files);
-    if next != *current
+    let state_changed = next != *current;
+    if state_changed
         || !files.as_object().unwrap().is_empty()
         || !store.persisted.load(Ordering::Relaxed)
     {
@@ -216,10 +224,9 @@ pub(crate) fn change_with_files<T>(
             !store.persisted.load(Ordering::Relaxed),
             files,
         )?;
-        *store
-            .state
-            .write()
-            .map_err(|_| io::Error::other("Stato non disponibile"))? = Arc::new(next);
+        if state_changed {
+            *store.state.write().map_err(|_| io::Error::other("Stato non disponibile"))? = Arc::new(next);
+        }
         store.persisted.store(true, Ordering::Relaxed);
     }
     Ok(result)
@@ -653,6 +660,19 @@ pub fn database(
     ];
     if reads.contains(&operation) {
         let state = snapshot(config)?;
+        if operation == "status-read" {
+            let store = store(config)?;
+            let mapping = ["pairing.json", "pairing_ed25519.pub"].into_iter().map(|name|
+                std::fs::metadata(config.join(name)).map(|m|(m.len(),m.modified().ok())).unwrap_or_default()
+            ).collect::<Vec<_>>();
+            let mut cache = store.status.lock().map_err(|_|io::Error::other("Stato non disponibile"))?;
+            if let Some(saved) = cache.as_ref().filter(|saved|Arc::ptr_eq(&saved.state,&state) && saved.mapping == mapping) {
+                return Ok(saved.value.clone());
+            }
+            let value = read_operation(config, &state, key, operation)?;
+            *cache = Some(StatusCache { state, mapping, value: value.clone() });
+            return Ok(value);
+        }
         read_operation(config, &state, key, operation)
     } else {
         change(config, |state| {
@@ -680,6 +700,29 @@ mod console_access_tests {
         assert_eq!(persisted["chat:abc"]["sync"]["console_access"],"full");
         assert!(database(&root,"abc","console-access",Some(&json!("bogus"))).is_err());
         assert_eq!(snapshot(&root).unwrap().appearance["chat:abc"].sync["console_access"],"full");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod optimization_tests {
+    use super::*;
+    #[test]
+    fn status_cache_reuses_snapshots_and_invalidates_after_a_change() {
+        let root=std::env::temp_dir().join(format!("oaclis-status-cache-{}",std::process::id()));
+        database(&root,"","migrate",None).unwrap();
+        let first=snapshot(&root).unwrap();
+        let before=database(&root,"","status-read",None).unwrap();
+        change(&root,|_|Ok(())).unwrap();
+        assert!(Arc::ptr_eq(&first,&snapshot(&root).unwrap()));
+        assert_eq!(before,database(&root,"","status-read",None).unwrap());
+        assert!(Arc::ptr_eq(&store(&root).unwrap().status.lock().unwrap().as_ref().unwrap().state,&first));
+        database(&root,"chat","console-access",Some(&json!("full"))).unwrap();
+        let after=database(&root,"","status-read",None).unwrap();
+        assert_eq!(after["preferences"]["chat"]["console_access"],"full");
+        assert!(!Arc::ptr_eq(&store(&root).unwrap().status.lock().unwrap().as_ref().unwrap().state,&first));
+        std::fs::write(root.join("pairing.json"),"invalid mapping").unwrap();
+        assert!(database(&root,"","status-read",None).is_err());
         std::fs::remove_dir_all(root).unwrap();
     }
 }

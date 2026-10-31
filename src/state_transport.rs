@@ -1,4 +1,4 @@
-// state_transport.rs v1.17.296
+// state_transport.rs v1.17.310
 //! A local Unix socket forwards approved SSH requests into the running Rust app.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -78,15 +78,25 @@ pub(crate) fn remote_progress(device: &Device, value: &Value, notify: &mut impl 
     device.validate()?;
     log_request("SEND", &device.ssh_alias, value);
     let mut errors=crate::staging::StagedFile::new(&std::env::temp_dir())?;
-    let mut child = Command::new("ssh")
+    use std::os::unix::process::CommandExt;
+    let mut child = Command::new("ssh").process_group(0)
         .args(crate::ssh::OPTIONS.split_whitespace().skip(1))
         .arg(&device.ssh_alias)
         .arg(if value["kind"]=="environment" {"$HOME/.local/bin/oaclis environment-request"} else {"$HOME/.local/bin/oaclis state-request"})
         .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(errors.file.try_clone()?).spawn()?;
+    let seconds=match (value["kind"].as_str(),value["operation"].as_str()) {
+        (Some("environment"),Some("install"))=>7200,
+        (Some("environment"),Some("analyze"))=>240,
+        _=>60,
+    };
+    let (done,timer)=crate::ssh::deadline(child.id(),Duration::from_secs(seconds));
     if let Err(error)=child.stdin.take().unwrap().write_all(&serde_json::to_vec(value)?) {let _=child.kill();let _=child.wait();return Err(error);}
     let result=read_response(BufReader::new(child.stdout.take().unwrap()),value["kind"]=="environment" && value["operation"]=="install",notify);
     if result.is_err() {let _=child.kill();}
-    let status=child.wait()?;
+    let status=child.wait();
+    let _=done.send(());
+    if timer.join().unwrap_or(true) { return Err(io::Error::new(io::ErrorKind::TimedOut,"Tempo massimo della richiesta remota superato")); }
+    let status=status?;
     log(format!("RECV {} {}", device.ssh_alias, status));
     if !status.success() {
         use std::io::{Seek,SeekFrom};

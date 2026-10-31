@@ -1,8 +1,16 @@
-// initial_inventory.rs v2.22.1224
+// initial_inventory.rs v2.24.1275
 //! One initial inventory per local chat; saved results remain cached.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid};
 use serde_json::{Value,json};
 use std::{fs,io,path::{Path,PathBuf},sync::{Arc,Mutex},thread};
+
+fn reserve(active: &Mutex<std::collections::HashSet<String>>, key: &str) -> io::Result<bool> {
+    let mut running=active.lock().unwrap();
+    if running.contains(key) { return Ok(false); }
+    if running.len()>=2 { return Err(invalid("Analisi già in corso; riprova tra poco")); }
+    running.insert(key.to_owned());
+    Ok(true)
+}
 
 // Each device analyzes its own archives serially; unchanged failures are not retried.
 pub(crate) fn start(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::collections::HashSet<String>>>) {
@@ -26,10 +34,7 @@ pub(crate) fn start(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::coll
                     }
                     continue;
                 }
-                {
-                    let mut running = active.lock().unwrap();
-                    if running.len() >= 2 || !running.insert(key.clone()) { continue; }
-                }
+                if !matches!(reserve(&active,&key),Ok(true)) { continue; }
                 let _ = environment::database(&config, &key, "analysis-save", Some(&json!({"status":"pending", "revision":revision})));
                 let result = match environment::analyze(None, chat["path"].as_str().unwrap_or(""), id) {
                     Ok(manifest) => {
@@ -76,29 +81,18 @@ pub(crate) fn request(config: &Path, codex: &Path, analyses: &Arc<Mutex<std::col
         .ok_or_else(|| invalid("Chat non trovata"))?;
     let revision = environment::revision(chat, device.as_ref());
     let cached = environment::database(&config, &key, "analysis-get", None)?;
-    if analyses.lock().unwrap().contains(&key) {
-        return Ok(cached);
-    }
     if matches!(cached["status"].as_str(), Some("ready" | "failed")) && v["force"] != true {
         return Ok(cached);
     }
-    if analyses.lock().unwrap().len() >= 2 {
-        return Err(invalid("Analisi già in corso; riprova tra poco"));
-    }
-    let pending = environment::database(
-        &config,
-        &key,
-        "analysis-save",
-        Some(&json!({"status":"pending","revision":revision})),
-    )?;
-    analyses.lock().unwrap().insert(key.clone());
+    let path = chat["path"].as_str().ok_or_else(||invalid("Archivio chat mancante"))?.to_owned();
+    if !reserve(analyses,&key)? { return environment::database(config,&key,"analysis-get",None); }
+    let pending = match environment::database(config,&key,"analysis-save",Some(&json!({"status":"pending","revision":revision}))) {
+        Ok(value) => value,
+        Err(error) => { analyses.lock().unwrap().remove(&key); return Err(error); }
+    };
     let active = analyses.clone();
     let config = config.to_path_buf();
     let chat_id = chat_id.to_owned();
-    let path = chat["path"]
-        .as_str()
-        .ok_or_else(|| invalid("Archivio chat mancante"))?
-        .to_owned();
     thread::spawn(move || {
         let result = match environment::analyze(device.as_ref(), &path, &chat_id) {
             Ok(manifest) => {
@@ -119,4 +113,19 @@ pub(crate) fn request(config: &Path, codex: &Path, analyses: &Arc<Mutex<std::col
         active.lock().unwrap().remove(&key);
     });
     Ok(pending)
+}
+
+#[cfg(test)]
+mod optimization_tests {
+    use super::*;
+    #[test]
+    fn simultaneous_requests_reserve_once_and_respect_capacity() {
+        let active=Arc::new(Mutex::new(std::collections::HashSet::new()));
+        let gate=Arc::new(std::sync::Barrier::new(12));
+        let workers:Vec<_>=(0..12).map(|_|{let active=active.clone();let gate=gate.clone();thread::spawn(move||{gate.wait();reserve(&active,"same").unwrap()})}).collect();
+        assert_eq!(workers.into_iter().filter_map(|worker|worker.join().unwrap().then_some(())).count(),1);
+        assert!(reserve(&active,"second").unwrap());
+        assert!(reserve(&active,"third").is_err());
+        assert_eq!(active.lock().unwrap().len(),2);
+    }
 }

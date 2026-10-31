@@ -1,4 +1,4 @@
-// device_runtime.rs v1.17.323
+// device_runtime.rs v1.22.407
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
@@ -32,16 +32,17 @@ pub(crate) struct Runtime {
     config: PathBuf,
     error: Option<String>,
     restarting: bool,
+    awake_pending: Option<bool>,
     desktop: std::sync::Arc<std::sync::Mutex<Value>>,
     update: std::sync::Arc<std::sync::Mutex<Value>>,
 }
 impl Runtime {
     pub(crate) fn new(config: &Path) -> Self {
-        let mut state = Self { child: None, config: config.into(), error: None, restarting: false, desktop: Default::default(), update: Default::default() };
+        let mut state = Self { child: None, config: config.into(), error: None, restarting: false, awake_pending: None, desktop: Default::default(), update: Default::default() };
         let desktop = state.desktop.clone();
         thread::spawn(move || { *desktop.lock().unwrap() = crate::remote_desktop::discover(); });
         if fs::read_to_string(config.join("keep-awake.json")).ok().is_some_and(|s| s.trim() == "true") {
-            if let Err(error) = state.enable() { state.error = Some(error.to_string()); }
+            match Self::start_inhibitor() { Ok(child)=>state.child=Some(child), Err(error)=>state.error=Some(error.to_string()) }
         }
         state
     }
@@ -50,9 +51,9 @@ impl Runtime {
             self.child.take();
             self.error = Some("Il blocco standby non è più attivo".into());
         }
-        json!({"available":true,"observed_at":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,"active":self.child.is_some(),"error":self.error,"restarting":self.restarting,"build":build(),"desktop":*self.desktop.lock().unwrap(),"update":*self.update.lock().unwrap()})
+        json!({"available":true,"observed_at":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,"active":self.awake_pending.unwrap_or(self.child.is_some()),"error":self.error,"restarting":self.restarting,"build":build(),"desktop":*self.desktop.lock().unwrap(),"update":*self.update.lock().unwrap()})
     }
-    fn enable(&mut self) -> io::Result<()> {
+    fn start_inhibitor() -> io::Result<Child> {
         let mut child = Command::new(executable_path(std::env::current_exe()?)?).arg("keep-awake-hold")
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn()?;
         let mut output = String::new();
@@ -71,18 +72,16 @@ impl Runtime {
             let _ = child.kill(); let _ = child.wait();
             return Err(invalid(result["error"].as_str().unwrap_or("Blocco standby non disponibile")));
         }
-        self.child = Some(child); self.error = None;
-        Ok(())
+        Ok(child)
     }
     fn stop(&mut self) {
-        if let Some(mut child) = self.child.take() {
-            child.stdin.take();
-            let _ = child.wait();
+        if let Some(child) = self.child.take() {
+            stop_inhibitor(child);
         }
     }
     pub(crate) fn start_update(&mut self, revision: &str, job: std::sync::Arc<std::sync::Mutex<Value>>) -> io::Result<Value> {
         if revision.len() != 40 || !revision.bytes().all(|byte|byte.is_ascii_hexdigit()) { return Err(invalid("Revisione master non disponibile")); }
-        if self.restarting || self.update.lock().unwrap()["status"] == "running" { return Err(invalid("Aggiornamento o riavvio già in corso")); }
+        if self.awake_pending.is_some() || self.restarting || self.update.lock().unwrap()["status"] == "running" { return Err(invalid("Aggiornamento o riavvio già in corso")); }
         let executable = executable_path(std::env::current_exe()?)?;
         let revision = revision.to_owned();
         let state = self.update.clone();
@@ -111,12 +110,6 @@ impl Runtime {
     pub(crate) fn action(&mut self, action: &str) -> io::Result<Value> {
         match action {
             "status" => {},
-            "toggle-awake" => {
-                self.status();
-                if self.child.is_some() { self.stop(); self.error = None; }
-                else if let Err(error) = self.enable() { self.error = Some(error.to_string()); return Err(error); }
-                crate::staging::save_json(&self.config.join("keep-awake.json"), &self.child.is_some())?;
-            },
             "restart" => {
                 #[cfg(not(unix))]
                 return Err(invalid("Riavvio dell'app non supportato in questo ambiente"));
@@ -136,6 +129,15 @@ impl Runtime {
         }
         Ok(self.status())
     }
+}
+fn stop_inhibitor(mut child: Child) {
+    child.stdin.take();
+    let deadline = std::time::Instant::now()+Duration::from_secs(2);
+    while matches!(child.try_wait(),Ok(None)) && std::time::Instant::now()<deadline {
+        thread::sleep(Duration::from_millis(10));
+    }
+    if !matches!(child.try_wait(),Ok(Some(_))) { let _=child.kill(); }
+    let _=child.wait();
 }
 impl Drop for Runtime { fn drop(&mut self) { self.stop(); } }
 
@@ -165,7 +167,7 @@ mod tests {
     }
     #[test]
     fn status_and_invalid_commands_have_no_side_effects() {
-        let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false, desktop: Default::default(), update: Default::default() };
+        let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false, awake_pending: None, desktop: Default::default(), update: Default::default() };
         *state.desktop.lock().unwrap() = json!({"id":"96335341"});
         let status = state.action("status").unwrap();
         assert_eq!(status["active"], false);
@@ -177,7 +179,7 @@ mod tests {
     fn dead_inhibitor_is_never_reported_as_active() {
         let mut child = Command::new("sh").args(["-c", "exit 0"]).spawn().unwrap();
         child.wait().unwrap();
-        let mut state = Runtime { child: Some(child), config: PathBuf::from("/unused"), error: None, restarting: false, desktop: Default::default(), update: Default::default() };
+        let mut state = Runtime { child: Some(child), config: PathBuf::from("/unused"), error: None, restarting: false, awake_pending: None, desktop: Default::default(), update: Default::default() };
         let status = state.status();
         assert_eq!(status["active"], false);
         assert!(status["error"].is_string());
@@ -191,7 +193,7 @@ mod update_tests {
     fn source_identity_is_available_and_bad_revision_never_starts_a_job() {
         assert_eq!(build()["source_id"].as_str().unwrap().len(),64);
         assert!(build()["version"].as_str().unwrap().starts_with('v'));
-        let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false, desktop: Default::default(), update: Default::default() };
+        let mut state = Runtime { child: None, config: PathBuf::from("/unused"), error: None, restarting: false, awake_pending: None, desktop: Default::default(), update: Default::default() };
         let job = std::sync::Arc::new(std::sync::Mutex::new(json!({"status":"idle"})));
         assert!(state.start_update("HEAD; exit 1",job.clone()).is_err());
         assert_eq!(job.lock().unwrap()["status"],"idle");
@@ -220,5 +222,47 @@ pub(crate) fn control(
         if role != "client" { return Err(invalid("Aggiornare il master dalla sua installazione locale")); }
         return runtime.lock().unwrap().start_update(revision, job.clone());
     }
-    runtime.lock().unwrap().action(action)
+    if action == "toggle-awake" {
+        let (child, config) = {
+            let mut state = runtime.lock().unwrap();
+            if state.awake_pending.is_some() || state.restarting { return Err(invalid("Operazione dispositivo già in corso")); }
+            state.status();
+            state.awake_pending = Some(state.child.is_some());
+            (state.child.take(), state.config.clone())
+        };
+        let result = if let Some(child) = child { stop_inhibitor(child); Ok(None) } else { Runtime::start_inhibitor().map(Some) };
+        let active = result.as_ref().is_ok_and(|child|child.is_some());
+        let saved = if result.is_ok() { crate::staging::save_json(&config.join("keep-awake.json"),&active) } else { Ok(()) };
+        let mut state = runtime.lock().unwrap();
+        state.awake_pending = None;
+        match result {
+            Ok(child) => { state.child=child; state.error=None; }
+            Err(error) => { state.error=Some(error.to_string()); return Err(error); }
+        }
+        if let Err(error) = saved { state.error=Some(error.to_string()); return Err(error); }
+        return Ok(state.status());
+    }
+    let mut state = runtime.lock().unwrap();
+    if state.awake_pending.is_some() && action != "status" { return Err(invalid("Operazione dispositivo già in corso")); }
+    state.action(action)
+}
+
+#[cfg(test)]
+mod optimization_tests {
+    use super::*;
+    #[test]
+    fn pending_awake_operation_keeps_status_available_and_rejects_another_toggle() {
+        let root=std::env::temp_dir().join("oaclis-pending-awake-test");
+        let runtime=std::sync::Arc::new(std::sync::Mutex::new(Runtime {child:None,config:root,error:None,restarting:false,awake_pending:Some(true),desktop:Default::default(),update:Default::default()}));
+        let job=Default::default();let analyses=Default::default();
+        assert_eq!(control(&runtime,&job,&analyses,"master","status","").unwrap()["active"],true);
+        assert!(control(&runtime,&job,&analyses,"master","toggle-awake","").is_err());
+        assert!(control(&runtime,&job,&analyses,"master","restart","").is_err());
+    }
+    #[test]
+    fn unresponsive_inhibitor_does_not_block_shutdown_forever() {
+        let child=Command::new("sleep").arg("10").stdin(Stdio::piped()).spawn().unwrap();
+        let started=std::time::Instant::now();stop_inhibitor(child);
+        assert!(started.elapsed()<Duration::from_secs(4));
+    }
 }
