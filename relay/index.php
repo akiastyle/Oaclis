@@ -1,5 +1,5 @@
 <?php
-// index.php v1.5.406
+// index.php v1.5.412
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -84,7 +84,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $state=$originalState;
         $record=$state['devices'][$deviceId]??null;
         $result=[];
-        $web=new \lbuchs\WebAuthn\WebAuthn('Oaclis','oaclis.krprojects.it',['none'],true);
+        if (in_array($action,['register-options','register','login-options','login'],true))
+            $web=new \lbuchs\WebAuthn\WebAuthn('Oaclis','oaclis.krprojects.it',['none'],true);
         switch ($action) {
         case 'admin-list':
             if (!$isAdmin) respond([],403);
@@ -208,7 +209,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     usleep(100000);
                     if (!flock($db,LOCK_EX)) throw new RuntimeException();
                     $raw=readState();
-                    $state=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
+                    $originalState=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
+                    $state=$originalState;
                     $record=$state['devices'][$deviceId]??null;
                     $job=$record['console']??[];
                     if (!$record || $record['status']!=='approved' || $authUntil<time() ||

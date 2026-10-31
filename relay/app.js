@@ -1,4 +1,4 @@
-// app.js v1.57.478
+// app.js v1.57.484
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -37,7 +37,7 @@ async function keepConsoleAwake(){
  }catch{}finally{wakePending=false;}
 }
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')keepConsoleAwake();});
-function show(html){closeConsole?.();voice.leave();app.innerHTML=html;app.hidden=false;if(screenWakeLock&&!document.getElementById('console-screen')){screenWakeLock.release().catch(()=>{});screenWakeLock=null;}}
+function show(html){clearTimeout(timer);closeConsole?.();voice.leave();app.innerHTML=html;app.hidden=false;if(screenWakeLock&&!document.getElementById('console-screen')){screenWakeLock.release().catch(()=>{});screenWakeLock=null;}}
 function message(text,error=false){let p=document.getElementById('message');if(!p){p=document.createElement('p');p.id='message';p.setAttribute('role','status');app.append(p);}p.className=error?'error':'status';p.textContent=OaclisSettings.text(text);}
 async function api(action,body={}){
  if(action==='console')body={...body,signed:await OaclisMobileSecurity.sign(code,body)};
@@ -131,6 +131,7 @@ async function openConsole(chat){
    pending=request;
    const deadline=Date.now()+23000;let result;
    do{if(closed)return false;result=await api('console-result',{chat_id:chat.id,request_id:request.request_id});}while(result.pending&&Date.now()<deadline);
+   if(closed)return false;
    if(result.pending){pending=null;throw new Error(OaclisSettings.text('Collegamento temporaneamente non disponibile. Riprova.'));}
    const completed=pending;pending=null;
    if(result.error)throw new Error(result.error);
@@ -180,7 +181,8 @@ async function protectedView(){
  document.getElementById('online-version').textContent=x.version||'';
  renderAuthorizedChats(authorizedChats);bindVoice();
  document.getElementById('lock').onclick=e=>run(e.target,async()=>{clearTimeout(timer);voice.stop();drafts.clear();await api('logout');location.replace('/auth');});
- const refresh=async()=>{try{const data=await api('protected');if(!document.getElementById('authorized-chats'))return;authorizedChats=data.chats||[];document.getElementById('online-version').textContent=data.version||'';document.getElementById('chat-search').dispatchEvent(new Event('input'));timer=setTimeout(refresh,5000);}catch(e){if(e.status===403){clearTimeout(timer);voice.stop();show('');location.replace('/auth');}else{message(e.message,true);timer=setTimeout(refresh,5000);}}};
+ const list=document.getElementById('authorized-chats');
+ const refresh=async()=>{if(document.getElementById('authorized-chats')!==list)return;try{const data=await api('protected');if(document.getElementById('authorized-chats')!==list)return;authorizedChats=data.chats||[];document.getElementById('online-version').textContent=data.version||'';document.getElementById('chat-search').dispatchEvent(new Event('input'));timer=setTimeout(refresh,5000);}catch(e){if(document.getElementById('authorized-chats')!==list)return;if(e.status===403){clearTimeout(timer);voice.stop();show('');location.replace('/auth');}else{message(e.message,true);timer=setTimeout(refresh,5000);}}};
  timer=setTimeout(refresh,5000);
 }
 async function deviceView(){
