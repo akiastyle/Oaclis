@@ -1,4 +1,4 @@
-// voice.js v1.38.560
+// voice.js v1.38.562
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -119,7 +119,7 @@ window.OaclisVoice=(()=>{
   }
   async function action(task){
    if(blocked()){feedback('Operazione in corso');return;}
-   cancelAutoSend();locked=true;invalidate();clearPending();
+   cancelAutoSend();locked=true;clearPending();
    try{const result=await task();feedback(result===false?'Operazione non completata. Riprova.':'Comando eseguito');}catch{feedback('Operazione non completata. Riprova.');}
    finally{locked=false;if(wanted&&!document.hidden&&!disposed)start();}
   }

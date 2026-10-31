@@ -191,7 +191,7 @@ La dettatura riusa un solo riconoscitore tra le frasi e gli invii. A ogni fine
 ascolto scollega i gestori precedenti; i risultati gia elaborati sono segnati
 con un solo indice, senza conservare una lista crescente durante l’ascolto continuo.
 
-Il suono di conferma usa il file originale feedback.mp3, precaricato in un solo
+Il suono di conferma usa feedback.mp3 senza il silenzio finale, precaricato in un solo
 lettore e conservato in cache. Ogni conferma lo riavvia senza sovrapporre lettori.
 Dopo l’invio
 di un messaggio, la lettura attende due secondi prima della prima frase,
