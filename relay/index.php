@@ -1,5 +1,5 @@
 <?php
-// index.php v1.5.401
+// index.php v1.5.406
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -80,7 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db=fopen(PRIVATE_DIR.'/state.lock','c+');
         if (!$db || !flock($db,LOCK_EX)) throw new RuntimeException();
         $raw=readState();
-        $state=$raw===''?['invitations'=>[], 'devices'=>[]]:json_decode($raw,true,64,JSON_THROW_ON_ERROR);
+        $originalState=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
+        $state=$originalState;
         $record=$state['devices'][$deviceId]??null;
         $result=[];
         $web=new \lbuchs\WebAuthn\WebAuthn('Oaclis','oaclis.krprojects.it',['none'],true);
@@ -269,7 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         default: respond([],404);
         }
         if (in_array($action,['protected','console','console-result'],true)) $result['security']=isset($state['console_security']['epoch'])?['epoch'=>$state['console_security']['epoch'],'time'=>time()]:null;
-        if ($state!==($raw===''?['invitations'=>[], 'devices'=>[]]:json_decode($raw,true))) {
+        if ($state!==$originalState) {
             $encoded=json_encode($state,JSON_THROW_ON_ERROR|JSON_PRETTY_PRINT);
             $temporary=tempnam(PRIVATE_DIR,'state-');
             if ($temporary===false) throw new RuntimeException();

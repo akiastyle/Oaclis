@@ -3,7 +3,9 @@
 Sorgenti della pagina gia' pubblicata su https://oaclis.krprojects.it/.
 Questo componente PHP gira sull'hosting; Oaclis continua a funzionare in Rust.
 
-I tre file pubblici sono index.php, app.js e style.css. La libreria lbuchs/WebAuthn v2.2.0
+La directory pubblica contiene index.php, gli script e gli stili della PWA,
+il manifest, il service worker, le icone e il suono di conferma.
+La libreria lbuchs/WebAuthn v2.2.0
 (commit 20adb4a240c3997bd8cac7dc4dde38ab0bea0ed1, MIT), la configurazione, lo stato e le
 sessioni restano nella cartella privata oaclis-auth-test-private, fuori da www.
 composer.lock documenta la versione della libreria; sul server esistente e' caricata
@@ -29,7 +31,7 @@ La pagina mobile riceve solo le proprie chat dopo la verifica di codice, passkey
 sessione e abbinamento approvato; non puo' leggere o modificare le scelte di altri
 telefoni. La lista si aggiorna ogni cinque secondi, senza trasferire archivi o console.
 
-Abbinamento e passkey: /oaclis/auth. La card apre il QR del solo indirizzo di accesso.
+Abbinamento e passkey: https://oaclis.krprojects.it/auth. La card apre il QR del solo indirizzo di accesso.
 .htaccess instrada auth; legacy.php mantiene compatibili i vecchi link ed endpoint.
 
 Una chat autorizzata apre la console del master. Il relay accoda soltanto open/read/input

@@ -1,4 +1,4 @@
-// read-aloud.js v1.18.222
+// read-aloud.js v1.18.228
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -46,17 +46,17 @@ window.OaclisReadAloud=(()=>{
    clearTimeout(playTimer);playTimer=null;quietUntil=0;
    lastActivity='';lastActivityId=null;lastActivityAt=0;
    if(!preserve)desired=false;
-   if(enabled&&!silent)feedback('off');
+   if(enabled&&!silent)feedback();
    generation++;enabled=false;cursor=null;queue=[];items.clear();ignored.clear();speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;
    engine?.cancel();paint();resume();
   }
   function enable(silent=false){
    if(disposed||!engine||!window.SpeechSynthesisUtterance)return false;
    if(enabled)return true;
-   if(!silent)feedback('on');desired=true;enabled=true;cursor=null;button.dataset.ready='false';paint();return true;
+   if(!silent)feedback();desired=true;enabled=true;cursor=null;button.dataset.ready='false';paint();return true;
   }
   function skip(){
-   feedback('pause');
+   feedback();
    const id=currentItem||queue[0]?.id||[...items.keys()].at(-1);
    if(!id)return;
    if(ignored.size>=16)ignored.delete(ignored.values().next().value);

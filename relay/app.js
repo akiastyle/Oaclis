@@ -1,4 +1,4 @@
-// app.js v1.52.473
+// app.js v1.57.478
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -22,10 +22,7 @@ function bindVoice(chat=null){
  if(!host)return;
  voice.bind({chatId:chat?.id,compose,fields:()=>[compose,search].filter(Boolean),chats:()=>authorizedChats,list:()=>visibleChatList,
   selectChat:async selected=>{if(!authorizedChats.some(item=>item.id===selected.id))return;await openConsole(selected);},
-  ...(chat?{send:async()=>{if(consoleActions?.chatId!==chat.id||!authorizedChats.some(item=>item.id===chat.id))throw Error();return consoleActions.submit();},back:()=>protectedView(),chatList:()=>protectedView(),sending:()=>consoleActions?.sending()===true,commandOnly:()=>consoleActions?.commandOnly()===true,readOn:()=>consoleActions?.readOn(),readOff:()=>consoleActions?.readOff(),readStop:()=>consoleActions?.readStop()}:{}),
-  ...(!chat?{searchChat:query=>{search.value=query;search.dispatchEvent(new Event('input',{bubbles:true}));}}:{}),
-  scrollUp:()=>{const area=document.getElementById('console-screen')||document.getElementById('authorized-chats');area.scrollBy({top:-area.clientHeight*.75,behavior:'smooth'});},
-  scrollDown:()=>{const area=document.getElementById('console-screen')||document.getElementById('authorized-chats');area.scrollBy({top:area.clientHeight*.75,behavior:'smooth'});},
+  ...(chat?{send:async()=>{if(consoleActions?.chatId!==chat.id||!authorizedChats.some(item=>item.id===chat.id))throw Error();return consoleActions.submit();},sending:()=>consoleActions?.sending()===true,commandOnly:()=>consoleActions?.commandOnly()===true,readOn:()=>consoleActions?.readOn(),readOff:()=>consoleActions?.readOff(),readStop:()=>consoleActions?.readStop()}:{}),
  },host);
  voice.ready();
 }

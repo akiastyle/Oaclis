@@ -1,4 +1,4 @@
-// voice.js v1.38.562
+// voice.js v1.38.590
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -64,7 +64,7 @@ window.OaclisVoice=(()=>{
    if(old){retiring=old;state='stopping';try{old.abort();}catch{releaseSession(old);recorder=null;retiring=null;}}
    if(preview)preview.textContent='';if(!retiring)state='idle';paint();
   };
-  const stop=()=>{cancelAutoSend();if(wanted)window.OaclisReadAloud?.feedback('off');wanted=false;paused=false;retries=0;clearPending();invalidate();feedback('Ascolto disattivato');};
+  const stop=()=>{cancelAutoSend();if(wanted)window.OaclisReadAloud?.feedback();wanted=false;paused=false;retries=0;clearPending();invalidate();feedback('Ascolto disattivato');};
   function insert(value){
    const field=target;
    if(!valid(field)){feedback('Seleziona un campo oppure pronuncia un comando');return;}
@@ -106,16 +106,16 @@ window.OaclisVoice=(()=>{
    if(id==='clearDraft')return !!adapter?.compose?.value;
    return typeof adapter?.[id]==='function';
   }
-  function choices(kind,items){
+  function choices(items){
    clearPending();
-   pending={kind,items,revision,chat:adapter?.chatId,value:adapter?.compose?.value};
+   pending={items,revision,chat:adapter?.chatId};
    options.replaceChildren();
    for(const [index,item]of items.entries()){
-    const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=kind==='select'?`${index+1}. ${item.name}`:item.name;
+    const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=`${index+1}. ${item.name}`;
     b.onclick=()=>choose(index);options.append(b);
    }
    const cancel=document.createElement('button');cancel.type='button';cancel.className='secondary';cancel.textContent=locale.text('Annulla');cancel.onclick=()=>{clearPending();feedback('Operazione annullata');};options.append(cancel);options.showModal();
-   pendingTimer=setTimeout(()=>{clearPending();feedback('Scelta scaduta');},kind==='select'?15000:10000);
+   pendingTimer=setTimeout(()=>{clearPending();feedback('Scelta scaduta');},15000);
   }
   async function action(task){
    if(blocked()){feedback('Operazione in corso');return;}
@@ -133,9 +133,7 @@ window.OaclisVoice=(()=>{
    if(!choice)return;
    if(choice.revision!==revision||choice.chat!==adapter?.chatId){clearPending();feedback('Contesto cambiato.');return;}
    if(!choice.items[index]){feedback('Scegli un numero tra quelli mostrati.');return;}
-   if(choice.kind==='select'){const chat=choice.items[index];clearPending();return openChat(chat);}
-   if(adapter.compose.value!==choice.value){clearPending();feedback('La bozza è cambiata. Svuotamento annullato.');return;}
-   clearPending();target=adapter.compose;target.select();insert('');feedback('Messaggio svuotato');
+   const chat=choice.items[index];clearPending();return openChat(chat);
   }
   async function route(segment,commandsOnly=false){
    if(blocked()){feedback('Operazione in corso');return;}
@@ -146,18 +144,17 @@ window.OaclisVoice=(()=>{
    if(result.type==='command'){
     cancelAutoSend();
     if(result.id==='stop'){stop();return;}
-    if(result.id==='pauseRec'){if(!paused)window.OaclisReadAloud?.feedback('pause');paused=true;clearPending();preview.textContent='';paint();return;}
-    if(result.id==='resumeRec'){if(paused)window.OaclisReadAloud?.feedback('on');paused=false;paint();return;}
+    if(result.id==='pauseRec'){if(!paused)window.OaclisReadAloud?.feedback();paused=true;clearPending();preview.textContent='';paint();return;}
+    if(result.id==='resumeRec'){if(paused)window.OaclisReadAloud?.feedback();paused=false;paint();return;}
     if(result.id==='help'){if(help.open)help.close();else showHelp();return;}
    }
    if(paused)return;
    if(pending){
     const value=normalize(segment).replace(new RegExp('^'+grammar.explicit+' '),'');
     if(grammar.cancel.includes(value)){clearPending();feedback('Operazione annullata');return;}
-    if(pending.kind==='clear'&&value===grammar.confirm){choose(0);return;}
     const match=grammar.choose.exec(value);
-    if(pending.kind==='select'&&match){const n=number(match[1]);if(n>=1&&n<=20)choose(n-1);else feedback('Scegli un numero tra quelli mostrati.');return;}
-    feedback(pending.kind==='select'?'Scegli uno dei numeri mostrati oppure annulla selezione.':'Pronuncia conferma svuotamento oppure annulla operazione.');return;
+    if(match){const n=number(match[1]);if(n>=1&&n<=20)choose(n-1);else feedback('Scegli un numero tra quelli mostrati.');return;}
+    feedback('Scegli uno dei numeri mostrati oppure annulla selezione.');return;
    }
    if(result.type==='error'){feedback(result.message);return;}
    if(result.type==='dictation'){if(insert(result.text))scheduleAutoSend();return;}
@@ -170,7 +167,7 @@ window.OaclisVoice=(()=>{
      if(n>0){const chat=adapter.list()[n-1];if(!chat){feedback('Numero fuori elenco.');break;}await openChat(chat);break;}
      const matches=resolve(adapter.chats(),args);
      if(!matches.length){feedback('Chat non trovata.');break;}
-     if(matches.length===1)await openChat(matches[0]);else{choices('select',matches.slice(0,20));feedback('Più chat corrispondono. Scegli un numero.');}break;
+     if(matches.length===1)await openChat(matches[0]);else{choices(matches.slice(0,20));feedback('Più chat corrispondono. Scegli un numero.');}break;
     }
     case 'send':
      if(!adapter.compose?.value.trim()){feedback('Scrivi prima un messaggio.');break;}
@@ -231,7 +228,6 @@ window.OaclisVoice=(()=>{
   }
   function input(event){
    if(event.target===adapter?.compose)cancelAutoSend();
-   if(pending?.kind==='clear'&&event.target===adapter?.compose){clearPending();feedback('La bozza è cambiata. Svuotamento annullato.');}
   }
   function hidden(){if(document.hidden)stop();}
   function bind(next,host){
@@ -245,7 +241,7 @@ window.OaclisVoice=(()=>{
    root.append(status,preview,options,help);document.getElementById('app').append(root);
    button=document.createElement('button');button.type='button';button.className='voice-mic secondary';button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8"/></svg>';
    host.append(button);
-   button.onclick=()=>{if(wanted)stop();else{window.OaclisReadAloud?.feedback('on');wanted=true;paused=false;retries=0;start();}};
+   button.onclick=()=>{if(wanted)stop();else{window.OaclisReadAloud?.feedback();wanted=true;paused=false;retries=0;start();}};
    if(!Recognition||!window.isSecureContext){button.disabled=true;feedback('Voce non disponibile in questo browser.');}
    paint();
    if(wanted&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},0);
