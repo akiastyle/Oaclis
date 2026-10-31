@@ -1,4 +1,4 @@
-// voice.js v1.38.594
+// voice.js v1.38.617
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -106,9 +106,9 @@ window.OaclisVoice=(()=>{
    if(id==='clearDraft')return !!adapter?.compose?.value;
    return typeof adapter?.[id]==='function';
   }
-  function choices(items){
+  function choices(items,method='selectChat'){
    clearPending();
-   pending={items,revision,chat:adapter?.chatId};
+   pending={items,method,revision,chat:adapter?.chatId};
    options.replaceChildren();
    for(const [index,item]of items.entries()){
     const b=document.createElement('button');b.type='button';b.className='secondary';b.textContent=`${index+1}. ${item.name}`;
@@ -123,24 +123,25 @@ window.OaclisVoice=(()=>{
    try{const result=await task();feedback(result===false?'Operazione non completata. Riprova.':'Comando eseguito');}catch{feedback('Operazione non completata. Riprova.');}
    finally{locked=false;if(wanted&&!document.hidden&&!disposed)start();}
   }
-  function openChat(chat){
+  function openChat(chat,method='selectChat'){
    const current=adapter?.chats().find(item=>item.id===chat.id);
    if(!current){feedback('Chat non più disponibile.');return;}
-   return action(()=>adapter.selectChat(current));
+   return action(()=>adapter[method](current));
   }
   function choose(index){
    const choice=pending;
    if(!choice)return;
    if(choice.revision!==revision||choice.chat!==adapter?.chatId){clearPending();feedback('Contesto cambiato.');return;}
    if(!choice.items[index]){feedback('Scegli un numero tra quelli mostrati.');return;}
-   const chat=choice.items[index];clearPending();return openChat(chat);
+   const chat=choice.items[index];clearPending();return openChat(chat,choice.method);
   }
   async function route(segment,commandsOnly=false){
    if(blocked()){feedback('Operazione in corso');return;}
    const result=parse(segment);
-   const audio=result.type==='command'&&['readOn','readOff','readStop'].includes(result.id);
-   if((commandsOnly||adapter?.commandOnly?.())&&!audio)return;
-   if(audio){if(available(result.id))await action(()=>adapter[result.id]());else feedback('Comando non disponibile in questa schermata.');return;}
+   const audio=result.type==='command'&&['readOn','readOff','readStop','selectPane'].includes(result.id);
+   const navigation=result.type==='command'&&['selectChat','splitChat'].includes(result.id);
+   if((commandsOnly||adapter?.commandOnly?.())&&!audio&&!navigation)return;
+   if(audio){if(available(result.id))await action(()=>adapter[result.id](result.args));else feedback('Comando non disponibile in questa schermata.');return;}
    if(result.type==='command'){
     cancelAutoSend();
     if(result.id==='stop'){stop();return;}
@@ -162,12 +163,12 @@ window.OaclisVoice=(()=>{
    if(!available(id)){feedback('Comando non disponibile in questa schermata.');return;}
    switch(id){
     case 'clearDraft':clearPending();adapter.compose.value='';adapter.compose.dispatchEvent(new Event('input',{bubbles:true}));feedback('Messaggio svuotato');break;
-    case 'selectChat':{
+    case 'selectChat':case 'splitChat':{
      const n=number(normalize(args));
-     if(n>0){const chat=adapter.list()[n-1];if(!chat){feedback('Numero fuori elenco.');break;}await openChat(chat);break;}
+     if(n>0){const chat=adapter.list()[n-1];if(!chat){feedback('Numero fuori elenco.');break;}await openChat(chat,id);break;}
      const matches=resolve(adapter.chats(),args);
      if(!matches.length){feedback('Chat non trovata.');break;}
-     if(matches.length===1)await openChat(matches[0]);else{choices(matches.slice(0,20));feedback('Più chat corrispondono. Scegli un numero.');}break;
+     if(matches.length===1)await openChat(matches[0],id);else{choices(matches.slice(0,20),id);feedback('Più chat corrispondono. Scegli un numero.');}break;
     }
     case 'send':
      if(!adapter.compose?.value.trim()){feedback('Scrivi prima un messaggio.');break;}

@@ -1,4 +1,4 @@
-// locale.js v1.3.448
+// locale.js v1.3.456
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -8,6 +8,8 @@ window.OaclisSettings=(()=>{
  const speechLanguage=language==='it'?'it-IT':'en-US';
  document.documentElement.lang=language;
  const en={
+  "Affianca chat":"Split chat",
+  "Chat singola":"Single chat",
   "Ricevuto":"Received",
   "Invio non confermato":"Send not confirmed",
   "Inviato":"Sent",
@@ -346,6 +348,7 @@ window.OaclisSettings=(()=>{
   choose:/^scegli\s+(.+)$/iu,cancel:['annulla selezione','annulla operazione'],confirm:'conferma svuotamento',
   descriptions:{
    send:'Invia il messaggio scritto.',selectChat:'Passa alla chat indicata dal numero o dal nome.',
+   splitChat:'Apre una seconda chat sopra o sotto la prima.',selectPane:'Sceglie la chat su cui usare i comandi.',
    clearDraft:'Svuota completamente il messaggio.',readOn:'Attiva la lettura delle risposte e degli aggiornamenti.',
    readOff:'Disattiva la lettura.',readStop:'Interrompe la lettura corrente, lasciando attive le successive.',
    pauseRec:'Mette in pausa la trascrizione senza spegnere il microfono.',resumeRec:'Riprende la trascrizione.',
@@ -354,6 +357,8 @@ window.OaclisSettings=(()=>{
   commands:[
    ['send',['invia']],
    ['selectChat',/^cambia\s+(.+)$/iu,'cambia 3 / cambia Oaclis'],
+   ['splitChat',/^affianca\s+(.+)$/iu,'affianca 3 / affianca Oaclis'],
+   ['selectPane',/^attiva\s+(sopra|sotto)$/iu,'attiva sopra / attiva sotto'],
    ['clearDraft',['cancella']],
    ['readOn',['voce on']],['readOff',['voce off']],['readStop',['voce stop']],
    ['pauseRec',['pausa']],['resumeRec',['riprendi']],['help',['comandi']],['stop',['spegni']],
@@ -364,6 +369,7 @@ window.OaclisSettings=(()=>{
   choose:/^choose\s+(.+)$/iu,cancel:['cancel selection','cancel operation'],confirm:'confirm clear',
   descriptions:{
    send:'Sends the written message.',selectChat:'Switches to the chat identified by number or name.',
+   splitChat:'Opens a second chat above or below the first.',selectPane:'Selects which chat receives the controls.',
    clearDraft:'Clears the entire message.',readOn:'Enables reading of responses and progress updates.',
    readOff:'Disables reading.',readStop:'Stops the current reading, keeping subsequent responses enabled.',
    pauseRec:'Pauses transcription without turning off the microphone.',resumeRec:'Resumes transcription.',
@@ -372,6 +378,8 @@ window.OaclisSettings=(()=>{
   commands:[
    ['send',['send','send message']],
    ['selectChat',/^change\s+(.+)$/iu,'change 3 / change Oaclis'],
+   ['splitChat',/^split\s+(.+)$/iu,'split 3 / split Oaclis'],
+   ['selectPane',/^activate\s+(top|bottom)$/iu,'activate top / activate bottom'],
    ['clearDraft',['clear message']],
    ['readOn',['voice on']],['readOff',['voice off']],['readStop',['voice stop']],
    ['pauseRec',['pause']],['resumeRec',['resume']],['help',['commands']],['stop',['stop listening','turn off microphone']],

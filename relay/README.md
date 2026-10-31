@@ -203,3 +203,12 @@ Il pannello Comandi contiene cinque check locali, salvati nel browser: avvio
 del microfono, avvio della lettura, invio automatico, attesa di 5 secondi
 (in alternativa a 3) e pausa della dettatura dopo un invio riuscito.
 I permessi del browser restano necessari per avviare automaticamente microfono e voce.
+
+La console mobile consente due chat sovrapposte con un solo compositore e gruppo
+di comandi. Il pulsante a destra del primo titolo sceglie la seconda chat;
+ripremendolo conserva soltanto quella attiva. Un tocco su una chat la seleziona.
+Bozze e posizione di lettura restano distinte; solo la chat attiva viene letta.
+I comandi «affianca 3 / affianca nome» e «attiva sopra / attiva sotto» riusano il
+vocabolario IT/EN. «Cambia» sostituisce la chat attiva o seleziona quella già visibile.
+Le due viste condividono una coda di richieste firmate: non vengono creati canali
+concorrenti né modificati abbinamenti o autorizzazioni sul relay.
