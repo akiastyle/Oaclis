@@ -1,6 +1,5 @@
-// app.js v1.71.682
+// app.js v1.71.685
 'use strict';
-const PWA_RELEASE='v1.0.1';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
 window.addEventListener('hashchange',()=>{if(location.hash)location.reload();});
@@ -218,7 +217,7 @@ async function protectedView(){
  authorizedChats=x.chats||[];
  show(OaclisSettings.html('<header class="online-brand" aria-label="Oaclis"><img src="/icon-192.png" alt="" width="32" height="32"><span>aclis</span></header><div id="chat-tools"><input id="chat-search" type="search" maxlength="160" aria-label="Cerca chat" placeholder="Cerca chat"></div><div id="authorized-chats" aria-live="polite"></div><button id="lock" class="secondary">Blocca accesso</button><small id="online-version" aria-label="Versione Oaclis"></small>'));
  document.getElementById('chat-search').oninput=()=>renderAuthorizedChats(authorizedChats.filter(chat=>OaclisVoice.normalize(chat.name).includes(OaclisVoice.normalize(document.getElementById('chat-search').value))));
- document.getElementById('online-version').textContent='PWA '+PWA_RELEASE;
+ document.getElementById('online-version').textContent='PWA '+app.dataset.pwaVersion;
  renderAuthorizedChats(authorizedChats);bindVoice();
  document.getElementById('lock').onclick=e=>run(e.target,async()=>{clearTimeout(timer);voice.stop();drafts.clear();consolePositions.clear();await api('logout');location.replace('/auth');});
  const list=document.getElementById('authorized-chats');

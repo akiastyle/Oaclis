@@ -142,7 +142,7 @@ quando cambia la presentazione sul master; gli ID autorizzati non cambiano.
 ## Identita e versione online
 
 La lista autenticata mostra la balena con il marchio aclis e, in fondo, la
-versione generale calcolata dal master (non un contatore separato della PWA).
+versione PWA calcolata dagli header dei file pubblicati con la formula del master.
 Il master trasmette OACLIS_APP_VERSION nel heartbeat admin-list gia' esistente;
 il relay conserva l'ultimo valore in app_version nello stato privato e lo
 restituisce soltanto da protected dopo approvazione e sessione passkey valida.
@@ -213,8 +213,9 @@ vocabolario IT/EN. «Cambia» sostituisce la chat attiva o seleziona quella già
 Le due viste condividono una coda di richieste firmate: non vengono creati canali
 concorrenti né modificati abbinamenti o autorizzazioni sul relay.
 
-La lista delle chat mostra la release autonoma della PWA (`PWA_RELEASE` in
-`app.js`), incrementata a ogni blocco pubblicato che modifica la parte mobile.
-I contatori dei file web restano inclusi nella versione generale del master.
-La release mostrata identifica il codice caricato: per caricare una nuova
-release occorre ricaricare la pagina.
+La lista delle chat mostra la release PWA calcolata dagli header dei suoi file
+PHP, JavaScript e CSS pubblicati, incluse le sorgenti condivise di lingua,
+icone e console. La formula e' identica al master: media di X e Z su tutti i
+file, media di Y sui soli valori positivi, arrotondamento a meta' verso l'alto.
+Non esiste un contatore manuale. I file web contribuiscono anche alla versione
+generale del master. Ricaricare la pagina carica e mostra la nuova release.
