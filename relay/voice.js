@@ -1,4 +1,4 @@
-// voice.js v1.38.617
+// voice.js v1.38.628
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -64,7 +64,7 @@ window.OaclisVoice=(()=>{
    if(old){retiring=old;state='stopping';try{old.abort();}catch{releaseSession(old);recorder=null;retiring=null;}}
    if(preview)preview.textContent='';if(!retiring)state='idle';paint();
   };
-  const stop=()=>{cancelAutoSend();if(wanted)window.OaclisReadAloud?.feedback();wanted=false;paused=false;retries=0;clearPending();invalidate();feedback('Ascolto disattivato');};
+  const stop=(silent=true)=>{cancelAutoSend();if(wanted&&!silent)window.OaclisReadAloud?.feedback();wanted=false;paused=false;retries=0;clearPending();invalidate();feedback('Ascolto disattivato');};
   function insert(value){
    const field=target;
    if(!valid(field)){feedback('Seleziona un campo oppure pronuncia un comando');return;}
@@ -140,11 +140,12 @@ window.OaclisVoice=(()=>{
    const result=parse(segment);
    const audio=result.type==='command'&&['readOn','readOff','readStop','selectPane'].includes(result.id);
    const navigation=result.type==='command'&&['selectChat','splitChat'].includes(result.id);
-   if((commandsOnly||adapter?.commandOnly?.())&&!audio&&!navigation)return;
+   const recording=result.type==='command'&&['pauseRec','resumeRec','stop','help'].includes(result.id);
+   if((commandsOnly||adapter?.commandOnly?.())&&!audio&&!navigation&&!recording)return;
    if(audio){if(available(result.id))await action(()=>adapter[result.id](result.args));else feedback('Comando non disponibile in questa schermata.');return;}
    if(result.type==='command'){
     cancelAutoSend();
-    if(result.id==='stop'){stop();return;}
+    if(result.id==='stop'){stop(false);return;}
     if(result.id==='pauseRec'){if(!paused)window.OaclisReadAloud?.feedback();paused=true;clearPending();preview.textContent='';paint();return;}
     if(result.id==='resumeRec'){if(paused)window.OaclisReadAloud?.feedback();paused=false;paint();return;}
     if(result.id==='help'){if(help.open)help.close();else showHelp();return;}
@@ -242,7 +243,7 @@ window.OaclisVoice=(()=>{
    root.append(status,preview,options,help);(document.getElementById('app')||document.body).append(root);
    button=document.createElement('button');button.type='button';button.className='voice-mic secondary';button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8"/></svg>';
    host.append(button);
-   button.onclick=()=>{if(wanted)stop();else{window.OaclisReadAloud?.feedback();wanted=true;paused=false;retries=0;start();}};
+   button.onclick=()=>{if(wanted)stop(false);else{window.OaclisReadAloud?.feedback();wanted=true;paused=false;retries=0;start();}};
    if(!Recognition||!window.isSecureContext){button.disabled=true;feedback('Voce non disponibile in questo browser.');}
    paint();
    if(wanted&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},0);
@@ -250,7 +251,7 @@ window.OaclisVoice=(()=>{
   function leave(){cancelAutoSend();invalidate();clearPending();revision++;target=null;adapter=null;root=null;button=null;status=null;preview=null;options=null;help=null;}
   function ready(){if(adapter?.compose&&valid(adapter.compose)&&!target)target=adapter.compose;}
   function afterSend(){
-   if(preferences.pauseAfterSend&&wanted&&!paused){cancelAutoSend();paused=true;paint();}
+   if(preferences.pauseAfterSend&&wanted&&!paused){cancelAutoSend();paused=true;window.OaclisReadAloud?.feedback();paint();}
   }
   function destroy(){stop();disposed=true;leave();recorder=null;document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
   document.addEventListener('focusin',focus);document.addEventListener('input',input);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',stop);

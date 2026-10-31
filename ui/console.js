@@ -1,4 +1,4 @@
-// console.js v2.97.1861
+// console.js v2.97.1862
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -103,7 +103,6 @@ function openChatTerminal(connection, anchor, deviceId) {
   const submit = async () => {
     if (!ready || submitting) return false;
     const text = form.elements.text.value; submitting = true;
-    window.OaclisReadAloud?.feedback();
     try {
       const sent=await send({action:"input",text,key:"Enter"});
       if(sent){if(form.elements.text.value===text)form.elements.text.value="";window.OaclisLocalVoice?.sent(panel);}
