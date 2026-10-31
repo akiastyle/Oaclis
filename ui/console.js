@@ -1,4 +1,4 @@
-// console.js v2.95.1807
+// console.js v2.95.1823
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -62,10 +62,13 @@ function openChatTerminal(connection, anchor, deviceId) {
   panel.querySelector(".popover-close").onclick = () => closeChatTerminal(panel);
   const screen = panel.querySelector("pre"), form = panel.querySelector("form");
   const payload = { device_id: deviceId, chat_id: connection.entry.id };
-  let busy = false, ready = false, activeAccess = "existing";
+  let busy = false, ready = false, submitting = false, waitingInputs = 0, idle = Promise.resolve(), activeAccess = "existing";
   const send = async value => {
-    if (busy || !panel.isConnected) return false;
+    if (value.action === "read") { if (busy || waitingInputs) return false; }
+    else { waitingInputs++; while (busy) await idle; waitingInputs--; }
+    if (!panel.isConnected) return false;
     busy = true;
+    let done; idle = new Promise(resolve => { done = resolve; });
     try {
       const result = await api("terminal", { ...payload, ...value });
       if (!panel.isConnected) return false;
@@ -75,8 +78,8 @@ function openChatTerminal(connection, anchor, deviceId) {
       ready = true;
       form.querySelectorAll("textarea,button").forEach(e => e.disabled = false);
       return true;
-    } catch (error) { if (panel.isConnected) screen.textContent = error.message; ready = false; return false; }
-    finally { busy = false; }
+    } catch (error) { if (panel.isConnected) screen.textContent = error.message; if (value.action === "open") ready = false; return false; }
+    finally { busy = false; done(); }
   };
   const pollTerminal = async () => {
     if (!panel.isConnected || !ready) return;
@@ -85,7 +88,10 @@ function openChatTerminal(connection, anchor, deviceId) {
   };
   form.onsubmit = guard(async e => {
     e.preventDefault();
-    if (ready && await send({ action: "input", text: form.elements.text.value, key: "Enter" })) form.elements.text.value = "";
+    if (!ready || submitting) return;
+    const text = form.elements.text.value; submitting = true;
+    try { if (await send({ action: "input", text, key: "Enter" }) && form.elements.text.value === text) form.elements.text.value = ""; }
+    finally { submitting = false; }
   });
   form.elements.text.onkeydown = event => {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); }

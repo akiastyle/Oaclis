@@ -1,4 +1,4 @@
-// terminal.rs v1.14.249
+// terminal.rs v1.16.272
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -74,11 +74,22 @@ fn open(home: &Path, root: &Path, chat: &str, session: &str, access: &str) -> io
     tmux(&["set-option","-t",session,"@oaclis-access",access])?;
     Ok(())
 }
+fn session_lock(chat: &str) -> io::Result<std::sync::Arc<std::sync::Mutex<()>>> {
+    use std::sync::{Arc, Mutex, OnceLock, Weak};
+    static SESSIONS: OnceLock<Mutex<std::collections::HashMap<String, Weak<Mutex<()>>>>> = OnceLock::new();
+    let mut sessions = SESSIONS.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Console non disponibile"))?;
+    sessions.retain(|_, session| session.strong_count() > 0);
+    let session = sessions.get(chat).and_then(Weak::upgrade).unwrap_or_else(||Arc::new(Mutex::new(())));
+    sessions.insert(chat.to_owned(), Arc::downgrade(&session));
+    Ok(session)
+}
 pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let chat=validate(value)?;
     if let Some(home)=env::var_os("HOME") {
         if crate::chat_deletion::blocked(&PathBuf::from(home).join(".config/oaclis"),chat)? { return Err(invalid("Chat eliminata definitivamente")); }
     }
+    let session_lock = if value["action"] == "read" { None } else { Some(session_lock(chat)?) };
+    let _guard = session_lock.as_ref().map(|lock|lock.lock().map_err(|_|io::Error::other("Console non disponibile"))).transpose()?;
     let session=format!("oaclis-{chat}");let target=format!("{session}:0.0");
     match value["action"].as_str().unwrap() {
         "open" => {
@@ -149,6 +160,18 @@ pub fn request(device: Option<&Device>, value: &Value) -> io::Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn inputs_share_a_lock_only_for_the_same_chat() {
+        let first = session_lock("same-chat").unwrap();
+        let second = session_lock("same-chat").unwrap();
+        let other = session_lock("other-chat").unwrap();
+        assert!(std::sync::Arc::ptr_eq(&first, &second));
+        let held = first.lock().unwrap();
+        assert!(second.try_lock().is_err());
+        assert!(other.try_lock().is_ok());
+        drop(held);
+        assert!(second.try_lock().is_ok());
+    }
     #[test]
     fn console_access_only_accepts_explicit_presets() {
         assert_eq!(access_flags("default").unwrap(),"");
