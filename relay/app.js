@@ -1,4 +1,4 @@
-// app.js v1.71.672
+// app.js v1.71.677
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -149,7 +149,7 @@ async function openConsole(chat,adjacent=false){
   pending=null;if(result.error)throw Error(result.error);
   const pane=request.pane;if(pane.closed)return true;
   if(request.operation==='input'&&typeof request.text==='string'&&(drafts.get(pane.chat.id)||'')===request.text){saveDraft(pane.chat.id,'');if(pane===active&&text.value===request.text)text.value='';}
-  pane.name.textContent=pane.chat.name;
+  pane.reconnecting=false;pane.name.textContent=pane.chat.name;
   if(request.operation==='open'||request.operation==='input')pane.follow=true;
   const top=pane.saved?.top??pane.screen.scrollTop,left=pane.saved?.left??pane.screen.scrollLeft;
   const savedFollow=pane.saved?.follow;if(request.operation==='open'&&savedFollow===false)pane.follow=false;
@@ -167,11 +167,12 @@ async function openConsole(chat,adjacent=false){
     if(pending){const previous=pending;await complete(previous);if(previous.pane===pane&&operation==='read')return true;}
     if(closed||pane.closed)return false;
     if(operation==='open'&&pane.ready)operation='read';
+    if(pane.reconnecting&&!document.hidden){try{navigator.vibrate?.(100);}catch{}}
     const currentReader=pane===active?reader:null,speechGeneration=currentReader?.stamp();
     const request=await api('console',{chat_id:pane.chat.id,operation,...body,...currentReader?.request()});
     pending={...request,pane,operation,text:body.text,reader:currentReader,speechGeneration,deadline:Date.now()+23000};
     return await complete(pending);
-   }catch(error){if(error.status===403){voice.stop();show('');location.replace('/auth');}else if(!closed&&!pane.closed)pane.name.textContent=pane.chat.name+OaclisSettings.text(operation==='input'?' · Invio non confermato':' · Riconnessione…');return false;}
+   }catch(error){if(error.status===403){voice.stop();show('');location.replace('/auth');}else if(!closed&&!pane.closed){pane.reconnecting=true;pane.name.textContent=pane.chat.name+OaclisSettings.text(operation==='input'?' · Invio non confermato':' · Riconnessione…');}return false;}
   });queue=task.catch(()=>false);return task;
  }
  async function poll(){
