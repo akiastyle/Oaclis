@@ -1,4 +1,4 @@
-// voice.js v1.38.558
+// voice.js v1.38.560
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -253,7 +253,7 @@ window.OaclisVoice=(()=>{
   function leave(){cancelAutoSend();invalidate();clearPending();revision++;target=null;adapter=null;root=null;button=null;status=null;preview=null;options=null;help=null;}
   function ready(){if(adapter?.compose&&valid(adapter.compose)&&!target)target=adapter.compose;}
   function afterSend(){
-   if(preferences.pauseAfterSend&&wanted&&!paused){cancelAutoSend();paused=true;window.OaclisReadAloud?.feedback('pause');paint();}
+   if(preferences.pauseAfterSend&&wanted&&!paused){cancelAutoSend();paused=true;paint();}
   }
   function destroy(){stop();disposed=true;leave();recorder=null;document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
   document.addEventListener('focusin',focus);document.addEventListener('input',input);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',stop);

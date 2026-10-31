@@ -1,4 +1,4 @@
-// app.js v1.52.469
+// app.js v1.52.471
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -158,7 +158,7 @@ async function openConsole(chat){
  document.addEventListener('visibilitychange',resume);
  const submit=async()=>{
   if(inputBusy||closed)return false;
-  inputBusy=true;voice.pause();clearTimeout(timer);
+  inputBusy=true;window.OaclisReadAloud?.feedback();voice.pause();clearTimeout(timer);
   const value=text.value;
   try{const sent=await send('input',{text:value,key:'Enter'});if(sent)voice.afterSend();return sent;}finally{inputBusy=false;if(!closed){voice.resume();timer=setTimeout(poll,200);}}
  };
