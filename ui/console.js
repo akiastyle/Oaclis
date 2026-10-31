@@ -1,4 +1,4 @@
-// console.js v2.95.1823
+// console.js v2.97.1861
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -7,6 +7,7 @@ function closeChatTerminal(panel) {
   clearTimeout(panel.terminalTimer);
   const anchor = panel.opener;
   panel.remove();
+  window.OaclisLocalVoice?.close(panel);
   if (anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
 
@@ -40,6 +41,7 @@ function openChatTerminal(connection, anchor, deviceId) {
     p.dataset.chatId === connection.entry.id && p.dataset.deviceId === deviceId);
   if (existing) {
     existing.hidePopover(); existing.showPopover();
+    window.OaclisLocalVoice?.activate(existing);
     existing.querySelector("textarea").focus();
     return;
   }
@@ -62,23 +64,35 @@ function openChatTerminal(connection, anchor, deviceId) {
   panel.querySelector(".popover-close").onclick = () => closeChatTerminal(panel);
   const screen = panel.querySelector("pre"), form = panel.querySelector("form");
   const payload = { device_id: deviceId, chat_id: connection.entry.id };
+  const status = document.createElement("small"); status.className = "terminal-state"; status.setAttribute("role", "status"); panel.querySelector("h2").after(status);
+  let followOutput = true;
+  screen.addEventListener("scroll", () => { followOutput = screen.scrollHeight-screen.clientHeight-screen.scrollTop <= 24; }, {passive:true});
   let busy = false, ready = false, submitting = false, waitingInputs = 0, idle = Promise.resolve(), activeAccess = "existing";
   const send = async value => {
+    if (value.action !== "read") status.textContent = OaclisSettings.text("Ricevuto");
     if (value.action === "read") { if (busy || waitingInputs) return false; }
     else { waitingInputs++; while (busy) await idle; waitingInputs--; }
     if (!panel.isConnected) return false;
     busy = true;
     let done; idle = new Promise(resolve => { done = resolve; });
     try {
-      const result = await api("terminal", { ...payload, ...value });
+      if (value.action !== "read") status.textContent = OaclisSettings.text("Operazione in corso");
+      const stamp = window.OaclisLocalVoice?.stamp(panel);
+      const result = await api("terminal", { ...payload, ...value, ...window.OaclisLocalVoice?.request(panel) });
       if (!panel.isConnected) return false;
       if(value.action === "open") activeAccess=result.active_access || "existing";
+      const top=screen.scrollTop,left=screen.scrollLeft;
       OaclisTerminal.render(screen,result.screen,result.screen_ansi);
-      screen.scrollTop = screen.scrollHeight;
+      if (value.action === "input" || value.action === "open") followOutput = true;
+      if (followOutput) screen.scrollTop = screen.scrollHeight;
+      else {screen.scrollTop=top;screen.scrollLeft=left;}
+      window.OaclisLocalVoice?.update(panel,result,stamp,typeof value.text === "string");
+      if (value.action !== "read" || status.dataset.error) status.textContent=OaclisSettings.text(value.action === "input" ? "Inviato" : "Collegato");
+      delete status.dataset.error;
       ready = true;
       form.querySelectorAll("textarea,button").forEach(e => e.disabled = false);
       return true;
-    } catch (error) { if (panel.isConnected) screen.textContent = error.message; if (value.action === "open") ready = false; return false; }
+    } catch (error) { if (panel.isConnected) {status.textContent=OaclisSettings.text(value.action === "input" ? "Invio non confermato" : "Collegamento temporaneamente non disponibile. Riprova.");status.dataset.error="true";} if (value.action === "open") ready = false; return false; }
     finally { busy = false; done(); }
   };
   const pollTerminal = async () => {
@@ -86,13 +100,18 @@ function openChatTerminal(connection, anchor, deviceId) {
     await send({ action: "read" });
     if (panel.isConnected && ready) panel.terminalTimer = setTimeout(pollTerminal, 1500);
   };
-  form.onsubmit = guard(async e => {
-    e.preventDefault();
-    if (!ready || submitting) return;
+  const submit = async () => {
+    if (!ready || submitting) return false;
     const text = form.elements.text.value; submitting = true;
-    try { if (await send({ action: "input", text, key: "Enter" }) && form.elements.text.value === text) form.elements.text.value = ""; }
-    finally { submitting = false; }
-  });
+    window.OaclisReadAloud?.feedback();
+    try {
+      const sent=await send({action:"input",text,key:"Enter"});
+      if(sent){if(form.elements.text.value===text)form.elements.text.value="";window.OaclisLocalVoice?.sent(panel);}
+      return sent;
+    } finally {submitting=false;}
+  };
+  form.onsubmit=guard(async event=>{event.preventDefault();await submit();});
+  panel.voiceAdapter={chatId:connection.entry.id,compose:form.elements.text,send:submit,sending:()=>submitting};
   form.elements.text.onkeydown = event => {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); }
   };
@@ -131,4 +150,5 @@ function openChatTerminal(connection, anchor, deviceId) {
   };
   access.onchange=()=>{start.hidden=false;start.disabled=false;start.textContent=OaclisSettings.text(ready?"Salva autorizzazione":"Apri console");};
   screen.textContent=OaclisSettings.text("Scegli l’autorizzazione e apri la console.");
+  window.OaclisLocalVoice?.activate(panel);
 }

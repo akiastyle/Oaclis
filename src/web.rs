@@ -1,4 +1,4 @@
-// web.rs v2.26.1758
+// web.rs v2.28.1801
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -15,6 +15,18 @@ use std::{
     thread,
 };
 use tiny_http::{Header, Method, Request, Response, Server};
+
+fn compact_status(mut status: Value, known: &Value) -> io::Result<Value> {
+    use sha2::{Digest,Sha256};
+    let mut revisions=json!({});
+    for field in ["analyses","app_checks","transfers","preparations","shared"] {
+        let hash=Sha256::digest(serde_json::to_vec(&status[field])?).iter().map(|byte|format!("{byte:02x}")).collect::<String>();
+        if known[field]==hash { status.as_object_mut().unwrap().remove(field); }
+        revisions[field]=json!(hash);
+    }
+    status["revisions"]=revisions;
+    Ok(status)
+}
 
 fn association(value: &Value, devices: &[Device]) -> io::Result<(String, Value)> {
     let source = value["source"]
@@ -80,7 +92,7 @@ fn answer_bytes(request: Request, status: u16, body: Vec<u8>, content_type: &str
         .with_header(header("Content-Type", content_type))
         .with_header(header("Cache-Control", "no-store"))
         .with_header(header("X-Content-Type-Options", "nosniff"))
-        .with_header(header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"));
+        .with_header(header("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; media-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"));
     let _ = request.respond(response);
 }
 fn local_host(host: &str) -> bool {
@@ -185,6 +197,10 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 answer_bytes(request, 200, include_bytes!("../ui/assets/oaclis-crown.png").to_vec(), "image/png");
                 return;
             }
+            if url == "/feedback.mp3" {
+                answer_bytes(request,200,include_bytes!("../relay/feedback.mp3").to_vec(),"audio/mpeg");
+                return;
+            }
             if url == "/assets/oaclis-particles.png" {
                 answer_bytes(request, 200, include_bytes!("../ui/assets/oaclis-particles.png").to_vec(), "image/png");
                 return;
@@ -216,6 +232,10 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 "/background.js" => Some((include_str!("../ui/background.js").into(), "text/javascript; charset=utf-8")),
                 "/map.js" => Some((include_str!("../ui/map.js").into(), "text/javascript; charset=utf-8")),
                 "/terminal-format.js" => Some((include_str!("../ui/terminal-format.js").into(), "text/javascript; charset=utf-8")),
+                "/voice.js" => Some((include_str!("../relay/voice.js").into(), "text/javascript; charset=utf-8")),
+                "/read-aloud.js" => Some((include_str!("../relay/read-aloud.js").into(), "text/javascript; charset=utf-8")),
+                "/voice-local.js" => Some((include_str!("../ui/voice-local.js").into(), "text/javascript; charset=utf-8")),
+                "/voice-local.css" => Some((include_str!("../ui/voice-local.css").into(), "text/css; charset=utf-8")),
                 "/console.js" => Some((include_str!("../ui/console.js").into(), "text/javascript; charset=utf-8")),
                 "/app.js" => Some((
                     include_str!("../ui/app.js").into(),
@@ -303,9 +323,10 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Post, "/api/path/authorize") => crate::path_access::authorize(body(&mut request)?),
                 (&Method::Post, "/api/log") => Ok(crate::state_transport::logs()),
                 (&Method::Post, "/api/status") => {
+                    let known=body(&mut request)?;
                     let snapshot = environment::database(&config,"","status-read",None)?;
-                    Ok(json!({"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
-                        "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":snapshot["links"],"chat_settings":snapshot["preferences"],"deleted_chats":crate::chat_deletion::ids(crate::state_store::snapshot(&config)?.as_ref()),"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}))
+                    compact_status(json!({"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
+                        "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":snapshot["links"],"chat_settings":snapshot["preferences"],"deleted_chats":crate::chat_deletion::ids(crate::state_store::snapshot(&config)?.as_ref()),"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}),&known["revisions"])
                 }
                 (&Method::Post, "/api/link-position") => {
                     let value = body(&mut request)?;
@@ -622,4 +643,20 @@ mod tests {
         assert!(association(&value, &devices).is_err());
     }
 
+}
+
+#[cfg(test)]
+mod status_delta_tests {
+    use super::*;
+    #[test]
+    fn unchanged_sections_are_omitted_but_runtime_and_changes_are_returned() {
+        let original=json!({"analyses":{},"app_checks":{},"transfers":{},"preparations":{},"shared":{"positions":{"master":{"x":1}}},"job":{"status":"idle"}});
+        let first=compact_status(original.clone(),&Value::Null).unwrap();
+        let unchanged=compact_status(original.clone(),&first["revisions"]).unwrap();
+        assert!(unchanged.get("shared").is_none());assert!(unchanged.get("analyses").is_none());assert_eq!(unchanged["job"],original["job"]);
+        let mut changed=original.clone();changed["shared"]["positions"]["master"]["x"]=json!(2);
+        let next=compact_status(changed.clone(),&first["revisions"]).unwrap();assert_eq!(next["shared"],changed["shared"]);assert!(next.get("analyses").is_none());
+        let mut unacknowledged=first["revisions"].clone();unacknowledged.as_object_mut().unwrap().remove("shared");
+        assert_eq!(compact_status(original.clone(),&unacknowledged).unwrap()["shared"],original["shared"]);
+    }
 }

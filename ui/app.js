@@ -1,4 +1,4 @@
-// app.js v4.161.3020
+// app.js v4.161.3051
 "use strict";
 OaclisSettings.translate(document.body);
 const $ = (s) => document.querySelector(s);
@@ -28,7 +28,6 @@ let data = {
   linkPositions = {},
   linkPositionSaving = false,
   catalogRequest = 0,
-  audio,
   noticeTimer;
 try {
   positions = JSON.parse(localStorage.getItem("oaclis-map") || "{}");
@@ -142,22 +141,10 @@ updatePalettePreview();
 $("#sound").onclick = () => {
   const enabled = $("#sound").getAttribute("aria-pressed") !== "true";
   $("#sound").setAttribute("aria-pressed", enabled);
-  if (enabled) {
-    audio ??= new AudioContext();
-    audio.resume();
-  }
+  if (enabled) OaclisReadAloud.feedback();
 };
 function beep() {
-  if (!audio || $("#sound").getAttribute("aria-pressed") !== "true") return;
-  const osc = audio.createOscillator(),
-    gain = audio.createGain();
-  osc.connect(gain);
-  gain.connect(audio.destination);
-  osc.frequency.value = 660;
-  gain.gain.setValueAtTime(0.08, audio.currentTime);
-  gain.gain.exponentialRampToValueAtTime(0.001, audio.currentTime + 0.3);
-  osc.start();
-  osc.stop(audio.currentTime + 0.3);
+  if ($("#sound").getAttribute("aria-pressed") === "true") OaclisReadAloud.feedback();
 }
 async function api(path, value) {
   const response = await fetch("/api/" + path, {
@@ -221,6 +208,7 @@ async function openDevice(id) {
   bindPanelDrag($("#panel"), true);
   renderConnections();
   await loadChats();
+  window.OaclisLocalVoice?.library();
   if (sourceId === id && !$("#panel").hidden) $("#search").focus();
 }
 async function loadChats() {
@@ -274,11 +262,13 @@ $("#check").onclick = guard(() => api("check", {}));
 $("#add-device").onclick = () => openDiscovery();
 $("#edit-device").onclick = () => editDevice(data.devices.find(d => d.id === sourceId), $("#edit-device"));
 const lastConnection = {};
+let statusRevisions = {};
 async function poll() {
   const saved = saveLinks;
   await saved;
   if (saved !== saveLinks) return;
-  const next = await api("status");
+  const next = await api("status", {revisions:statusRevisions});
+  statusRevisions = {...next.revisions,shared:statusRevisions.shared};
   for (const device of data.devices) {
     const state = next.connections[device.id];
     if (state === "online" && lastConnection[device.id] === "offline") {
@@ -301,6 +291,7 @@ async function poll() {
       if (nodesChanged) renderMap(true);
       if (nodesChanged || libraryChanged) renderLibrary();
     }
+    statusRevisions.shared = next.revisions?.shared;
   }
   data.device_runtime ??= {};
   if (next.device_runtime) for (const id of Object.keys(data.device_runtime)) if (!(id in next.device_runtime)) delete data.device_runtime[id];
@@ -322,10 +313,10 @@ async function poll() {
   data.paused = next.paused;
   data.checks_paused = next.checks_paused;
   data.settings_paused = next.settings_paused;
-  data.analyses = next.analyses || {};
-  data.app_checks = next.app_checks || {};
-  data.transfers = next.transfers || {};
-  data.preparations = next.preparations || {};
+  if (Object.hasOwn(next,"analyses")) data.analyses = next.analyses;
+  if (Object.hasOwn(next,"app_checks")) data.app_checks = next.app_checks;
+  if (Object.hasOwn(next,"transfers")) data.transfers = next.transfers;
+  if (Object.hasOwn(next,"preparations")) data.preparations = next.preparations;
   for (const editor of document.querySelectorAll(".chat-editor")) {
     if (editor.scopeEntry) { renderScopeDetails(editor, editor.scopeEntry); editor.updateVisibility?.(); }
   }

@@ -708,3 +708,19 @@ Le richieste SSH hanno un limite complessivo: 60 secondi per i comandi ordinari,
 240 secondi per l'analisi dell'ambiente e 2 ore per l'installazione delle app.
 Le scadenze interrompono il gruppo del processo SSH locale; non costituiscono
 un annullamento transazionale di eventuali installazioni già avviate sul device.
+
+## Voce e console locale
+
+La barra superiore contiene il microfono e il pulsante informazioni dei comandi
+vocali. Con una console selezionata compare anche la lettura delle risposte.
+Microfono, comandi IT/EN, suono di conferma e cinque impostazioni riusano gli
+stessi moduli del mobile. Il riconoscimento resta attivo cambiando chat; la
+console mantiene la scelta esplicita delle autorizzazioni prima dell'apertura.
+Per numero, «cambia 3» segue l'ordine della lista filtrata; per nome usa le chat
+visibili del dispositivo selezionato. Il browser deve autorizzare il microfono.
+
+Gli aggiornamenti dello stato mantengono le frequenze precedenti e omettono le
+sezioni già ricevute quando non cambiano. Durante un trascinamento i dati
+condivisi rinviati vengono richiesti di nuovo, senza perdere aggiornamenti.
+La console conserva lo scroll se si legge più in alto e mostra lo stato
+immediato dell'invio senza cancellare una nuova bozza.

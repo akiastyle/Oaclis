@@ -1,4 +1,4 @@
-// terminal.rs v1.16.272
+// terminal.rs v1.16.278
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -15,6 +15,8 @@ pub(crate) fn access_flags(access: &str) -> io::Result<&'static str> {
 }
 fn validate(value: &Value) -> io::Result<&str> {
     if let Some(access)=value.get("access") { access_flags(access.as_str().ok_or_else(||invalid("Autorizzazione console non valida"))?)?; }
+    if let Some(speech)=value.get("speech") { if !speech.is_boolean() {return Err(invalid("Lettura non valida"));} }
+    if value.get("speech_cursor").is_some_and(|cursor|!cursor.is_null() && cursor.as_u64().is_none()) {return Err(invalid("Cursore lettura non valido"));}
     let chat = value["chat_id"].as_str().filter(|s| !s.is_empty() && s.len()<=160 && s.bytes().all(|b|b.is_ascii_alphanumeric() || b"_-".contains(&b)))
         .ok_or_else(||invalid("Chat non valida"))?;
     match value["action"].as_str() {
@@ -121,7 +123,9 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let access=if value["action"]=="open" {
         tmux(&["show-options","-v","-t",&session,"@oaclis-access"]).ok().and_then(|v|String::from_utf8(v).ok()).map(|v|v.trim().to_owned()).filter(|v|access_flags(v).is_ok()).unwrap_or_else(||"existing".into())
     } else { String::new() };
-    Ok(json!({"screen":sgr().replace_all(&ansi,""),"screen_ansi":ansi,"active_access":access}))
+    let mut result=json!({"screen":sgr().replace_all(&ansi,""),"screen_ansi":ansi,"active_access":access});
+    if value["speech"]==true {result["speech"]=crate::assistant_stream::snapshot(chat,value["speech_cursor"].as_u64());}
+    Ok(result)
 }
 fn sgr() -> &'static regex::Regex {
     static SGR: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();

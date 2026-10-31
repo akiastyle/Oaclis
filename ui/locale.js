@@ -1,4 +1,4 @@
-// locale.js v1.3.442
+// locale.js v1.3.448
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -8,6 +8,10 @@ window.OaclisSettings=(()=>{
  const speechLanguage=language==='it'?'it-IT':'en-US';
  document.documentElement.lang=language;
  const en={
+  "Ricevuto":"Received",
+  "Invio non confermato":"Send not confirmed",
+  "Inviato":"Sent",
+  "Collegato":"Connected",
   "Aggiungi dispositivo": "Add device",
   "Aggiungi manualmente": "Add manually",
   "Aggiungi mobile": "Add mobile",
@@ -268,7 +272,7 @@ window.OaclisSettings=(()=>{
   "Operazione non completata. Riprova.": "Operation incomplete. Try again.",
   "Comando eseguito": "Command completed",
   "Attiva voce": "Enable voice",
-  "Dettatura in pausa · start rec per riprendere": "Dictation paused · say resume dictation",
+  "Dettatura in pausa · riprendi": "Dictation paused · say resume dictation",
   "Dettatura attiva · clic per spegnere": "Dictation active · click to turn off",
   "Collegamento o elaborazione vocale · clic per spegnere": "Voice connecting or processing · click to turn off",
   "Ascolto disattivato": "Listening off",

@@ -1,4 +1,4 @@
-// voice.js v1.38.590
+// voice.js v1.38.594
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -51,7 +51,7 @@ window.OaclisVoice=(()=>{
    if(!button)return;
    const mode=!wanted?'off':paused?'paused':state==='listening'&&!blocked()?'listening':'busy';
    button.dataset.state=state;button.dataset.mode=mode;button.setAttribute('aria-pressed',String(wanted));
-   button.title=locale.text(({off:'Attiva voce',paused:'Dettatura in pausa · start rec per riprendere',listening:'Dettatura attiva · clic per spegnere',busy:'Collegamento o elaborazione vocale · clic per spegnere'})[mode]);
+   button.title=locale.text(({off:'Attiva voce',paused:'Dettatura in pausa · riprendi',listening:'Dettatura attiva · clic per spegnere',busy:'Collegamento o elaborazione vocale · clic per spegnere'})[mode]);
    button.setAttribute('aria-label',button.title);
   };
   const clearPending=()=>{clearTimeout(pendingTimer);pending=null;if(options){if(options.open)options.close();options.replaceChildren();}};
@@ -238,7 +238,7 @@ window.OaclisVoice=(()=>{
    preview=document.createElement('span');preview.className='voice-preview voice-sr';preview.setAttribute('aria-hidden','true');
    options=document.createElement('dialog');options.className='voice-options voice-dialog';options.setAttribute('aria-label',locale.text('Conferma comando vocale'));options.addEventListener('cancel',event=>{event.preventDefault();clearPending();});
    help=document.createElement('dialog');help.className='voice-help voice-dialog';help.setAttribute('aria-label',locale.text('Comandi vocali'));
-   root.append(status,preview,options,help);document.getElementById('app').append(root);
+   root.append(status,preview,options,help);(document.getElementById('app')||document.body).append(root);
    button=document.createElement('button');button.type='button';button.className='voice-mic secondary';button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8"/></svg>';
    host.append(button);
    button.onclick=()=>{if(wanted)stop();else{window.OaclisReadAloud?.feedback();wanted=true;paused=false;retries=0;start();}};
