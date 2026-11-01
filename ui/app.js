@@ -1,4 +1,4 @@
-// app.js v4.164.3105
+// app.js v4.164.3107
 "use strict";
 OaclisSettings.translate(document.body);
 const $ = (s) => document.querySelector(s);
@@ -369,7 +369,7 @@ async function poll() {
   }
   if (next.discovery) await updateDiscovery(next.discovery);
   renderConnections();
-  for (const marker of document.querySelectorAll(".link-badge")) {
+  for (const marker of document.querySelectorAll(".chat-link .link-badge[data-link-key]")) {
     const [id, source] = JSON.parse(marker.dataset.linkKey);
     const connection = chatLinks.find(value => value.entry.id === id && value.source === source && value.target === JSON.parse(marker.dataset.linkKey)[2]);
     if (connection) updateBadgeMotion(marker, connection);

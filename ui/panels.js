@@ -1,4 +1,4 @@
-// panels.js v3.140.2761
+// panels.js v3.140.2765
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -239,7 +239,7 @@ async function removePresentation(kind, id) {
     data.chat_settings[id] = { ...oldPreference, hidden: true };
   } else data.devices = data.devices.filter(device => device.id !== id);
   // Remove existing elements directly so the browser can paint before the request finishes.
-  document.querySelectorAll(".link-badge").forEach(marker => {
+  document.querySelectorAll(".chat-link .link-badge[data-link-key]").forEach(marker => {
     const [chat, source, target] = JSON.parse(marker.dataset.linkKey);
     if (kind === "chat" ? chat === id : [source, target].includes(id)) disposeChatLink(marker.closest(".chat-link"));
   });
@@ -374,7 +374,7 @@ function bindPanelReference(panel) {
   const nodeId = original.dataset.id, linkKey = original.dataset.linkKey;
   const chatId = original.querySelector("[data-chat-id]")?.dataset.chatId, chatSource = original.dataset.sourceDevice;
   const resolve = () => nodeId ? [...document.querySelectorAll(".map-node")].find(n => n.dataset.id === nodeId)
-    : linkKey ? [...document.querySelectorAll(".link-badge")].find(n => n.dataset.linkKey === linkKey)
+    : linkKey ? [...document.querySelectorAll(".chat-link .link-badge[data-link-key]")].find(n => n.dataset.linkKey === linkKey)
     : chatId ? [...document.querySelectorAll(".library-item")].find(n => n.dataset.chatId === chatId && n.closest(".library-row").dataset.sourceDevice === chatSource)?.closest(".library-row") : original;
   const tether = document.createElement("div");
   tether.className = "panel-tether";
