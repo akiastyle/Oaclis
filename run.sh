@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run.sh v1.5.234
+# run.sh v1.5.237
 # Prepare prerequisites, compile, configure and enable application startup.
 set -euo pipefail
 if [[ ${1:-} == --desktop-test ]]; then
@@ -44,6 +44,9 @@ else
         echo '[Manca] Strumenti Apple: xcode-select --install'
         missing+=(apple-tools)
     fi
+fi
+if [[ "$system" == Linux && "$wsl" == no && "$container" == no ]]; then
+    check xset x11-xserver-utils
 fi
 check cargo ''; check rustc ''
 if command -v rustc >/dev/null; then

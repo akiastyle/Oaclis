@@ -1,4 +1,4 @@
-// app.js v4.161.3051
+// app.js v4.162.3080
 "use strict";
 OaclisSettings.translate(document.body);
 const $ = (s) => document.querySelector(s);
@@ -107,6 +107,33 @@ function updatePalettePreview() {
     if (active) $("#palette").title = button.textContent.trim();
   });
 }
+const powerOptions=[...document.querySelectorAll('#power-menu [data-power]')];
+function updatePowerMenu(){
+  const runtime=data.device_runtime?.master,mode=runtime?.power_mode||(runtime?.active?'always':'normal');
+  for(const button of powerOptions)button.setAttribute('aria-checked',String(button.dataset.power===mode));
+  const selected=powerOptions.find(button=>button.dataset.power===mode);
+  if(selected){$('#power').innerHTML=selected.innerHTML;$('#power').title=OaclisSettings.text('Modalità energia')+' · '+selected.title+(runtime?.power_applied===false?' · '+OaclisSettings.text('Non applicata'):'');$('#power').setAttribute('aria-label',$('#power').title);}
+  $('#power').dataset.applied=String(runtime?.power_applied!==false);
+}
+for(const button of powerOptions)button.onclick=guard(async()=>{
+  const trigger=$('#power');trigger.dataset.busy='true';trigger.disabled=true;powerOptions.forEach(button=>button.disabled=true);
+  try{data.device_runtime??={};data.device_runtime.master=await api('device/control',{device_id:'master',action:'power-'+button.dataset.power});$('#power-menu').hidePopover();trigger.focus();}
+  finally{delete trigger.dataset.busy;trigger.disabled=false;powerOptions.forEach(button=>button.disabled=false);updatePowerMenu();}
+});
+$('#power-menu').addEventListener('toggle',event=>{
+  if(event.newState!=='open')return;updatePowerMenu();
+  const anchor=$('#power').getBoundingClientRect(),menu=event.target;
+  menu.style.left=Math.max(8,Math.min(anchor.left,innerWidth-menu.offsetWidth-8))+'px';
+  menu.style.top=Math.max(8,Math.min($('.toolbar').getBoundingClientRect().bottom+8,innerHeight-menu.offsetHeight-8))+'px';
+  menu.querySelector('[aria-checked="true"]')?.focus({preventScroll:true});
+});
+$('#power-menu').onkeydown=event=>{
+  const index=powerOptions.indexOf(document.activeElement);let next;
+  if(['ArrowDown','ArrowRight'].includes(event.key))next=(index+1)%powerOptions.length;
+  if(['ArrowUp','ArrowLeft'].includes(event.key))next=(index-1+powerOptions.length)%powerOptions.length;
+  if(event.key==='Home')next=0;if(event.key==='End')next=powerOptions.length-1;
+  if(next!==undefined){event.preventDefault();powerOptions[next].focus();}
+};
 const paletteOptions = [...document.querySelectorAll(".palette-option")];
 for (const button of paletteOptions) {
   button.append(paletteSwatches(palettes[button.dataset.palette]));
@@ -306,6 +333,7 @@ async function poll() {
     data.mobile_devices = next.mobile_devices;
     if (changed) renderMap(true);
   }
+  updatePowerMenu();
   data.build = next.build;
   data.connections = next.connections;
   data.job = next.job;
@@ -383,6 +411,7 @@ window.onresize = () => {
 };
 guard(async () => {
   data = await api("state");
+  updatePowerMenu();
   chatLinks = data.links || [];
   const oldPositions = positions;
   positions = data.positions || {};

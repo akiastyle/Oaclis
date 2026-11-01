@@ -1,4 +1,4 @@
-// locale.js v1.3.456
+// locale.js v1.3.461
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -75,6 +75,11 @@ window.OaclisSettings=(()=>{
   "Desktop remoto": "Remote desktop",
   "Desktop remoto ·": "Remote desktop ·",
   "Sempre attivo": "Keep awake",
+  "Modalità energia": "Power mode",
+  "Sempre acceso": "Always on",
+  "Spegni monitor senza standby": "Turn off display, keep awake",
+  "Normale": "Normal",
+  "Non applicata": "Not applied",
   "Riavvia Oaclis": "Restart Oaclis",
   "Standby bloccato": "Sleep prevented",
   "Standby consentito": "Sleep allowed",

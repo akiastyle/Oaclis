@@ -1,9 +1,9 @@
-// keep_awake.rs v1.14.376
+// keep_awake.rs v1.17.449
 //! Hold native OS inhibitors only for the lifetime of the Oaclis owner.
 use crate::invalid;
 use serde_json::json;
 use std::{env, fs, io::{self, BufRead, BufReader, IsTerminal, Read, Write}, path::Path, process::{Child, Command, Stdio}, sync::mpsc, thread, time::Duration};
-use std::os::unix::fs::{FileTypeExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, PermissionsExt, MetadataExt};
 
 fn host() -> io::Result<&'static str> {
     if Path::new("/.dockerenv").exists() || Path::new("/run/.containerenv").exists() { return Err(invalid("Il blocco standby deve essere gestito sul sistema host, non nel container")); }
@@ -106,18 +106,79 @@ fn start(command: &mut Command, ready: bool) -> io::Result<Inhibitor> {
     Ok(child)
 }
 
-fn hold() -> io::Result<()> {
+struct DisplayPower {
+    environment: Vec<(String,String)>,
+    restore: Vec<String>,
+}
+impl DisplayPower {
+    fn command(&self, args: &[&str]) -> Command {
+        let mut command=Command::new("xset");command.envs(self.environment.iter().cloned()).args(args);command
+    }
+    fn apply(mode: &str) -> io::Result<Option<Self>> {
+        let mut environment=Vec::new();
+        if env::var_os("DISPLAY").is_none() {
+            let sessions=crate::app_update::run(Command::new("loginctl").args(["list-sessions","--no-legend"]),Duration::from_secs(3)).unwrap_or_default();
+            for line in sessions.lines().take(32) {
+                let fields:Vec<_>=line.split_whitespace().collect();if fields.len()<3 {continue;}
+                let properties=crate::app_update::run(Command::new("loginctl").args(["show-session",fields[0],"-p","Active","-p","Type","-p","Display"]),Duration::from_secs(2)).unwrap_or_default();
+                if !properties.lines().any(|line|line=="Active=yes") {continue;}
+                if properties.lines().any(|line|line=="Type=wayland") {return Err(invalid("Controllo monitor non disponibile in questa sessione Wayland"));}
+                if !properties.lines().any(|line|line=="Type=x11") {continue;}
+                let runtime=format!("XDG_RUNTIME_DIR=/run/user/{}",fields[1]);let bus=format!("DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{}/bus",fields[1]);
+                let mut command=if fs::metadata("/proc/self").is_ok_and(|metadata|fields[1].parse::<u32>().ok()==Some(metadata.uid())) {Command::new("env")} else {let mut c=Command::new("runuser");c.args(["-u",fields[2],"--","env"]);c};
+                let values=crate::app_update::run(command.args([&runtime,&bus,"systemctl","--user","show-environment"]),Duration::from_secs(3)).unwrap_or_default();
+                for line in values.lines() {if let Some((key,value))=line.split_once('=') {if matches!(key,"DISPLAY"|"XAUTHORITY") {environment.push((key.into(),value.into()));}}}
+                if !environment.iter().any(|(key,_)|key=="DISPLAY") {if let Some(display)=properties.lines().find_map(|line|line.strip_prefix("Display=")).filter(|v|!v.is_empty()) {environment.push(("DISPLAY".into(),display.into()));}}
+                break;
+            }
+            if !environment.iter().any(|(key,_)|key=="DISPLAY") {
+                if mode=="screen-off" {return Err(invalid("Nessun monitor disponibile"));}
+                return Ok(None);
+            }
+        } else if env::var_os("WAYLAND_DISPLAY").is_some() {return Err(invalid("Controllo monitor non disponibile in questa sessione Wayland"));}
+        let mut display=Self {environment,restore:Vec::new()};
+        let query=crate::app_update::run(&mut display.command(&["q"]),Duration::from_secs(3))?;
+        let timeout=query.lines().find(|line|line.trim_start().starts_with("timeout:"))
+            .map(|line|line.split_whitespace().collect::<Vec<_>>()).filter(|values|values.len()>=4)
+            .ok_or_else(||invalid("Impostazioni monitor non disponibili"))?;
+        let cycle=timeout[3].parse::<u32>().map_err(|_|invalid("Impostazioni monitor non valide"))?;let timeout=timeout[1].parse::<u32>().map_err(|_|invalid("Impostazioni monitor non valide"))?;
+        let dpms=query.contains("DPMS is Enabled") || query.contains("DPMS is Disabled");
+        if mode=="screen-off" && !dpms {return Err(invalid("Questo monitor non supporta lo spegnimento"));}
+        display.restore=vec!["s".into(),timeout.to_string(),cycle.to_string()];
+        if dpms {display.restore.push(if query.contains("DPMS is Enabled") {"+dpms"} else {"-dpms"}.into());}
+        if mode=="always" {
+            if dpms {crate::app_update::run(&mut display.command(&["+dpms","dpms","force","on"]),Duration::from_secs(3))?;}
+            let args=if dpms {vec!["s","off","-dpms"]} else {vec!["s","off"]};
+            crate::app_update::run(&mut display.command(&args),Duration::from_secs(3))?;
+        } else {crate::app_update::run(&mut display.command(&["+dpms","dpms","force","off"]),Duration::from_secs(3))?;}
+        Ok(Some(display))
+    }
+}
+impl Drop for DisplayPower {
+    fn drop(&mut self) {
+        if !self.restore.is_empty() {let args:Vec<_>=self.restore.iter().map(String::as_str).collect();let _=crate::app_update::run(&mut self.command(&args),Duration::from_secs(1));}
+    }
+}
+
+fn hold(mode: &str) -> io::Result<()> {
+    if !matches!(mode,"always"|"screen-off") {return Err(invalid("Modalità energia non valida"));}
+    let mut display=None;
     let mut children = Vec::new();
     match host()? {
-        "windows" => children.push(start(&mut windows("$ErrorActionPreference='Stop'; & (Join-Path $env:LOCALAPPDATA 'Oaclis\\keep-awake.ps1')"), true)?),
-        "macos" => children.push(start(Command::new("caffeinate").args(["-i", "-w", &std::process::id().to_string()]), false)?),
+        "windows" => children.push(start(&mut windows(&format!("& {{ {} }} -Mode '{mode}'",include_str!("../scripts/keep-awake.ps1"))), true)?),
+        "macos" => {
+            children.push(start(Command::new("caffeinate").args([if mode=="always" {"-di"} else {"-i"}, "-w", &std::process::id().to_string()]), false)?);
+            if mode=="screen-off" {crate::app_update::run(Command::new("pmset").arg("displaysleepnow"),Duration::from_secs(3))?;}
+        },
         _ => {
+            display=DisplayPower::apply(mode)?;
             for kind in ["sleep", "idle"] {
                 // Separate requests avoid lid-switch authorization on systemd 255.
                 children.push(start(Command::new("systemd-inhibit").args([&format!("--what={kind}"), "--mode=block", "--who=Oaclis", "--why=Oaclis sempre attivo", "cat"]), false)?);
             }
         }
     }
+    let _display=display;
     thread::sleep(Duration::from_millis(250));
     for child in &mut children {
         if child.0.try_wait()?.is_some() {
@@ -139,8 +200,8 @@ fn hold() -> io::Result<()> {
     }
 }
 
-pub fn run() -> io::Result<()> {
-    let result = hold();
+pub fn run(mode: &str) -> io::Result<()> {
+    let result = hold(mode);
     if let Err(error) = &result { println!("{}", json!({"active":false,"error":error.to_string()})); io::stdout().flush()?; }
     result
 }

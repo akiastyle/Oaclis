@@ -629,7 +629,9 @@ registri gli eventi e avvii il polling. Il caricamento è dichiarato in `index.h
 
 Accanto alla matita, Riavvia riavvia soltanto Oaclis e chiede conferma. Attendere la conclusione dei trasferimenti e delle analisi prima di riavviare. I comandi remoti passano dall’accesso SSH già configurato e dal ricevitore Rust, senza script Python.
 
-Sempre attivo impedisce lo standby mentre Oaclis è aperto e conserva la scelta al riavvio: su Linux usa `systemd-inhibit`, su macOS `caffeinate`, in WSL una richiesta di alimentazione Windows. Non installa servizi. Nei container non può bloccare lo standby dell’host; se il sistema non concede il blocco mostra l’errore e non lo dichiara attivo. La sospensione esplicita dell’utente resta dipendente dalle regole del sistema operativo.
+Il menu energia nella nav offre tre icone: Sempre acceso (sistema e monitor attivi), Spegni monitor senza standby e Normale (gestione del sistema operativo). La preferenza e' salvata sul dispositivo in `keep-awake.json` e ripristinata all'avvio; non viene applicata agli altri device. Le vecchie preferenze booleane restano leggibili. Un cambio fallito conserva la preferenza precedente. La sospensione esplicita dell'utente resta dipendente dalle regole del sistema operativo.
+
+In WSL la richiesta agisce su Windows, su macOS usa `caffeinate` e `pmset`, su Linux usa `systemd-inhibit` e il controllo monitor X11 con `xset`. Le impostazioni X11 precedenti vengono ripristinate al rilascio. Su Linux senza desktop e' disponibile solo il blocco standby; il controllo monitor Wayland non e' supportato e viene segnalato senza dichiararlo applicato. Nei container l'energia resta gestita dall'host. Non vengono creati servizi aggiuntivi. Il vecchio pulsante Sempre attivo continua ad agire sullo stesso stato.
 
 Sulle card degli slave l’icona V è allineata agli altri comandi: fissa se allineata al master, lampeggiante se serve un aggiornamento. Il tooltip contiene solo la versione installata. Un clic verifica la versione effettiva e, se diversa, avvia direttamente l’aggiornamento senza conferma. Il confronto usa l’identità dei sorgenti oltre alla versione media visualizzata. L’aggiornamento avviene solo su richiesta e conserva configurazione e chat; una repo modificata o divergente blocca il comando.
 
@@ -656,7 +658,7 @@ Su Windows con WSL, dalla repository in PowerShell:
 .\run.ps1 -Distro Ubuntu -PrepareAwake
 ```
 
-Questa preparazione è già inclusa nel normale `run.ps1`; l’opzione serve soltanto a riparare il supporto separatamente. Sostituire Ubuntu con il nome della distribuzione Oaclis. È PowerShell a copiare e verificare il supporto; `run.sh` dentro WSL gestisce solo la parte Linux e non prepara Windows né apre il suo browser. Il setup crea `%LOCALAPPDATA%\Oaclis\keep-awake.ps1`; la normale richiesta di Oaclis usa questo helper Windows e lo rilascia quando il blocco viene spento o l'app termina. La policy di esecuzione PowerShell viene impostata soltanto sul processo helper, senza cambiare quella del sistema.
+Questa preparazione è già inclusa nel normale `run.ps1`; l’opzione serve soltanto a riparare il supporto separatamente. Sostituire Ubuntu con il nome della distribuzione Oaclis. È PowerShell a copiare e verificare il supporto; `run.sh` dentro WSL gestisce solo la parte Linux e non prepara Windows né apre il suo browser. Il setup crea `%LOCALAPPDATA%\Oaclis\keep-awake.ps1`; Oaclis esegue la stessa sorgente incorporata nel binario, cosi anche gli aggiornamenti da Git ricevono il supporto corretto, e rilascia il vincolo quando il blocco viene spento o l'app termina. La policy di esecuzione PowerShell viene impostata soltanto sul processo helper, senza cambiare quella del sistema.
 
 
 ### Stato operativo in Rust e JSON

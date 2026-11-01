@@ -1,4 +1,4 @@
-// main.rs v1.2.187
+// main.rs v1.2.190
 use oaclis::{
     chat::Chat,
     compare,
@@ -21,7 +21,8 @@ fn run() -> Result<(), Box<dyn Error>> {
         [command] if command == "environment-request" => oaclis::environment::forward()?,
         [command] if command == "prepare-awake" => oaclis::keep_awake::prepare(None)?,
         [command, option, user] if command == "prepare-awake" && option == "--user" => oaclis::keep_awake::prepare(Some(user.to_str().ok_or("Utente non valido")?))?,
-        [command] if command == "keep-awake-hold" => oaclis::keep_awake::run()?,
+        [command] if command == "keep-awake-hold" => oaclis::keep_awake::run("always")?,
+        [command, mode] if command == "keep-awake-hold" => oaclis::keep_awake::run(mode.to_str().ok_or("Modalità energia non valida")?)?,
         [command, system, container, wsl] if command == "save-scenario" => {
             let system = system.to_str().ok_or("Sistema non valido")?;
             if !["yes", "no"].iter().any(|v| container == v) || !["yes", "no"].iter().any(|v| wsl == v) { return Err("Scenario non valido".into()); }
