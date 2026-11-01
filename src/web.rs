@@ -1,4 +1,4 @@
-// web.rs v2.28.1801
+// web.rs v2.28.1805
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -50,7 +50,7 @@ fn association(value: &Value, devices: &[Device]) -> io::Result<(String, Value)>
         || source == target
         || (source != "master" && target != "master")
         || !devices::identifier(id)
-        || !matches!(operation, "copy" | "send" | "sync")
+        || !matches!(operation, "copy" | "send" | "sync" | "console")
         || name.chars().count() > 320
         || name.chars().any(char::is_control)
     {
@@ -353,6 +353,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     let (key,_)=association(&value,&devices::load(config.join("devices.json"))?)?;
                     let links=environment::database(&config,"","links-get",None)?;
                     let link=links.as_array().and_then(|all|all.iter().find(|link|crate::link_flow::key(link).is_ok_and(|k|k==key))).ok_or_else(||invalid("Collegamento non trovato"))?;
+                    if link["operation"]=="console" {return Err(invalid("Questo collegamento apre solo la console"));}
                     if link["operation"] != "sync" && link["flow"]["initialized"]==true { return Err(invalid("Trasferimento monodirezionale già completato")); }
                     if link["flow"]["phase"]=="conflict" {return Err(invalid("Le chat divergono: scegliere quale copia mantenere"));}
                     if link["flow"]["phase"]=="transferring" {return Err(invalid("Trasferimento già in corso"));}
@@ -368,6 +369,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     let links=environment::database(&config,"","links-get",None)?;
                     value["flow"]=links.as_array().and_then(|all|all.iter().find(|link|crate::link_flow::key(link).is_ok_and(|k|k==key))).map(|link|link["flow"].clone())
                         .unwrap_or_else(||crate::link_flow::initial(crate::peers::snapshot(&peers)["local_id"].as_str().unwrap_or("")));
+                    if value["operation"]=="console" {value["flow"]["initialized"]=json!(true);value["flow"]["phase"]=json!("aligned");value["transfer_pending"]=json!(false);}
                     environment::database(&config, &key, "links-save", Some(&value))
                 }
                 (&Method::Post, "/api/chat/delete") => {

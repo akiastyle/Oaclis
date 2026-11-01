@@ -1,5 +1,5 @@
-// keep_awake.rs v1.17.449
-//! Hold native OS inhibitors only for the lifetime of the Oaclis owner.
+// keep_awake.rs v1.20.507
+//! Native power settings; no forced monitor-off or forced sleep commands.
 use crate::invalid;
 use serde_json::json;
 use std::{env, fs, io::{self, BufRead, BufReader, IsTerminal, Read, Write}, path::Path, process::{Child, Command, Stdio}, sync::mpsc, thread, time::Duration};
@@ -43,8 +43,8 @@ fn available(name: &str) -> bool {
 pub fn prepare(user: Option<&str>) -> io::Result<()> {
     let host = host()?;
     if host == "windows" {
-        let script = "$ErrorActionPreference='Stop'; $path=Join-Path $env:LOCALAPPDATA 'Oaclis\\keep-awake.ps1'; if (-not (Test-Path $path)) { throw 'Preparare il supporto Windows con run.ps1' }; & $path -Check";
-        if crate::app_update::run(&mut windows(script), Duration::from_secs(15))? != "ready" { return Err(invalid("Supporto standby Windows non disponibile")); }
+        let script = format!("& {{ {} }} -Check",include_str!("../scripts/keep-awake.ps1"));
+        if crate::app_update::run(&mut windows(&script), Duration::from_secs(15))? != "ready" { return Err(invalid("Supporto standby Windows non disponibile")); }
     } else if host == "macos" {
         if !available("caffeinate") { return Err(invalid("Manca caffeinate")); }
     } else {
@@ -145,12 +145,16 @@ impl DisplayPower {
         let dpms=query.contains("DPMS is Enabled") || query.contains("DPMS is Disabled");
         if mode=="screen-off" && !dpms {return Err(invalid("Questo monitor non supporta lo spegnimento"));}
         display.restore=vec!["s".into(),timeout.to_string(),cycle.to_string()];
-        if dpms {display.restore.push(if query.contains("DPMS is Enabled") {"+dpms"} else {"-dpms"}.into());}
         if mode=="always" {
-            if dpms {crate::app_update::run(&mut display.command(&["+dpms","dpms","force","on"]),Duration::from_secs(3))?;}
             let args=if dpms {vec!["s","off","-dpms"]} else {vec!["s","off"]};
             crate::app_update::run(&mut display.command(&args),Duration::from_secs(3))?;
-        } else {crate::app_update::run(&mut display.command(&["+dpms","dpms","force","off"]),Duration::from_secs(3))?;}
+        } else {
+            let timers=query.lines().find(|line|line.contains("Standby:") && line.contains("Suspend:")).map(|line|line.split_whitespace().collect::<Vec<_>>()).filter(|v|v.len()>=6).ok_or_else(||invalid("Timeout monitor non disponibili"))?;
+            display.restore.push("dpms".into());
+            for index in [1,3,5] {display.restore.push(timers[index].parse::<u32>().map_err(|_|invalid("Timeout monitor non validi"))?.to_string());}
+            crate::app_update::run(&mut display.command(&["s","300","300","+dpms","dpms","300","300","300"]),Duration::from_secs(3))?;
+        }
+        if dpms {display.restore.push(if query.contains("DPMS is Enabled") {"+dpms"} else {"-dpms"}.into());}
         Ok(Some(display))
     }
 }
@@ -160,25 +164,56 @@ impl Drop for DisplayPower {
     }
 }
 
+struct MacDisplay(Vec<(String,String)>);
+impl MacDisplay {
+    fn apply(mode: &str) -> io::Result<Self> {
+        let query=crate::app_update::run(Command::new("pmset").args(["-g","custom"]),Duration::from_secs(3))?;
+        let mut saved=Self(Vec::new()); let mut profile=None;
+        for line in query.lines() {
+            let line=line.trim();
+            if line.ends_with(':') {profile=match line {"AC Power:"=>Some("-c"),"Battery Power:"=>Some("-b"),"UPS Power:"=>Some("-u"),_=>None};}
+            let fields:Vec<_>=line.split_whitespace().collect();
+            if fields.first()==Some(&"displaysleep") {
+                if let (Some(profile),Some(value))=(profile,fields.get(1)) {
+                    value.parse::<u32>().map_err(|_|invalid("Timeout monitor macOS non valido"))?;
+                    saved.0.push((profile.into(),value.to_string()));
+                }
+            }
+        }
+        if saved.0.is_empty(){return Err(invalid("Timeout monitor macOS non disponibile"));}
+        crate::app_update::run(Command::new("pmset").args(["-a","displaysleep",if mode=="screen-off" {"5"} else {"0"}]),Duration::from_secs(5))?;
+        Ok(saved)
+    }
+}
+impl Drop for MacDisplay {
+    fn drop(&mut self) {
+        for (profile,value) in &self.0 {let _=crate::app_update::run(Command::new("pmset").args([profile,"displaysleep",value]),Duration::from_secs(3));}
+    }
+}
+
 fn hold(mode: &str) -> io::Result<()> {
     if !matches!(mode,"always"|"screen-off") {return Err(invalid("Modalità energia non valida"));}
     let mut display=None;
+    let mut mac_display=None;
     let mut children = Vec::new();
     match host()? {
-        "windows" => children.push(start(&mut windows(&format!("& {{ {} }} -Mode '{mode}'",include_str!("../scripts/keep-awake.ps1"))), true)?),
+        "windows" => {
+            if crate::app_update::run(&mut windows(&format!("& {{ {} }} -Mode '{mode}'",include_str!("../scripts/keep-awake.ps1"))),Duration::from_secs(15))?!="ready" {return Err(invalid("Impostazioni energia Windows non confermate"));}
+        },
         "macos" => {
             children.push(start(Command::new("caffeinate").args([if mode=="always" {"-di"} else {"-i"}, "-w", &std::process::id().to_string()]), false)?);
-            if mode=="screen-off" {crate::app_update::run(Command::new("pmset").arg("displaysleepnow"),Duration::from_secs(3))?;}
+            mac_display=Some(MacDisplay::apply(mode)?);
         },
         _ => {
             display=DisplayPower::apply(mode)?;
-            for kind in ["sleep", "idle"] {
+            for kind in if mode=="always" {vec!["sleep","idle"]} else {vec!["sleep"]} {
                 // Separate requests avoid lid-switch authorization on systemd 255.
                 children.push(start(Command::new("systemd-inhibit").args([&format!("--what={kind}"), "--mode=block", "--who=Oaclis", "--why=Oaclis sempre attivo", "cat"]), false)?);
             }
         }
     }
     let _display=display;
+    let _mac_display=mac_display;
     thread::sleep(Duration::from_millis(250));
     for child in &mut children {
         if child.0.try_wait()?.is_some() {
@@ -198,6 +233,11 @@ fn hold(mode: &str) -> io::Result<()> {
         }
         if children.iter_mut().any(|c| !matches!(c.0.try_wait(), Ok(None))) { return Err(invalid("Il sistema ha interrotto il blocco standby")); }
     }
+}
+
+pub(crate) fn restore() -> io::Result<()> {
+    if matches!(host(),Ok("windows")) && crate::app_update::run(&mut windows(&format!("& {{ {} }} -Mode normal",include_str!("../scripts/keep-awake.ps1"))),Duration::from_secs(15))?!="ready" {return Err(invalid("Ripristino energia Windows non confermato"));}
+    Ok(())
 }
 
 pub fn run(mode: &str) -> io::Result<()> {

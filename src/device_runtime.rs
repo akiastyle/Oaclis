@@ -1,4 +1,4 @@
-// device_runtime.rs v1.22.463
+// device_runtime.rs v1.22.467
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
@@ -237,7 +237,7 @@ pub(crate) fn control(
             (state.child.take(),state.config.clone(),state.power_mode.clone(),mode)
         };
         if let Some(child)=child { stop_inhibitor(child); }
-        let result=if mode=="normal" {Ok(None)} else {Runtime::start_inhibitor(mode).map(Some)};
+        let result=if mode=="normal" {crate::keep_awake::restore().map(|_|None)} else {Runtime::start_inhibitor(mode).map(Some)};
         let result=result.and_then(|child| {
             if let Err(error)=crate::staging::save_json(&config.join("keep-awake.json"),&mode) {
                 if let Some(child)=child { stop_inhibitor(child); }
@@ -246,7 +246,7 @@ pub(crate) fn control(
             Ok(child)
         });
         // A failed change restores the last working preference without holding the runtime lock.
-        let restored=if result.is_err() && previous!="normal" {Runtime::start_inhibitor(&previous).ok()} else {None};
+        let restored=if result.is_err() && previous!="normal" {Runtime::start_inhibitor(&previous).ok()} else {if result.is_err() {let _=crate::keep_awake::restore();} None};
         let mut state=runtime.lock().unwrap();state.awake_pending=None;
         match result {
             Ok(child)=>{state.child=child;state.power_mode=mode.into();state.error=None;}

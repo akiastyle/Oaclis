@@ -1,4 +1,4 @@
-// mobile.rs v1.21.497
+// mobile.rs v1.21.500
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -84,7 +84,7 @@ fn approved_devices(config:&Path,reply:&Value)->io::Result<Value> {
     let authority=crate::mobile_auth::at(config)?.authority();
     listed["devices"].as_array_mut().unwrap().retain_mut(|device| {
         let id=device["id"].as_str().unwrap().strip_prefix("mobile-").unwrap();
-        if let Some(phone)=authority.phones.get(id){device["name"]=json!(phone.name);true}else{false}
+        if let Some(phone)=authority.phones.get(id){device["name"]=json!(phone.name);device["chat_ids"]=json!(phone.chats);true}else{false}
     });
     Ok(listed)
 }
@@ -244,6 +244,7 @@ pub(crate) fn chat_access(config: &Path, codex: &Path, value: &Value, registry: 
         authority.grants(id,ids.into_iter().map(str::to_owned).collect())?;
         let reply = request(config, json!({"action":"set-chat-access","id":id,"chats":chats}))?;
         if reply["ok"] != true { return Err(io::Error::other("Salvataggio non riuscito. Riprova.")); }
+        if let Some(device)=registry.devices.lock().unwrap().iter_mut().find(|device|device["id"]==format!("mobile-{id}")) {device["chat_ids"]=json!(selected);}
         return Ok(json!({"ok":true}));
     }
     Ok(json!({"chats":choices.into_values().collect::<Vec<_>>(),"selected":phone.chats}))

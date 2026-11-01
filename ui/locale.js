@@ -1,4 +1,4 @@
-// locale.js v1.3.463
+// locale.js v1.3.464
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -73,6 +73,7 @@ window.OaclisSettings=(()=>{
   "Apri su": "Open on",
   "Dove aprire la chat": "Where to open the chat",
   "Desktop remoto": "Remote desktop",
+  "Collega console remota": "Link remote console",
   "Desktop remoto ·": "Remote desktop ·",
   "Sempre attivo": "Keep awake",
   "Modalità energia": "Power mode",

@@ -1,4 +1,4 @@
-// map.js v3.121.2955
+// map.js v4.122.3041
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -34,7 +34,7 @@ function previewLinkFlow(node) {
     .filter(layer => layer.dataset.source === id || layer.dataset.target === id)
     .map(layer => ({ path: layer.querySelector('.connection-lines > path'), both: layer.dataset.operation === 'sync' }));
   for (const path of document.querySelectorAll('#mobile-links > path')) {
-    if (id === 'master' || path.dataset.id === id) paths.push({ path, both: false });
+    if (path.dataset.source === id || path.dataset.target === id) paths.push({ path, both: false });
   }
   for (const { path, both } of paths) {
     const overlay = document.createElementNS(path.namespaceURI, 'g');
@@ -108,10 +108,10 @@ function positionConnectionPorts() {
     else { orbit.phase = wrap(orbit.phase + remaining * (1 - Math.exp(-Math.min(40, Math.max(1, now - orbit.time)) / 85))); moving = true; }
     orbit.time = now;
     const reverse = tx < 0 ? -1 : 1;
-    for (const [index, operation] of ['sync', 'send', 'receive'].entries()) {
+    for (const [index, operation] of ['sync', 'send', 'receive', 'console'].entries()) {
       const port = node.querySelector('.connection-port.' + operation);
       if (!port) continue;
-      const position = orbit.phase + (index - 1) * 44 * reverse;
+      const position = orbit.phase + (index - 1.5) * 44 * reverse;
       const point = orbit.path.getPointAtLength(wrap(position));
       const before = orbit.path.getPointAtLength(wrap(position - 0.5)), after = orbit.path.getPointAtLength(wrap(position + 0.5));
       const length = Math.hypot(after.x - before.x, after.y - before.y);
@@ -144,7 +144,7 @@ function renderLink(force = false) {
     if (existing === -1) links.push(link); else links[existing] = link;
   }
   const lanes = new Map();
-  links.forEach((value, index) => {
+  links.filter(value=>value.operation!=="console").forEach((value, index) => {
     const anchors = value.operation === "sync"
       ? [value.source, value.target].sort().join(":") + ":sync"
       : [value.source, value.target].join(":") + ":send";
@@ -362,7 +362,7 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
 
 function acceptsChatDrop(source, target, operation) {
   return source !== target && (source === "master" || target === "master") &&
-    (operation === "sync" || operation === "receive");
+    (operation === "sync" || operation === "receive" || operation === "console");
 }
 
 function renderLibrary() {
@@ -651,19 +651,20 @@ function renderMap(animate = false) {
         ["sync", OaclisSettings.text("Sincronizzazione bidirezionale")],
         ["send", OaclisSettings.text("Invia a questo dispositivo")],
         ["receive", OaclisSettings.text("Ricevi da questo dispositivo")],
+        ["console", OaclisSettings.text("Collega console remota")],
       ]) {
         const port = document.createElement("button");
         port.className = "connection-port " + operation;
         port.dataset.operation = operation;
         port.setAttribute("aria-label", label + " · " + device.name);
         port.title = label;
-        port.innerHTML = OaclisIcon(operation === 'sync' ? 'sync' : operation === 'send' ? 'send' : 'receive');
+        port.innerHTML = OaclisIcon(operation === 'sync' ? 'sync' : operation === 'send' ? 'send' : operation === 'console' ? 'terminal' : 'receive');
         const local = device.id === "master";
   const objectId = device.id || "device-" + crypto.randomUUID();
         if (local) port.title = operation === "send" ? OaclisSettings.text("Invia a un dispositivo") : operation === "receive" ? OaclisSettings.text("Ricevi da un dispositivo") : label;
         const peer = () => !local ? "master" :
           sourceId && sourceId !== "master" ? sourceId : data.devices.length === 1 ? data.devices[0].id : null;
-        const origin = () => operation === "receive" ? peer() : device.id;
+        const origin = () => operation === "receive" || operation === "console" ? peer() : device.id;
         const target = id => id === device.id ? peer() || undefined : device.id;
         const transferOperation = operation === "receive" ? "send" : operation;
         const accepts = id => acceptsChatDrop(id, device.id, operation);
@@ -836,7 +837,7 @@ function renderConnections() {
 
 async function selectChat(entry, targetId, operation = "copy") {
   const association = { source: sourceId, target: targetId, operation, entry: { id: entry.id, name: entry.name },
-    scopes: data.chat_settings?.[entry.id]?.scopes || { chat: true, paths: true, apps: true }, transfer_pending: true };
+    scopes: data.chat_settings?.[entry.id]?.scopes || { chat: true, paths: true, apps: true }, transfer_pending: operation!=="console" };
   try {
     await saveLinkChange(async () => {
       chatLinks = await api("links/save", association);
@@ -870,9 +871,16 @@ function mobileLinkCurve(from, to, base, radius = 0) {
 
 function renderMobileLinks() {
   let svg = document.querySelector('#mobile-links');
-  const phones = data.mobile_devices || [];
+  const groups = (data.mobile_devices || []).map(phone => ({...phone, source:'master', target:phone.id,
+    entries:(phone.chat_ids || []).filter(id=>!(data.deleted_chats || []).includes(id)).map(id => data.chats.find(chat=>chat.id===id) || {id,name:id})}));
+  for (const connection of chatLinks.filter(link=>link.operation==='console' && !(data.deleted_chats || []).includes(link.entry.id))) {
+    const id = 'console-' + connection.source + '-' + connection.target;
+    let group = groups.find(group=>group.id===id);
+    if (!group) { group={id,source:connection.source,target:connection.target,active:data.connections[connection.source==='master'?connection.target:connection.source]==='online',entries:[]}; groups.push(group); }
+    group.entries.push(connection.entry);
+  }
   const masterNode = [...document.querySelectorAll('.map-node')].find(n => n.dataset.id === 'master');
-  if (!phones.length || !masterNode) { svg?.remove(); return; }
+  if (!groups.length || !masterNode) { svg?.remove(); document.querySelectorAll('.access-chat').forEach(node=>node.remove()); return; }
   if (!svg) {
     svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     svg.id = 'mobile-links'; svg.setAttribute('aria-hidden', 'true');
@@ -882,9 +890,11 @@ function renderMobileLinks() {
   const base = $('#nodes').getBoundingClientRect();
   const radius = parseFloat(getComputedStyle(masterNode).borderTopLeftRadius) || 0;
   const keep = new Set();
-  for (const device of phones) {
-    const node = [...document.querySelectorAll('.map-node')].find(n => n.dataset.id === device.id);
-    if (!node) continue;
+  const badges = new Set();
+  for (const device of groups) {
+    const node = [...document.querySelectorAll('.map-node')].find(n => n.dataset.id === device.target);
+    const owner = [...document.querySelectorAll('.map-node')].find(n => n.dataset.id === device.source);
+    if (!node || !owner) continue;
     keep.add(device.id);
     let path = [...svg.querySelectorAll(':scope > path')].find(p => p.dataset.id === device.id);
     if (!path) {
@@ -895,10 +905,58 @@ function renderMobileLinks() {
       marker.innerHTML = '<path d="M1 1L9 5L1 9Z"/>'; svg.querySelector('defs').append(marker);
       path.setAttribute('marker-end','url(#' + marker.id + ')'); svg.append(path);
     }
-    path.setAttribute('d', mobileLinkCurve(masterNode.getBoundingClientRect(), node.getBoundingClientRect(), base, radius));
+    path.dataset.source=device.source; path.dataset.target=device.target;
+    path.setAttribute('d', mobileLinkCurve(owner.getBoundingClientRect(), node.getBoundingClientRect(), base, radius));
     svg.querySelectorAll('.link-flow-trace[data-id="' + CSS.escape(device.id) + '"]').forEach(trace => trace.setAttribute('d', path.getAttribute('d')));
+    renderAccessBadges(path, device, badges);
     path.dataset.active = String(device.active === true);
     [...svg.querySelector('defs').children].find(m => m.dataset.id === device.id).dataset.active = path.dataset.active;
   }
+  document.querySelectorAll('.access-chat').forEach(node=>{if(!badges.has(node.dataset.accessKey))node.remove();});
   for (const item of [...svg.querySelectorAll(':scope > path, defs > marker')]) if (!keep.has(item.dataset.id)) item.remove();
+}
+
+function renderAccessBadges(path, group, keep) {
+  group.entries.forEach((entry,index) => {
+    const key=[entry.id,...[group.source,group.target].sort()].join(':');
+    keep.add(key);
+    let marker=[...document.querySelectorAll('.access-chat')].find(node=>node.dataset.accessKey===key);
+    if (!marker) {
+      marker=document.createElement('div'); marker.className='link-badge access-chat'; marker.dataset.accessKey=key;
+      marker.innerHTML='<button type="button" class="link-main"></button><button type="button" class="link-open icon-button">'+OaclisIcon('terminal')+'</button>';
+      $('#nodes').append(marker);
+    }
+    if (marker.dataset.dragging) return;
+    const main=marker.querySelector('.link-main'), open=marker.querySelector('.link-open');
+    const html=badge(entry); if(main.innerHTML!==html)main.innerHTML=html;
+    const name=chatLabel(entry); marker.title=name; main.title=OaclisSettings.text('Trascina ')+name;
+    main.setAttribute('aria-label',main.title); open.title=OaclisSettings.text('Apri console')+' · '+name; open.setAttribute('aria-label',open.title);
+    const color=appearance(entry).color || 'var(--ink)'; marker.style.color=color; marker.querySelector('.chat-badge').style.color=color;
+    open.onclick=()=>openChatTerminal({entry},open,group.source);
+    const midpoint=path.getPointAtLength(path.getTotalLength()*(index+1)/(group.entries.length+1));
+    const offset=linkPositions[key] || {x:0,y:0};
+    marker.style.left=midpoint.x+offset.x+'px'; marker.style.top=midpoint.y+offset.y+'px';
+    const save=()=>{
+      linkPositions[key]={x:marker.offsetLeft-midpoint.x,y:marker.offsetTop-midpoint.y}; linkPositionSaving=true;
+      api('link-position',{id:entry.id,source:group.source,target:group.target,...linkPositions[key]})
+        .catch(error=>notice(error.message)).finally(()=>{linkPositionSaving=false;});
+    };
+    main.onpointerdown=event=>{
+      if(event.button!==0)return;
+      event.preventDefault(); const start={x:event.clientX,y:event.clientY,left:marker.offsetLeft,top:marker.offsetTop};
+      marker.dataset.dragging='true'; main.setPointerCapture(event.pointerId);
+      main.onpointermove=event=>{
+        if(!main.hasPointerCapture(event.pointerId))return;
+        marker.style.left=Math.max(22,Math.min($('#nodes').clientWidth-22,start.left+event.clientX-start.x))+'px';
+        marker.style.top=Math.max(22,Math.min($('#nodes').clientHeight-22,start.top+event.clientY-start.y))+'px';
+      };
+      main.onpointerup=event=>{save();delete marker.dataset.dragging;if(main.hasPointerCapture(event.pointerId))main.releasePointerCapture(event.pointerId);};
+      main.onpointercancel=main.onlostpointercapture=()=>{delete marker.dataset.dragging;};
+    };
+    main.onkeydown=event=>{
+      const direction={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[event.key];
+      if(direction){event.preventDefault();marker.style.left=marker.offsetLeft+direction[0]+'px';marker.style.top=marker.offsetTop+direction[1]+'px';save();}
+      if(event.key==='Delete' && group.id.startsWith('console-'))guard(()=>removeConnection({entry,source:group.source,target:group.target},null))();
+    };
+  });
 }

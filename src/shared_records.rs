@@ -1,4 +1,4 @@
-// shared_records.rs v1.19.873
+// shared_records.rs v1.19.875
 //! Shared settings retain the existing clocks, stable identities and ownership boundaries.
 use std::sync::Arc;
 use crate::{
@@ -137,7 +137,7 @@ pub(crate) fn validate(records: &Value) -> io::Result<()> {
                 || !parts[2..].contains(&b)
                 || a == b
                 || value["entry"]["id"] != parts[1]
-                || !["copy", "send", "sync"].contains(&value["operation"].as_str().unwrap_or(""))
+                || !["copy", "send", "sync", "console"].contains(&value["operation"].as_str().unwrap_or(""))
             {
                 return Err(invalid("Collegamento non valido"));
             }

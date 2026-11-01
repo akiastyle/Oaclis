@@ -1,11 +1,11 @@
-// automation.rs v1.16.525
+// automation.rs v1.16.528
 //! Compare links periodically; transfers always require explicit Play.
 use crate::{devices, environment, link_flow, peers, transfer_job};
 use serde_json::{Value, json};
 use std::{collections::HashMap, path::PathBuf, sync::{Arc, Mutex}, thread, time::{Duration, Instant}};
 
 fn eligible(link: &Value, executor: &str) -> bool {
-    link["flow"]["executor"] == executor && (link["flow"]["initialized"] != true || link["operation"] == "sync")
+    link["operation"]!="console" && link["flow"]["executor"] == executor && (link["flow"]["initialized"] != true || link["operation"] == "sync")
 }
 
 pub(crate) fn conflict(value: &Value) -> bool {
@@ -133,6 +133,7 @@ mod tests {
         assert!(eligible(&link,"a"));assert!(!eligible(&link,"b"));
         link["flow"]["initialized"]=json!(true);assert!(!eligible(&link,"a"));
         link["operation"]=json!("sync");assert!(eligible(&link,"a"));
+        link["operation"]=json!("console");link["flow"]["initialized"]=json!(false);assert!(!eligible(&link,"a"));
         assert!(conflict(&json!({"chat":"conflict"})));assert!(!conflict(&json!({"chat":"identical"})));
     }
     #[test]
