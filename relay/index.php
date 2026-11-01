@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.516
+// index.php v1.8.524
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -113,10 +113,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         switch ($action) {
         case 'admin-list':
             if (!$isAdmin) respond([],403);
-            if (array_key_exists('app_version',$input)) {
-                if (!is_string($input['app_version']) || !preg_match('/^v[0-9]{1,10}\.[0-9]{1,10}\.[0-9]{1,10}$/D',$input['app_version'])) throw new RuntimeException();
-                $state['app_version']=$input['app_version'];
-            }
             $result['devices']=array_values(array_map(function($id,$r){return ['id'=>$id,'name'=>$r['name'],'status'=>$r['status'],'created'=>$r['created'],'lastAccess'=>$r['lastAccess']??null,'active'=>$r['status']==='approved' && ($r['lastSeen']??0)>=time()-30,'pairing'=>$r['status']==='pending'?($r['pairing']??null):null];},array_keys($state['devices']),$state['devices']));
             break;
         case 'chat-access': case 'set-chat-access':
@@ -251,7 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $previous=$record['console']??[];
             if (($previous['until']??0)>time() && !isset($previous['result'])) respond(['error'=>'Attendi il completamento della richiesta.'],409);
             $id=$packet['id'];
-            $state['devices'][$deviceId]['console']=['id'=>$id,'chat_id'=>$chat,'until'=>min(time()+20,$session['auth']['until']),'value'=>['chat_id'=>$chat,'action'=>$operation,'text'=>$text,'key'=>$key],'signed'=>$signed];
+            $state['devices'][$deviceId]['console']=['id'=>$id,'chat_id'=>$chat,'until'=>min(time()+20,$session['auth']['until']),'signed'=>$signed];
             $result=['request_id'=>$id];
             break;
         case 'console-exchange':
@@ -282,7 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'protected':
             if (!$authenticated) respond([],403);
             if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
-            $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c'),'chats'=>$record['chats']??[],'version'=>$state['app_version']??''];
+            $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c'),'chats'=>$record['chats']??[]];
             break;
         case 'logout':
             if ($authenticated) {$state['devices'][$deviceId]['lastSeen']=0;unset($state['devices'][$deviceId]['auth_token'],$state['devices'][$deviceId]['console']);}

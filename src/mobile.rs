@@ -1,4 +1,4 @@
-// mobile.rs v1.21.495
+// mobile.rs v1.21.497
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -166,7 +166,7 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
          loop {
             {
                 let _exchange = worker.exchange.lock().unwrap();
-                match request(&config, json!({"action":"admin-list","app_version":env!("OACLIS_APP_VERSION")})).and_then(|r| approved_devices(&config, &r)) {
+                match request(&config, json!({"action":"admin-list"})).and_then(|r| approved_devices(&config, &r)) {
                     Ok(reply) => {
                         *worker.devices.lock().unwrap() = reply["devices"].as_array().unwrap().clone();
                         if let Ok(state)=crate::state_store::snapshot(&config) {

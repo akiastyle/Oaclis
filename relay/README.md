@@ -145,10 +145,8 @@ quando cambia la presentazione sul master; gli ID autorizzati non cambiano.
 
 La lista autenticata mostra la balena con il marchio aclis e, in fondo, la
 versione PWA calcolata dagli header dei file pubblicati con la formula del master.
-Il master trasmette OACLIS_APP_VERSION nel heartbeat admin-list gia' esistente;
-il relay conserva l'ultimo valore in app_version nello stato privato e lo
-restituisce soltanto da protected dopo approvazione e sessione passkey valida.
-Il refresh esistente della lista aggiorna anche il valore visualizzato.
+Il valore identifica i file caricati dalla pagina: ricaricare per ricevere una
+nuova release. Non viene scambiata o salvata la versione del master nel relay.
 L'accesso normale senza abbinamento, in attesa, negato o annullato resta vuoto;
 per riprovare una passkey annullata ricaricare. L'invito di nuovo abbinamento
 conserva il modulo necessario a creare la passkey. La console non aggiunge
