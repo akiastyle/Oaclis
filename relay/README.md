@@ -7,7 +7,8 @@ La directory pubblica contiene index.php, gli script e gli stili della PWA,
 il manifest, il service worker, le icone e il suono di conferma.
 La libreria lbuchs/WebAuthn v2.2.0
 (commit 20adb4a240c3997bd8cac7dc4dde38ab0bea0ed1, MIT), la configurazione e lo
-stato restano nella cartella privata oaclis-auth-test-private, fuori da www.
+stato restano in una cartella privata dal nome neutro, fuori da www.
+Il percorso effettivo e' definito da `PRIVATE_DIR` in index.php.
 L'autenticazione non usa file di sessione PHP.
 composer.lock documenta la versione della libreria; sul server esistente e' caricata
 come library/src. Non caricare configurazioni, chiavi o stato nella directory pubblica.

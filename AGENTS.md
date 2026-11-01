@@ -110,3 +110,5 @@
 - All interface icons use the vendored Lucide SVG subset in `ui/icons.js` (native and mobile share the identical file). Reuse `OaclisIcon(name)` for markup or `OaclisIcons[name]` for an existing SVG container; static HTML uses `svg[data-icon]`. Keep saved picker IDs stable. Add missing glyphs from the pinned Lucide release with its license; do not draw custom UI glyphs or use CDN/icon fonts. Brand logos, user images, QR data and graph/connection geometry are separate.
 
 - Relay authentication uses an authenticated-encrypted `__Host-Oaclis` cookie with a two-hour expiry, not PHP file sessions. Keep device grants, revocation hashes and one-use passkey challenges in the existing private JSON. Preserve logout/revocation and challenge replay protection; reads must not rewrite cookies. Do not reintroduce session_start/session files or a new state service.
+
+- The relay private directory uses the neutral hidden name selected in `PRIVATE_DIR`, outside the document root. Renames move the entire existing directory and preserve library, configuration, state, locks, pairings and permissions; never initialize a replacement state file.
