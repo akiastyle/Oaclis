@@ -1,4 +1,4 @@
-// mobile_auth.rs v1.46.609
+// mobile_auth.rs v1.46.634
 //! Local mobile authority: QR-bound keys, chat grants and signed, non-replayable requests.
 use crate::invalid;
 use ring::{hmac, rand::{SecureRandom, SystemRandom}, signature};
@@ -24,7 +24,7 @@ pub(crate) struct Phone { pub name:String, public_key:String, pub chats:BTreeSet
 struct Settings { admin_key:String, #[serde(default)] authorization:Authority }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct SignedRequest { purpose:String, epoch:String, device:String, id:String, issued:u64, chat_id:String, action:String, text:String, key:String, #[serde(default)] speech:bool, #[serde(default)] speech_cursor:Option<u64> }
+struct SignedRequest { purpose:String, epoch:String, device:String, id:String, issued:u64, chat_id:String, action:String, text:String, key:String, #[serde(default)] speech:bool, #[serde(default)] speech_cursor:Option<u64>, #[serde(default)] image:Option<String> }
 
 pub(crate) struct Store {
     config:PathBuf,
@@ -105,7 +105,7 @@ impl Store {
         let device=envelope["device"].as_str().unwrap_or("");
         let settings=self.settings.read().unwrap().clone();let phone=settings.authorization.phones.get(device).ok_or_else(||invalid("Telefono non autorizzato dal master"))?;
         let signed=&envelope["signed"];
-        let payload=signed["payload"].as_str().filter(|s|s.len()<=65536).ok_or_else(||invalid("Richiesta mobile non firmata"))?;
+        let payload=signed["payload"].as_str().filter(|s|s.len()<=786432).ok_or_else(||invalid("Richiesta mobile non firmata"))?;
         verify(&phone.public_key,payload,signed["signature"].as_str().unwrap_or(""))?;
         let current=now();
         if current<self.last_time.fetch_max(current,Ordering::Relaxed){return Err(invalid("Orologio locale non allineato"));}
@@ -116,14 +116,15 @@ impl Store {
             || !phone.chats.contains(&command.chat_id) || command.text.chars().count()>8000 || command.text.contains('\0')
             || !matches!(command.action.as_str(),"open"|"read"|"input")
             || !matches!(command.key.as_str(),""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c"|"1"|"2"|"3")
-            || (command.action!="input" && (!command.text.is_empty() || !command.key.is_empty())) {
+            || (command.action!="input" && (!command.text.is_empty() || !command.key.is_empty() || command.image.is_some())) {
             return Err(invalid("Richiesta mobile non autorizzata dal master"));
         }
+        if let Some(image)=&command.image {crate::terminal::image_bytes(image)?;if command.key!="Enter" {return Err(invalid("Invio immagine non valido"));}}
         let mut seen=self.seen.lock().unwrap();seen.retain(|_,until|*until>=now());
         let id=format!("{device}:{}",command.id);
         if seen.contains_key(&id) || seen.len()>=8192{return Err(invalid("Richiesta mobile gia' utilizzata"));}
         seen.insert(id,command.issued+30);
-        Ok(json!({"chat_id":command.chat_id,"action":command.action,"text":command.text,"key":command.key,"speech":command.speech,"speech_cursor":command.speech_cursor}))
+        Ok(json!({"chat_id":command.chat_id,"action":command.action,"text":command.text,"key":command.key,"speech":command.speech,"speech_cursor":command.speech_cursor,"image":command.image}))
     }
 }
 
@@ -199,6 +200,22 @@ mod tests {
         *store.settings.write().unwrap()=Arc::new(pinned);
         let packet=&input["packet"];assert_eq!(store.command(packet).unwrap()["text"],"Ciao è 🇮🇹");
         assert!(store.command(packet).is_err());
+        if let Some(packet)=input.get("image_packet") {
+            let value=store.command(packet).unwrap();assert!(value["image"].as_str().unwrap().starts_with("data:image/jpeg;base64,"));
+            if let Some(log)=std::env::var_os("OACLIS_PASTE_LOG") {
+                let mut sent=value.clone();sent["text"]=json!("image prompt");crate::terminal::local(&sent).unwrap();
+                let pasted=std::fs::read_to_string(log).unwrap();let lines:Vec<_>=pasted.lines().collect();
+                assert!(lines[0].ends_with(".jpg"));assert_eq!(lines[1],"image prompt");assert_eq!(lines[2],"KEY:Enter");
+                let path=std::path::Path::new(lines[0]);assert!(path.is_file());
+                assert_eq!(std::fs::read(path).unwrap(),crate::terminal::image_bytes(value["image"].as_str().unwrap()).unwrap());
+                use std::os::unix::fs::PermissionsExt;assert_eq!(std::fs::metadata(path).unwrap().permissions().mode()&0o777,0o600);
+                assert!(crate::terminal::image_bytes("data:image/jpeg;base64,invalid").is_err());
+                assert!(crate::terminal::image_bytes(&format!("data:image/jpeg;base64,{}","A".repeat(700000))).is_err());
+            }
+
+            let mut tampered=packet.clone();let mut body:Value=serde_json::from_str(tampered["signed"]["payload"].as_str().unwrap()).unwrap();body["image"]=json!("data:image/jpeg;base64,changed");tampered["signed"]["payload"]=json!(body.to_string());assert!(store.command(&tampered).is_err());
+        }
+
         if let Some(packets)=input["number_packets"].as_array() {
             for (packet,key) in packets.iter().zip(["1","2","3"]) {
                 let value=store.command(packet).unwrap();assert_eq!(value["key"],key);assert_eq!(value["text"],"");

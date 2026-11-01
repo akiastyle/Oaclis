@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.524
+// index.php v1.8.539
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -11,7 +11,7 @@ header('Permissions-Policy: publickey-credentials-create=(self), publickey-crede
 if (($_SERVER['HTTP_HOST'] ?? '') !== 'oaclis.krprojects.it') { http_response_code(404); exit; }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
-    if (($_SERVER['HTTP_ORIGIN'] ?? '') !== ORIGIN || !str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') || (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 131072) { http_response_code(403); exit; }
+    if (($_SERVER['HTTP_ORIGIN'] ?? '') !== ORIGIN || !str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') || (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 1048576) { http_response_code(403); exit; }
     umask(0077);
     $config = require PRIVATE_DIR . '/config.php';
     $cookieKey=hash('sha256','oaclis-cookie-v1:'.$config['admin_hash'],true);
@@ -75,8 +75,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
     $session=readCookie($_COOKIE['__Host-Oaclis']??null,$cookieKey);$originalSession=$session;
     try {
-        $body=file_get_contents('php://input',false,null,0,131073);
-        if ($body===false || strlen($body)>131072) respond([],413);
+        $body=file_get_contents('php://input',false,null,0,1048577);
+        if ($body===false || strlen($body)>1048576) respond([],413);
         $input=json_decode($body,true,32,JSON_THROW_ON_ERROR);
         $action=$input['action']??'';
         $device=$_SERVER['HTTP_X_DEVICE_CODE']??'';
@@ -240,10 +240,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $operation=$input['operation']??''; $text=$input['text']??''; $key=$input['key']??'';
             if (!in_array($operation,['open','read','input'],true) || !is_string($text) || mb_strlen($text)>8000 || str_contains($text,"\0") || !in_array($key,['','Enter','Escape','Tab','Up','Down','Left','Right','BSpace','C-c','1','2','3'],true)) throw new RuntimeException();
             $signed=$input['signed']??null;
-            if (!is_array($signed) || !is_string($signed['payload']??null) || strlen($signed['payload'])>65536 || !is_string($signed['signature']??null) || !preg_match('/^[a-f0-9]{128}$/D',$signed['signature'])) respond([],403);
+            if (!is_array($signed) || !is_string($signed['payload']??null) || strlen($signed['payload'])>786432 || !is_string($signed['signature']??null) || !preg_match('/^[a-f0-9]{128}$/D',$signed['signature'])) respond([],403);
             $packet=json_decode($signed['payload'],true,16,JSON_THROW_ON_ERROR);
             if (!is_array($packet) || ($packet['purpose']??'')!=='oaclis-console-v1' || ($packet['device']??'')!==$deviceId || ($packet['chat_id']??'')!==$chat || ($packet['action']??'')!==$operation || ($packet['text']??null)!==$text || ($packet['key']??null)!==$key || !is_string($packet['id']??null) || !preg_match('/^[a-f0-9]{32}$/D',$packet['id'])) respond([],403);
             if (!is_bool($packet['speech']??false) || (($packet['speech_cursor']??null)!==null && (!is_int($packet['speech_cursor']) || $packet['speech_cursor']<0))) respond([],403);
+            if (isset($packet['image'])) {
+                $image=$packet['image'];
+                if ($operation!=='input' || $key!=='Enter' || !is_string($image) || strlen($image)>699075 || !str_starts_with($image,'data:image/jpeg;base64,')) respond([],400);
+                $bytes=base64_decode(substr($image,23),true);
+                if ($bytes===false || strlen($bytes)>524288 || !str_starts_with($bytes,"\xff\xd8\xff") || !str_ends_with($bytes,"\xff\xd9")) respond([],400);
+            }
             $previous=$record['console']??[];
             if (($previous['until']??0)>time() && !isset($previous['result'])) respond(['error'=>'Attendi il completamento della richiesta.'],409);
             $id=$packet['id'];
@@ -258,6 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             foreach (($input['results']??[]) as $answer) {
                 $target=$answer['device']??''; $job=$state['devices'][$target]['console']??[];
                 if (($job['id']??'')!==($answer['id']??null) || ($job['until']??0)<time() || ($state['devices'][$target]['status']??'')!=='approved' || !in_array($job['chat_id'],array_column($state['devices'][$target]['chats']??[],'id'),true)) continue;
+                unset($state['devices'][$target]['console']['signed']);
                 $screen=$answer['screen']??null;
                 $state['devices'][$target]['console']['result']=is_string($screen)&&strlen($screen)<=60000?['screen'=>$screen]:['error'=>'Console non disponibile. Riprova.'];
                 if (is_string($screen)&&strlen($screen)<=60000&&is_string($answer['screen_ansi']??null)&&strlen($answer['screen_ansi'])<=24000) $state['devices'][$target]['console']['result']['screen_ansi']=$answer['screen_ansi'];

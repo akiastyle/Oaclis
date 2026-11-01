@@ -1,4 +1,4 @@
-// mobile.rs v1.21.500
+// mobile.rs v1.21.504
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -40,8 +40,8 @@ fn request(config: &Path, payload: Value) -> io::Result<Value> {
         io::Error::other("Collegamento mobile non disponibile. Riprova.")
     })?;
     let mut bytes = Vec::new();
-    response.body_mut().as_reader().take(131073).read_to_end(&mut bytes)?;
-    if bytes.len() > 131072 { return Err(invalid("Risposta mobile troppo ampia")); }
+    response.body_mut().as_reader().take(1048577).read_to_end(&mut bytes)?;
+    if bytes.len() > 1048576 { return Err(invalid("Risposta mobile troppo ampia")); }
     let reply: Value = serde_json::from_slice(&bytes).map_err(|_| io::Error::other("Risposta mobile non valida"))?;
     crate::state_transport::log(format!("RECV mobile-relay {action} OK {}ms", started.elapsed().as_millis()));
     Ok(reply)

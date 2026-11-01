@@ -1,4 +1,4 @@
-// terminal.rs v1.16.278
+// terminal.rs v1.19.322
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -29,7 +29,38 @@ fn validate(value: &Value) -> io::Result<&str> {
         },
         _ => return Err(invalid("Azione non valida")),
     }
+    if let Some(image)=value.get("image").filter(|image|!image.is_null()) {
+        if value["action"]!="input" || value["key"]!="Enter" {return Err(invalid("Invio immagine non valido"));}
+        image_bytes(image.as_str().ok_or_else(||invalid("Immagine non valida"))?)?;
+    }
     Ok(chat)
+}
+pub(crate) fn image_bytes(value: &str) -> io::Result<Vec<u8>> {
+    use base64::Engine;
+    let data=value.strip_prefix("data:image/jpeg;base64,").filter(|value|value.len()<=699052).ok_or_else(||invalid("Immagine non valida"))?;
+    let bytes=base64::engine::general_purpose::STANDARD.decode(data).map_err(|_|invalid("Immagine non valida"))?;
+    if bytes.len()>512*1024 || !bytes.starts_with(&[0xff,0xd8,0xff]) || !bytes.ends_with(&[0xff,0xd9]) {return Err(invalid("Immagine non valida"));}
+    Ok(bytes)
+}
+fn save_image(value: &str) -> io::Result<PathBuf> {
+    use std::io::Write;
+    use std::os::unix::fs::DirBuilderExt;
+    use sha2::{Digest,Sha256};
+    let bytes=image_bytes(value)?;
+    let home=env::var_os("HOME").map(PathBuf::from).ok_or_else(||invalid("HOME non definita"))?;
+    let directory=home.join(".local/share/oaclis/attachments");fs::DirBuilder::new().recursive(true).mode(0o700).create(&directory)?;
+    let path=directory.join(format!("{}.jpg",Sha256::digest(&bytes).iter().map(|byte|format!("{byte:02x}")).collect::<String>()));
+    let mut staged=crate::staging::StagedFile::new(&directory)?;staged.file.write_all(&bytes)?;staged.file.sync_all()?;
+    fs::rename(&staged.path,&path)?;
+    Ok(path)
+}
+fn paste(target: &str, text: &str) -> io::Result<()> {
+    static INPUT_ID: AtomicU64 = AtomicU64::new(0);
+    let buffer=format!("oaclis-{}-{}",std::process::id(),INPUT_ID.fetch_add(1,Ordering::Relaxed));
+    crate::ssh_settings::command(Command::new("tmux").args(["load-buffer","-b",&buffer,"-"]),Some(text.as_bytes()),Duration::from_secs(5))?;
+    let result=tmux(&["paste-buffer","-p","-r","-d","-b",&buffer,"-t",target]);
+    if result.is_err() {let _=tmux(&["delete-buffer","-b",&buffer]);}
+    result?;Ok(())
 }
 fn tmux(args: &[&str]) -> io::Result<Vec<u8>> {
     crate::ssh_settings::command(Command::new("tmux").args(args),None,Duration::from_secs(5))
@@ -105,13 +136,14 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         },
         "input" => {
             let text=value.get("text").and_then(Value::as_str).unwrap_or("");let key=value.get("key").and_then(Value::as_str).unwrap_or("");
+            if let Some(image)=value["image"].as_str() {
+                if key!="Enter" {return Err(invalid("Invio immagine non valido"));}
+                let path=save_image(image)?;
+                paste(&target,path.to_str().ok_or_else(||invalid("Percorso immagine non valido"))?)?;
+                std::thread::sleep(Duration::from_millis(150));
+            }
             if !text.is_empty() {
-                static INPUT_ID: AtomicU64 = AtomicU64::new(0);
-                let buffer=format!("oaclis-{}-{}",std::process::id(),INPUT_ID.fetch_add(1,Ordering::Relaxed));
-                crate::ssh_settings::command(Command::new("tmux").args(["load-buffer","-b",&buffer,"-"]),Some(text.as_bytes()),Duration::from_secs(5))?;
-                let pasted=tmux(&["paste-buffer","-p","-r","-d","-b",&buffer,"-t",&target]);
-                if pasted.is_err() { let _=tmux(&["delete-buffer","-b",&buffer]); }
-                pasted?;
+                paste(&target,text)?;
                 if !key.is_empty() { std::thread::sleep(Duration::from_millis(100)); }
             }
             if !key.is_empty() { tmux(&["send-keys","-t",&target,key])?; }

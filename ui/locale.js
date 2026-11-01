@@ -1,4 +1,4 @@
-// locale.js v1.3.464
+// locale.js v1.3.470
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -19,6 +19,12 @@ window.OaclisSettings=(()=>{
   "Aggiungi mobile": "Add mobile",
   "Dispositivi": "Devices",
   "Versione Oaclis": "Oaclis version",
+  "Allega o invia": "Attach or send",
+  "Scatta foto": "Take photo",
+  "Archivio": "Photo library",
+  "Rimuovi immagine": "Remove image",
+  "Scegli un’immagine fino a 25 MB.": "Choose an image up to 25 MB.",
+  "Impossibile caricare l’immagine. Prova un’altra foto.": "Unable to load the image. Try another photo.",
   "Comandi Oaclis": "Oaclis controls",
   "Verifica collegamenti": "Check connections",
   "Scegli palette colori": "Choose color palette",
