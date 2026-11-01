@@ -1,4 +1,4 @@
-// voice.js v1.38.638
+// voice.js v1.38.640
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -97,7 +97,7 @@ window.OaclisVoice=(()=>{
     row.append(check,document.createTextNode(locale.text(label)));settings.append(row);
    }
    const list=document.createElement('ul');list.className='voice-command-list';
-   for(const command of commands.filter(command=>available(command.id))){const item=document.createElement('li'),name=document.createElement('strong'),detail=document.createElement('span');name.textContent=command.aliases?.join(' / ')||command.label;detail.textContent=grammar.descriptions[command.id]||'';item.append(name,detail);list.append(item);}
+   for(const command of commands.filter(command=>command.id==='clearDraft'||available(command.id))){const item=document.createElement('li'),name=document.createElement('strong'),detail=document.createElement('span');name.textContent=command.aliases?.join(' / ')||command.label;detail.textContent=grammar.descriptions[command.id]||'';item.append(name,detail);list.append(item);}
    help.append(header,settings,list);help.showModal();
   }
   function available(id){
