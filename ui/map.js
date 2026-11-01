@@ -1,4 +1,4 @@
-// map.js v3.121.2924
+// map.js v3.121.2955
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -253,7 +253,7 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
   edit.className = "link-edit icon-button";
   edit.setAttribute("aria-label", OaclisSettings.text("Modifica ") + name);
   edit.title = OaclisSettings.text("Modifica chat");
-  edit.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
+  edit.innerHTML = OaclisIcon('edit');
   edit.onclick = guard(async () => {
     const cached = connection.source === sourceId ? visibleChats : connection.source === "master" ? data.chats : [];
     const panel = editChat(cached.find(c => c.id === connection.entry.id) || connection.entry, edit, connection.source, connection);
@@ -273,7 +273,7 @@ function drawChatLink(connection, index, lane = 0, existing = null) {
   play.dataset.ready = String(!play.disabled);
   play.title = play.disabled ? (phase === "transferring" || marker.playPending || connection.flow?.requested ? OaclisSettings.text("Sincronizzazione in corso") : OaclisSettings.text("Sincronizzazione non disponibile")) : OaclisSettings.text("Sincronizza verso la copia rimasta indietro");
   play.setAttribute("aria-label", play.title);
-  play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg>';
+  play.innerHTML = OaclisIcon('play');
   play.onclick = guard(async () => {
     play.disabled = true;
     marker.playPending = true;
@@ -433,13 +433,13 @@ function renderLibrary() {
     edit.className = "icon-button";
     edit.setAttribute("aria-label", OaclisSettings.text("Personalizza ") + chatLabel(entry));
     edit.innerHTML =
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
+      OaclisIcon('edit');
     edit.onclick = () => editChat(entry, edit);
     row.classList.toggle("hidden-chat", data.chat_settings?.[entry.id]?.hidden === true);
     const remove=document.createElement("button");remove.type="button";
     remove.className="icon-button delete-chat";remove.title=OaclisSettings.text("Elimina definitivamente");
     remove.setAttribute("aria-label",OaclisSettings.text("Elimina definitivamente ")+chatLabel(entry));
-    remove.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>';
+    remove.innerHTML=OaclisIcon('trash');
     remove.onclick=guard(()=>deleteChat(entry));
     row.append(button, edit, remove);
     $("#library-list").append(row);
@@ -533,7 +533,7 @@ function renderMap(animate = false) {
     node.setAttribute("role", mobile ? "group" : "button");
     node.innerHTML =
       '<span class="device-symbol">' + iconBody(mobile ? "mobile" : data.appearance?.["device:" + device.id]?.icon ?? "desktop", device.name) +
-      (!mobile && device.id !== "master" && data.ssh_settings?.[device.id]?.in_lan !== true ? OaclisSettings.html('<span class="remote-badge" role="img" aria-label="Probabilmente remoto" title="Probabilmente remoto"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></svg></span>') : '') + '</span>' +
+      (!mobile && device.id !== "master" && data.ssh_settings?.[device.id]?.in_lan !== true ? OaclisSettings.html(('<span class="remote-badge" role="img" aria-label="Probabilmente remoto" title="Probabilmente remoto">' + OaclisIcon('globe') + '</span>')) : '') + '</span>' +
       '<span class="node-name">'  +
       esc(device.name) +
       '</span><i class="status-dot" aria-hidden="true"></i>';
@@ -553,15 +553,15 @@ function renderMap(animate = false) {
     customize.setAttribute("aria-label", OaclisSettings.text("Modifica ") + device.name);
     customize.title = OaclisSettings.text("Modifica dispositivo");
     customize.innerHTML =
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4 5 5-11 11-6 1 1-6zm-2 2 5 5"/></svg>';
+      OaclisIcon('edit');
     customize.onclick = (e) => {
       e.stopPropagation();
       editDevice(device, customize);
     };
     actions.append(customize);
     for (const [action, label, shape] of [
-      ["restart", OaclisSettings.text("Riavvia Oaclis"), '<path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5"/>'],
-      ["toggle-awake", OaclisSettings.text("Sempre attivo"), '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/>'],
+      ["restart", OaclisSettings.text("Riavvia Oaclis"), OaclisIcons.refresh],
+      ["toggle-awake", OaclisSettings.text("Sempre attivo"), OaclisIcons.sun],
     ]) {
       const button = document.createElement("button");
       button.className = "node-color node-" + action + " icon-button";
@@ -594,7 +594,7 @@ function renderMap(animate = false) {
       desktop.className = "node-color node-desktop icon-button";
       desktop.title = OaclisSettings.text("Desktop remoto");
       desktop.setAttribute("aria-label", OaclisSettings.text("Desktop remoto · ") + device.name);
-      desktop.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8m-4-4v4"/></svg>';
+      desktop.innerHTML = OaclisIcon('desktop');
       desktop.hidden = true;
       desktop.onclick = event => {
         event.stopPropagation();
@@ -605,7 +605,7 @@ function renderMap(animate = false) {
     if (device.id !== "master" && data.role === "master") {
       const version = document.createElement("button");
       version.className = "node-color node-version icon-button";
-      version.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 5 7 14L19 5"/></svg>';
+      version.innerHTML = OaclisIcon('chevronDown');
       version.type = "button";
       version.onclick = guard(async event => {
         event.stopPropagation();
@@ -634,13 +634,13 @@ function renderMap(animate = false) {
       const access = document.createElement('button');
       access.className = 'node-color icon-button'; access.type = 'button';
       access.title = OaclisSettings.text('QR accesso'); access.setAttribute('aria-label', OaclisSettings.text('QR accesso · ') + device.name);
-      access.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h6v6H3zM15 3h6v6h-6zM3 15h6v6H3zM15 15h2v2h-2zm4 0h2v6h-6v-2"/></svg>';
+      access.innerHTML = OaclisIcon('qr');
       access.onclick = event => { event.stopPropagation(); openMobileAccess(access); };
       actions.append(access);
       const remove = document.createElement('button');
       remove.className = 'node-color icon-button'; remove.type = 'button';
       remove.title = OaclisSettings.text('Elimina telefono'); remove.setAttribute('aria-label', OaclisSettings.text('Elimina ') + device.name);
-      remove.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></svg>';
+      remove.innerHTML = OaclisIcon('trash');
       remove.onclick = guard(async event => { event.stopPropagation(); await removeMobile(device); });
       actions.append(remove);
     }
@@ -657,12 +657,7 @@ function renderMap(animate = false) {
         port.dataset.operation = operation;
         port.setAttribute("aria-label", label + " · " + device.name);
         port.title = label;
-        const paths = {
-          sync: "M4 8h16m-5-4 5 4-5 4M20 16H4m5-4-5 4 5 4",
-          send: "M4 12h16m-5-5 5 5-5 5",
-          receive: "M20 12H4m5-5-5 5 5 5",
-        };
-        port.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="' + paths[operation] + '"/></svg>';
+        port.innerHTML = OaclisIcon(operation === 'sync' ? 'sync' : operation === 'send' ? 'send' : 'receive');
         const local = device.id === "master";
   const objectId = device.id || "device-" + crypto.randomUUID();
         if (local) port.title = operation === "send" ? OaclisSettings.text("Invia a un dispositivo") : operation === "receive" ? OaclisSettings.text("Ricevi da un dispositivo") : label;

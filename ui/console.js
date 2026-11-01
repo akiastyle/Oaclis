@@ -1,4 +1,4 @@
-// console.js v2.97.1862
+// console.js v2.97.1872
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -19,7 +19,7 @@ function chooseChatTerminal(connection, anchor) {
   menu.setAttribute("popover", "manual");
   menu.setAttribute("role", "dialog");
   menu.setAttribute("aria-label", OaclisSettings.text("Dove aprire la chat"));
-  menu.innerHTML = OaclisSettings.html('<button class="icon-button popover-close" aria-label="Chiudi scelta"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Apri su</h2><div class="terminal-destinations"></div>');
+  menu.innerHTML = OaclisSettings.html(('<button class="icon-button popover-close" aria-label="Chiudi scelta">' + OaclisIcon('close') + '</button><h2>Apri su</h2><div class="terminal-destinations"></div>'));
   document.body.append(menu);
   menu.showPopover();
   positionContext(menu, anchor);
@@ -53,7 +53,7 @@ function openChatTerminal(connection, anchor, deviceId) {
   panel.setAttribute("popover", "manual");
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", OaclisSettings.text("Console Codex · ") + deviceName(deviceId));
-  panel.innerHTML = OaclisSettings.html('<button class="icon-button popover-close" aria-label="Chiudi chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>') + esc(chatLabel(connection.entry)) + ' · ' + esc(deviceName(deviceId)) + OaclisSettings.html('</h2><pre class="terminal-screen" tabindex="0" aria-label="Schermo Codex">Connessione…</pre><form class="terminal-input"><textarea name="text" maxlength="8000" aria-label="Messaggio a Codex" rows="2" placeholder="Scrivi a Codex" disabled></textarea></form><div class="terminal-keys"></div>');
+  panel.innerHTML = OaclisSettings.html(('<button class="icon-button popover-close" aria-label="Chiudi chat">' + OaclisIcon('close') + '</button><h2>')) + esc(chatLabel(connection.entry)) + ' · ' + esc(deviceName(deviceId)) + OaclisSettings.html('</h2><pre class="terminal-screen" tabindex="0" aria-label="Schermo Codex">Connessione…</pre><form class="terminal-input"><textarea name="text" maxlength="8000" aria-label="Messaggio a Codex" rows="2" placeholder="Scrivi a Codex" disabled></textarea></form><div class="terminal-keys"></div>');
   document.body.append(panel);
   panel.showPopover();
   positionContext(panel, anchor);
@@ -116,8 +116,10 @@ function openChatTerminal(connection, anchor, deviceId) {
   };
   for (const [key, label] of [["Enter", "↵"], ["Escape", "Esc"], ["Tab", "Tab"], ["Up", "↑"], ["Down", "↓"], ["C-c", "Ctrl+C"]]) {
     const button = document.createElement("button");
-    button.type = "button"; button.className = "icon-button"; button.textContent = label;
-    button.setAttribute("aria-label", key === "Enter" ? OaclisSettings.text("Invio") : label);
+    button.type = "button"; button.className = "icon-button";
+    const symbol={Enter:'enter',Up:'arrowUp',Down:'arrowDown'}[key];
+    if(symbol)button.innerHTML=OaclisIcon(symbol);else button.textContent=label;
+    button.setAttribute("aria-label", key === "Enter" ? OaclisSettings.text("Invio") : key === "Up" ? OaclisSettings.text("Su") : key === "Down" ? OaclisSettings.text("Giù") : label);
     button.onclick = () => {
       if (!ready) return;
       if (key === "Enter" && form.elements.text.value) form.requestSubmit();

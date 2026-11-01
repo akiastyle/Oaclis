@@ -1,4 +1,4 @@
-<!-- index.html v1.0.181 -->
+<!-- index.html v1.0.225 -->
 <!doctype html>
 <html lang="it">
   <head>
@@ -34,26 +34,24 @@
         aria-label="Aggiungi dispositivo"
         title="Aggiungi dispositivo"
       >
-        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14" /></svg></button
+        <svg viewBox="0 0 24 24" data-icon="plus"></svg></button
       ><button
         id="check"
         class="icon-button"
         aria-label="Verifica collegamenti"
         title="Verifica collegamenti"
       >
-        <svg viewBox="0 0 24 24">
-          <path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5" />
-        </svg>
+        <svg viewBox="0 0 24 24" data-icon="refresh"></svg>
       </button>
 
-      <button id="toggle-log" class="icon-button" type="button" aria-label="Log" title="Log" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 10h16M4 15h10M4 20h10"/></svg></button>
-      <button id="power" class="icon-button" type="button" popovertarget="power-menu" aria-label="Modalità energia" title="Modalità energia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4C10 2 3 6 4 13s9 9 13 4c3-4 3-9 3-13ZM5 19 16 8"/></svg></button>
+      <button id="toggle-log" class="icon-button" type="button" aria-label="Log" title="Log" aria-expanded="false"><svg viewBox="0 0 24 24" data-icon="log"></svg></button>
+      <button id="power" class="icon-button" type="button" popovertarget="power-menu" aria-label="Modalità energia" title="Modalità energia"><svg viewBox="0 0 24 24" aria-hidden="true" data-icon="leaf"></svg></button>
       <div id="power-menu" popover="auto" role="radiogroup" aria-label="Modalità energia">
-        <button type="button" class="icon-button" data-power="always" role="radio" aria-checked="false" aria-label="Sempre acceso" title="Sempre acceso"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l2 2m10 10 2 2M5 19l2-2M17 7l2-2"/></svg></button>
-        <button type="button" class="icon-button" data-power="screen-off" role="radio" aria-checked="false" aria-label="Spegni monitor senza standby" title="Spegni monitor senza standby"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8m-4-4v4M5 6l14 8"/></svg></button>
-        <button type="button" class="icon-button" data-power="normal" role="radio" aria-checked="true" aria-label="Normale" title="Normale"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4C10 2 3 6 4 13s9 9 13 4c3-4 3-9 3-13ZM5 19 16 8"/></svg></button>
+        <button type="button" class="icon-button" data-power="always" role="radio" aria-checked="false" aria-label="Sempre acceso" title="Sempre acceso"><svg viewBox="0 0 24 24" aria-hidden="true" data-icon="sun"></svg></button>
+        <button type="button" class="icon-button" data-power="screen-off" role="radio" aria-checked="false" aria-label="Spegni monitor senza standby" title="Spegni monitor senza standby"><svg viewBox="0 0 24 24" aria-hidden="true" data-icon="monitorOff"></svg></button>
+        <button type="button" class="icon-button" data-power="normal" role="radio" aria-checked="true" aria-label="Normale" title="Normale"><svg viewBox="0 0 24 24" aria-hidden="true" data-icon="leaf"></svg></button>
       </div>
-      <button id="palette" class="icon-button" type="button" popovertarget="palette-menu" aria-label="Scegli palette colori" title="Palette colori"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 0 18h2a2 2 0 0 0 1-4c-1-1 0-3 2-3h2a2 2 0 0 0 2-2 9 9 0 0 0-9-9z"/><circle cx="7" cy="10" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="15" cy="7" r="1"/><circle cx="18" cy="10" r="1"/></svg></button>
+      <button id="palette" class="icon-button" type="button" popovertarget="palette-menu" aria-label="Scegli palette colori" title="Palette colori"><svg viewBox="0 0 24 24" aria-hidden="true" data-icon="palette"></svg></button>
       <div id="palette-menu" popover="auto" role="radiogroup" aria-label="Palette colori">
         <button type="button" class="palette-option" data-palette="sienna" role="radio" aria-checked="false"><span class="palette-name">Sienna · Blue</span></button>
         <button type="button" class="palette-option" data-palette="imperial" role="radio" aria-checked="false"><span class="palette-name">Imperial · Cadet</span></button>
@@ -83,9 +81,7 @@
         aria-label="Riordina mappa"
         title="Riordina mappa"
       >
-        <svg viewBox="0 0 24 24">
-          <path d="M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5" />
-        </svg></button
+        <svg viewBox="0 0 24 24" data-icon="maximize"></svg></button
       ><button
         id="sound"
         class="icon-button"
@@ -93,18 +89,14 @@
         aria-pressed="false"
         title="Avviso sonoro"
       >
-        <svg viewBox="0 0 24 24">
-          <path d="M4 9h4l5-4v14l-5-4H4Zm12-1a6 6 0 0 1 0 8" />
-        </svg></button
+        <svg viewBox="0 0 24 24" data-icon="volume"></svg></button
       ><button
         id="theme"
         class="icon-button"
         aria-label="Cambia tema"
         title="Cambia tema"
       >
-        <svg viewBox="0 0 24 24">
-          <path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z" />
-        </svg>
+        <svg viewBox="0 0 24 24" data-icon="moon"></svg>
       </button>
       </div></div>
       <button id="toolbar-toggle" class="icon-button" type="button" aria-label="Impostazioni" title="Impostazioni" aria-expanded="false" aria-controls="toolbar-actions"><svg viewBox="0 0 24 24" aria-hidden="true"></svg></button>
@@ -117,7 +109,7 @@
           aria-label="Torna alle chat"
           hidden
         >
-          <svg viewBox="0 0 24 24"><path d="m14 6-6 6 6 6" /></svg></button
+          <svg viewBox="0 0 24 24" data-icon="chevronLeft"></svg></button
         ><span id="panel-device"></span
         ><button
           id="edit-device"
@@ -125,21 +117,17 @@
           aria-label="Modifica dispositivo"
           title="Modifica dispositivo"
         >
-          <svg viewBox="0 0 24 24">
-            <path d="m4 16 12-12 4 4L8 20H4Z" />
-          </svg></button
+          <svg viewBox="0 0 24 24" data-icon="edit"></svg></button
         ><button
           id="refresh"
           class="icon-button"
           aria-label="Aggiorna chat"
           title="Aggiorna chat"
         >
-          <svg viewBox="0 0 24 24">
-            <path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5" />
-          </svg></button
+          <svg viewBox="0 0 24 24" data-icon="refresh"></svg></button
         ><button id="show-hidden" type="button" class="icon-button" aria-label="Mostra chat nascoste" title="Mostra chat nascoste" aria-pressed="false"></button
         ><button id="close" class="icon-button" aria-label="Chiudi pannello">
-          <svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></svg>
+          <svg viewBox="0 0 24 24" data-icon="close"></svg>
         </button>
       </div>
       <div id="library">
@@ -158,7 +146,7 @@
       </div>
       <div id="details" hidden></div>
     </aside>
-    <section id="orchestrator-log" class="context-popover" hidden aria-label="Log"><button type="button" class="icon-button popover-close" aria-label="Chiudi log">×</button><h2>Log</h2><pre></pre></section>
+    <section id="orchestrator-log" class="context-popover" hidden aria-label="Log"><button type="button" class="icon-button popover-close" aria-label="Chiudi log"><svg viewBox="0 0 24 24" data-icon="close" aria-hidden="true"></svg></button><h2>Log</h2><pre></pre></section>
     <div id="notice" hidden role="status" aria-live="polite"></div>
   </body>
 </html>

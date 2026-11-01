@@ -1,4 +1,4 @@
-// panels.js v3.140.2745
+// panels.js v3.140.2761
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -97,7 +97,7 @@ function bindAppearanceFields(panel) {
 function scopeFields(scopes = {}, entry = {}) {
   return OaclisSettings.html('<div class="scope-tools" role="group" aria-label="Cosa sincronizzare">') +
     [["chat", "chat", "Chat"], ["paths", "folder", OaclisSettings.text("Percorsi")], ["apps", "box", OaclisSettings.text("App, plugin e configurazioni")]].map(([scope, icon, label]) =>
-      '<div class="scope-row"><button type="button" class="scope-toggle" data-scope="' + scope + '" aria-pressed="' + (scopes[scope] !== false) + '" aria-label="' + label + '" title="' + label + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + icons[icon] + '</svg></button><div class="scope-detail" data-detail="' + scope + '" tabindex="0" aria-label="' + label + '"></div><button type="button" class="icon-button" data-refresh="' + scope + '" aria-label="Aggiorna ' + label + '" title="Aggiorna ' + label + '"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M20 12a8 8 0 1 0-2 5"></path></svg></button></div>').join("") + '</div>';
+      '<div class="scope-row"><button type="button" class="scope-toggle" data-scope="' + scope + '" aria-pressed="' + (scopes[scope] !== false) + '" aria-label="' + label + '" title="' + label + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + icons[icon] + '</svg></button><div class="scope-detail" data-detail="' + scope + '" tabindex="0" aria-label="' + label + '"></div><button type="button" class="icon-button" data-refresh="' + scope + '" aria-label="Aggiorna ' + label + '" title="Aggiorna ' + label + ('">' + OaclisIcon('refresh') + '</button></div>')).join("") + '</div>';
 }
 
 function activityState(entry, origin, scope) {
@@ -449,7 +449,7 @@ function editChat(entry, anchor, origin = sourceId || "master", connection = nul
   const panel = document.createElement("div");
   panel.id = "chat-editor-" + crypto.randomUUID(); panel.classList.add("chat-editor"); panel.opener = anchor; panel.dataset.objectId = entry.id; panel.dataset.sourceDevice = origin; panel.dataset.connectionKey = connectionKey;
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", OaclisSettings.text("Personalizza chat"));
-  panel.innerHTML = OaclisSettings.html('<button type="button" class="icon-button chat-visibility" aria-label="Nascondi chat"></button><button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>') + esc(chatLabel(entry)) + OaclisSettings.html('</h2><form><label class="field">Nome visualizzato<input name="label" maxlength="160" value="') + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + OaclisSettings.html('<label class="field">URL web<input name="url" type="url" maxlength="2048" value="') + esc(value.url || "") + '" placeholder="https://…"></label>' + appearanceFields(value) + OaclisSettings.html('<details><summary>Sincronizza</summary>') + scopeFields(scopes, entry) + OaclisSettings.html('</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>');
+  panel.innerHTML = OaclisSettings.html(('<button type="button" class="icon-button chat-visibility" aria-label="Nascondi chat"></button><button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat">' + OaclisIcon('close') + '</button><h2>')) + esc(chatLabel(entry)) + OaclisSettings.html('</h2><form><label class="field">Nome visualizzato<input name="label" maxlength="160" value="') + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + OaclisSettings.html('<label class="field">URL web<input name="url" type="url" maxlength="2048" value="') + esc(value.url || "") + '" placeholder="https://…"></label>' + appearanceFields(value) + OaclisSettings.html('<details><summary>Sincronizza</summary>') + scopeFields(scopes, entry) + OaclisSettings.html('</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>');
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
   panel.querySelector('.delete-presentation').textContent=connection?OaclisSettings.text("Elimina collegamento"):OaclisSettings.text("Nascondi dalla lista");
   bindPanelDrag(panel, true);
@@ -545,7 +545,7 @@ function editDevice(device = {}, anchor = $("#add-device")) {
   closeDeviceSettings();
   const panel = document.createElement("div"); panel.id = "device-settings"; panel.opener = anchor; panel.dataset.objectId = objectId;
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", device.id ? OaclisSettings.text("Modifica dispositivo") : OaclisSettings.text("Aggiungi dispositivo"));
-  panel.innerHTML = OaclisSettings.html('<button type="button" class="icon-button popover-close" aria-label="Chiudi dispositivo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>') + (device.id ? OaclisSettings.text("Modifica dispositivo") : OaclisSettings.text("Aggiungi dispositivo")) + '</h2><form id="device-form" novalidate>' + field(OaclisSettings.text("Nome"), "name", device.name || "") + appearanceFields(value, "desktop") +
+  panel.innerHTML = OaclisSettings.html(('<button type="button" class="icon-button popover-close" aria-label="Chiudi dispositivo">' + OaclisIcon('close') + '</button><h2>')) + (device.id ? OaclisSettings.text("Modifica dispositivo") : OaclisSettings.text("Aggiungi dispositivo")) + '</h2><form id="device-form" novalidate>' + field(OaclisSettings.text("Nome"), "name", device.name || "") + appearanceFields(value, "desktop") +
     (local ? '' : OaclisSettings.html('<details class="device-advanced"><summary>Avanzato</summary>') + field(OaclisSettings.text("Indirizzo IP o hostname"), "address", settings.address || "") + OaclisSettings.html('<label class="field">Porta SSH<input type="number" name="port" min="1" max="65535" required value="') + esc(settings.port || 22) + '"></label>' + field(OaclisSettings.text("Utente SSH"), "user", settings.user || "") + OaclisSettings.html('<label class="field">Chiave SSH (facoltativa)<input name="identity_file" value="') + esc(settings.identity_file || "") + '" placeholder="~/.ssh/id_ed25519"></label></details>') + OaclisSettings.html('<button class="primary" type="submit">Salva</button>') + (device.id && !local ? OaclisSettings.html('<button type="button" class="delete-presentation">Elimina</button>') : '') + '</form>';
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
   bindPanelDrag(panel, true);
@@ -582,7 +582,7 @@ function openDiscovery() {
     panel = document.createElement("div"); panel.id = "discovery-popover"; panel.opener = $("#add-device");
     panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-label", OaclisSettings.text("Collega dispositivo"));
-    panel.innerHTML = OaclisSettings.html('<button class="icon-button popover-close" type="button" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Collega dispositivo</h2><div class="discovery-content" aria-live="polite"></div><button class="primary discovery-manual" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 21h8m-4-5v5"/></svg><span>Aggiungi manualmente</span></button><button class="primary discovery-manual discovery-mobile" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 18h4"/></svg><span>Aggiungi mobile</span></button>');
+    panel.innerHTML = OaclisSettings.html(('<button class="icon-button popover-close" type="button" aria-label="Chiudi">' + OaclisIcon('close') + '</button><h2>Collega dispositivo</h2><div class="discovery-content" aria-live="polite"></div><button class="primary discovery-manual" type="button">' + OaclisIcon('desktop') + '<span>Aggiungi manualmente</span></button><button class="primary discovery-manual discovery-mobile" type="button">' + OaclisIcon('mobile') + '<span>Aggiungi mobile</span></button>'));
     document.body.append(panel); panel.showPopover();
     panel.querySelector('.popover-close').onclick = () => panel.remove();
     panel.querySelector('.discovery-manual').onclick = () => { panel.remove(); editDevice(); };
@@ -646,7 +646,7 @@ function renderPathAuthorization(auth) {
   panel = document.createElement('dialog');
   panel.id = 'path-authorization'; panel.className = 'context-popover path-authorization'; panel.dataset.request = auth.id;
   panel.setAttribute('aria-labelledby', 'path-authorization-title');
-  panel.innerHTML = OaclisSettings.html('<button type="button" class="icon-button popover-close" aria-label="Annulla autorizzazione"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>') +
+  panel.innerHTML = OaclisSettings.html(('<button type="button" class="icon-button popover-close" aria-label="Annulla autorizzazione">' + OaclisIcon('close') + '</button>')) +
     OaclisSettings.html('<h2 id="path-authorization-title">Prepara cartella</h2><p class="authorization-device"></p><p class="authorization-path"></p>') +
     OaclisSettings.html('<p>Creare il percorso e assegnare la sola cartella finale all’utente indicato. Le cartelle esistenti mantengono proprietario e permessi.</p>') +
     OaclisSettings.html('<form autocomplete="off"><label>Password sudo<input name="password" type="password" required autocomplete="off" maxlength="1024" aria-describedby="path-authorization-note"></label>') +
@@ -739,7 +739,7 @@ async function openMobileInvite() {
   panel.id = 'mobile-invite'; panel.opener = $('#add-device');
   panel.setAttribute('popover', 'manual'); panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-label', OaclisSettings.text('Aggiungi mobile'));
-  panel.innerHTML = OaclisSettings.html('<button class="icon-button popover-close" type="button" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Aggiungi mobile</h2><div class="mobile-invite-content" aria-live="polite"><p>Preparazione…</p></div>');
+  panel.innerHTML = OaclisSettings.html(('<button class="icon-button popover-close" type="button" aria-label="Chiudi">' + OaclisIcon('close') + '</button><h2>Aggiungi mobile</h2><div class="mobile-invite-content" aria-live="polite"><p>Preparazione…</p></div>'));
   document.body.append(panel); panel.showPopover(); positionContext(panel, panel.opener); bindPanelDrag(panel);
   let expiry, timer, expiresAt;
   panel.querySelector('.popover-close').onclick = () => { clearTimeout(expiry); clearTimeout(timer); panel.remove(); };
@@ -799,7 +799,7 @@ async function openMobileChats(device, anchor) {
   const panel = document.createElement('div');
   panel.className = 'mobile-chat-editor'; panel.dataset.objectId = device.id; panel.opener = anchor;
   panel.setAttribute('popover', 'manual'); panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', OaclisSettings.text('Chat per ') + device.name);
-  panel.innerHTML = OaclisSettings.html('<button type="button" class="icon-button popover-close" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Chat autorizzate</h2><p>') + esc(device.name) + OaclisSettings.html('</p><div class="mobile-chat-content"><p>Caricamento chat…</p></div>');
+  panel.innerHTML = OaclisSettings.html(('<button type="button" class="icon-button popover-close" aria-label="Chiudi">' + OaclisIcon('close') + '</button><h2>Chat autorizzate</h2><p>')) + esc(device.name) + OaclisSettings.html('</p><div class="mobile-chat-content"><p>Caricamento chat…</p></div>');
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor); bindPanelDrag(panel, true);
   panel.querySelector('.popover-close').onclick = () => panel.remove();
   panel.querySelector('h2').focus({preventScroll:true});
@@ -830,7 +830,7 @@ async function openMobileAccess(anchor) {
   document.querySelector('#mobile-access-qr')?.remove();
   const panel = document.createElement('div'); panel.id = 'mobile-access-qr'; panel.opener = anchor;
   panel.setAttribute('popover','manual'); panel.setAttribute('role','dialog'); panel.setAttribute('aria-label',OaclisSettings.text('QR accesso'));
-  panel.innerHTML = OaclisSettings.html('<button type="button" class="icon-button popover-close" aria-label="Chiudi"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button><h2>Apri Oaclis</h2><div class="mobile-access-content" aria-live="polite">Preparazione QR…</div>');
+  panel.innerHTML = OaclisSettings.html(('<button type="button" class="icon-button popover-close" aria-label="Chiudi">' + OaclisIcon('close') + '</button><h2>Apri Oaclis</h2><div class="mobile-access-content" aria-live="polite">Preparazione QR…</div>'));
   document.body.append(panel); panel.showPopover(); positionContext(panel,anchor); bindPanelDrag(panel,true);
   panel.querySelector('.popover-close').onclick = () => panel.remove();
   try {

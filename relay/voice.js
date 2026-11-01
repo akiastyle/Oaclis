@@ -1,4 +1,4 @@
-// voice.js v1.38.630
+// voice.js v1.38.638
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -84,13 +84,13 @@ window.OaclisVoice=(()=>{
    if(help.open)return;
    help.replaceChildren();
    const close=document.createElement('button');close.type='button';close.className='voice-close secondary';close.setAttribute('aria-label',locale.text('Chiudi comandi vocali'));
-   close.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>';close.onclick=()=>help.close();
+   close.innerHTML=OaclisIcon('close');close.onclick=()=>help.close();
    const title=document.createElement('h1');title.textContent=locale.text('Comandi vocali');
    const header=document.createElement('header');header.className='voice-help-header';header.append(title,close);
    const settings=document.createElement('details');settings.className='voice-settings';settings.setAttribute('aria-label',locale.text('Impostazioni'));
-   const summary=document.createElement('summary');summary.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">'+(window.OaclisIcons?.settings||'')+'</svg>';
+   const summary=document.createElement('summary');summary.innerHTML=OaclisIcon('settings');
    summary.append(document.createTextNode(locale.text('Impostazioni')));
-   const chevron=document.createElementNS('http://www.w3.org/2000/svg','svg');chevron.setAttribute('viewBox','0 0 24 24');chevron.setAttribute('aria-hidden','true');chevron.innerHTML='<path d="m9 5 7 7-7 7"/>';summary.append(chevron);settings.append(summary);
+   const chevron=document.createElementNS('http://www.w3.org/2000/svg','svg');chevron.setAttribute('viewBox','0 0 24 24');chevron.setAttribute('aria-hidden','true');chevron.innerHTML=OaclisIcons.chevronRight;summary.append(chevron);settings.append(summary);
    for(const [key,label]of [['startMic',"Microfono acceso all'avvio"],['startVoice',"Voce accesa all'avvio"],['autoSend','Invio automatico'],['waitFive','Attesa di 5 secondi (altrimenti 3)'],['pauseAfterSend','Pausa dettatura dopo invio']]){
     const row=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.checked=preferences[key];
     check.onchange=()=>{preferences[key]=check.checked;try{localStorage.setItem('oaclis-voice-preferences',JSON.stringify(preferences));}catch{}if(!preferences.autoSend)cancelAutoSend();else if(key==='waitFive'&&autoSendTimer)scheduleAutoSend();};
@@ -241,7 +241,7 @@ window.OaclisVoice=(()=>{
    options=document.createElement('dialog');options.className='voice-options voice-dialog';options.setAttribute('aria-label',locale.text('Conferma comando vocale'));options.addEventListener('cancel',event=>{event.preventDefault();clearPending();});
    help=document.createElement('dialog');help.className='voice-help voice-dialog';help.setAttribute('aria-label',locale.text('Comandi vocali'));
    root.append(status,preview,options,help);(document.getElementById('app')||document.body).append(root);
-   button=document.createElement('button');button.type='button';button.className='voice-mic secondary';button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2m-7 9v3m-4 0h8"/></svg>';
+   button=document.createElement('button');button.type='button';button.className='voice-mic secondary';button.innerHTML=OaclisIcon('microphone');
    host.append(button);
    button.onclick=()=>{if(wanted)stop(false);else{window.OaclisReadAloud?.feedback();wanted=true;paused=false;retries=0;start();}};
    if(!Recognition||!window.isSecureContext){button.disabled=true;feedback('Voce non disponibile in questo browser.');}

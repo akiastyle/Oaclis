@@ -1,4 +1,4 @@
-// app.js v4.164.3100
+// app.js v4.164.3105
 "use strict";
 OaclisSettings.translate(document.body);
 const $ = (s) => document.querySelector(s);
@@ -219,9 +219,8 @@ function guard(fn) {
     }
   };
 }
-const eyePath = '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>';
 function renderEye(button, crossed, label) {
-  button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + eyePath + (crossed ? '<path d="m3 3 18 18"/>' : '') + '</svg>';
+  button.innerHTML = OaclisIcon(crossed ? 'eyeOff' : 'eye');
   button.title = label; button.setAttribute("aria-label", label);
   button.setAttribute("aria-pressed", String(!crossed));
 }
@@ -292,7 +291,7 @@ const chatLabel = (entry) => appearance(entry).label || entry.name;
 const iconNames = { chat: "Chat", code: OaclisSettings.text("Codice"), folder: OaclisSettings.text("Cartella"), desktop: "Desktop", laptop: OaclisSettings.text("Portatile"), server: "Server", terminal: OaclisSettings.text("Terminale"), globe: OaclisSettings.text("Globo"), cloud: "Cloud", box: "App", database: "Database", git: OaclisSettings.text("Rami"), book: OaclisSettings.text("Libro"), star: OaclisSettings.text("Stella"), bolt: OaclisSettings.text("Fulmine"), shield: OaclisSettings.text("Scudo"), bug: "Bug", settings: OaclisSettings.text("Impostazioni"), cpu: OaclisSettings.text("Processore"), rocket: OaclisSettings.text("Razzo"), link: OaclisSettings.text("Collegamento"), image: OaclisSettings.text("Immagine"), wrench: OaclisSettings.text("Strumenti"), layers: OaclisSettings.text("Livelli") };
 function iconBody(icon, name) {
   if (icon?.startsWith("data:image/png;base64,")) return '<img src="' + esc(icon) + '" alt="">';
-  if (icons[icon]) return '<svg viewBox="0 0 24 24" aria-hidden="true">' + icons[icon] + '</svg>';
+  if (icons[icon]) return OaclisIcon(icon);
   return esc([...name.trim()][0]?.toLocaleUpperCase() || "?");
 }
 function badge(entry) {

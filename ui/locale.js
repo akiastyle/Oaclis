@@ -1,4 +1,4 @@
-// locale.js v1.3.461
+// locale.js v1.3.463
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -242,6 +242,8 @@ window.OaclisSettings=(()=>{
   "Scrivi a Codex": "Write to Codex",
   "Invia messaggio": "Send message",
   "Invio": "Send",
+  "Su": "Up",
+  "Giù": "Down",
   "Schermo Codex": "Codex screen",
   "Console Codex ·": "Codex console ·",
   "· Invio non confermato": "· Send not confirmed",

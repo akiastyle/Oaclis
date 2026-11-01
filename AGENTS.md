@@ -106,3 +106,5 @@
 - Use this same snapshot in the UI, with a 30-second freshness limit. Do not create independent automatic SSH checks on hover or update-monitoring timers, or rely on LAN announcements for build comparison.
 
 - The PWA release is calculated by `pwaVersion()` in `relay/index.php` from the headers of its deployed PHP/JS/CSS sources, including shared locale, icons and terminal renderer. Use the same arithmetic means and half-up rounding as `build.rs`: X and Z include all versioned sources, Y only positive values. No manual release counter. Show this loaded-page release only in the authorized chat list. All PWA source headers remain included in the general master calculation.
+
+- All interface icons use the vendored Lucide SVG subset in `ui/icons.js` (native and mobile share the identical file). Reuse `OaclisIcon(name)` for markup or `OaclisIcons[name]` for an existing SVG container; static HTML uses `svg[data-icon]`. Keep saved picker IDs stable. Add missing glyphs from the pinned Lucide release with its license; do not draw custom UI glyphs or use CDN/icon fonts. Brand logos, user images, QR data and graph/connection geometry are separate.

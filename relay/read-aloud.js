@@ -1,4 +1,4 @@
-// read-aloud.js v1.18.231
+// read-aloud.js v1.18.233
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -25,7 +25,7 @@ window.OaclisReadAloud=(()=>{
  function create(host,{pause=()=>{},resume=()=>{}}={}){
   const engine=window.speechSynthesis,button=document.createElement('button');
   button.type='button';button.className='read-aloud secondary';
-  button.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4zM16 8a6 6 0 0 1 0 8m2-11a10 10 0 0 1 0 14"/></svg>';
+  button.innerHTML=OaclisIcon('volume');
   let enabled=false,cursor=null,queue=[],speaking=false,current=null,generation=0,disposed=false,currentItem=null,echoUntil=0,quietUntil=0,playTimer=null,lastActivity='',lastActivityId=null,lastActivityAt=0;
   const items=new Map(),ignored=new Set();
   const paint=()=>{button.setAttribute('aria-pressed',String(enabled));button.title=OaclisSettings.text(enabled?(button.dataset.ready==='false'?'Lettura in collegamento':'Disattiva lettura'):'Attiva lettura');button.setAttribute('aria-label',button.title);};

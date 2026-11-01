@@ -1,4 +1,4 @@
-/* style.css v2.0.1461 */
+/* style.css v2.0.1465 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -125,7 +125,7 @@
   --glass-highlight: rgb(255 255 255 / 35%);
   --shadow-surface: 0 8px 24px rgb(0 0 0 / 10%), inset 0 1px 0 var(--glass-highlight);
   --stroke-device: 1.25;
-  --stroke-icon: 1.6;
+  --stroke-icon: 2;
 
   --bg: #fafafa;
   --panel: #fff;
@@ -1341,7 +1341,7 @@ select {
 #toolbar-actions > .icon-button, #local-voice-controls .icon-button { flex-shrink: 0; opacity: 0; transform: translateX(-8px) scale(.94); transition: opacity var(--duration-ui) var(--ease-ui), transform var(--duration-ui) var(--ease-ui); }
 .toolbar[data-expanded="true"] .toolbar-reveal { width: var(--toolbar-width); height: var(--toolbar-height); }
 .toolbar[data-expanded="true"] #toolbar-actions > .icon-button, .toolbar[data-expanded="true"] #local-voice-controls .icon-button { opacity: 1; transform: none; transition-delay: calc(var(--toolbar-order, 0) * 24ms); }
-#toolbar-toggle { flex-shrink: 0; width: 36px; overflow: hidden; transition: width var(--duration-ui) var(--ease-ui), padding var(--duration-ui) var(--ease-ui), opacity var(--duration-ui) var(--ease-ui), transform var(--duration-ui) var(--ease-ui); }
+#toolbar-toggle { flex-shrink: 0; width: calc(var(--size-20) + var(--space-9) * 2); overflow: hidden; transition: width var(--duration-ui) var(--ease-ui), padding var(--duration-ui) var(--ease-ui), opacity var(--duration-ui) var(--ease-ui), transform var(--duration-ui) var(--ease-ui); }
 .toolbar[data-expanded="true"] #toolbar-toggle { width: 0; padding-inline: 0; opacity: 0; transform: rotate(65deg); pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
   .toolbar-reveal, #toolbar-toggle, #toolbar-actions > .icon-button, #local-voice-controls .icon-button { transition: none; }

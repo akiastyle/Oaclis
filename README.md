@@ -731,3 +731,11 @@ La nav locale mostra logo e ingranaggio a riposo. Il passaggio del puntatore o
 l'attivazione da tastiera apre i comandi con comparsa progressiva; dopo tre
 secondi senza interazione si richiude, mantenendosi aperta durante l'uso dei
 menu o con il focus da tastiera sui controlli. Rispetta il movimento ridotto.
+
+Le icone dell'interfaccia provengono da Lucide 1.66.0, conservate come sottoinsieme
+SVG locale in `ui/icons.js`. Master, client e PWA usano lo stesso catalogo; non
+sono necessari CDN, font di icone, Node o download durante l'uso. Gli identificativi
+delle icone gia' salvate restano validi. Il catalogo contiene anche il testo
+delle licenze ISC/MIT, disponibile separatamente in `ui/assets/LUCIDE-LICENSE.txt`.
+Loghi, immagini personali e geometria di grafici e collegamenti sono distinti
+dalle icone dei comandi.
