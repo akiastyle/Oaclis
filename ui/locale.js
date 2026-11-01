@@ -1,4 +1,4 @@
-// locale.js v1.3.474
+// locale.js v1.3.482
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -274,13 +274,9 @@ window.OaclisSettings=(()=>{
   "Dettatura annullata": "Dictation undone",
   "Compositore selezionato": "Message field selected",
   "Messaggio svuotato": "Message cleared",
-  "Conferma svuotamento": "Confirm clear",
-  "Confermare lo svuotamento del messaggio?": "Clear the message?",
-  "La bozza è cambiata. Svuotamento annullato.": "The draft changed. Clear cancelled.",
   "Contesto cambiato.": "Context changed.",
   "Scegli un numero tra quelli mostrati.": "Choose one of the displayed numbers.",
   "Scegli uno dei numeri mostrati oppure annulla selezione.": "Choose a displayed number or say cancel selection.",
-  "Pronuncia conferma svuotamento oppure annulla operazione.": "Say confirm clear or cancel operation.",
   "Più chat corrispondono. Scegli un numero.": "Several chats match. Choose a number.",
   "Scelta scaduta": "Selection expired",
   "Scrivi prima un messaggio.": "Write a message first.",
@@ -359,7 +355,7 @@ window.OaclisSettings=(()=>{
 };
  const it={
   literal:'scrivi',explicit:'comando',numbers:['uno','due','tre','quattro','cinque','sei','sette','otto','nove','dieci','undici','dodici','tredici','quattordici','quindici','sedici','diciassette','diciotto','diciannove','venti'],
-  choose:/^scegli\s+(.+)$/iu,cancel:['annulla selezione','annulla operazione'],confirm:'conferma svuotamento',
+  choose:/^scegli\s+(.+)$/iu,cancel:['annulla selezione','annulla operazione'],
   descriptions:{
    send:'Invia il messaggio scritto.',selectChat:'Passa alla chat indicata dal numero o dal nome.',
    splitChat:'Apre una seconda chat sopra o sotto la prima.',selectPane:'Sceglie la chat su cui usare i comandi.',
@@ -382,7 +378,7 @@ window.OaclisSettings=(()=>{
  };
  const english={
   literal:'write',explicit:'command',numbers:['one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty'],
-  choose:/^choose\s+(.+)$/iu,cancel:['cancel selection','cancel operation'],confirm:'confirm clear',
+  choose:/^choose\s+(.+)$/iu,cancel:['cancel selection','cancel operation'],
   descriptions:{
    send:'Sends the written message.',selectChat:'Switches to the chat identified by number or name.',
    splitChat:'Opens a second chat above or below the first.',selectPane:'Selects which chat receives the controls.',

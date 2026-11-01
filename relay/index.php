@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.539
+// index.php v1.8.544
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -251,9 +251,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($bytes===false || strlen($bytes)>524288 || !str_starts_with($bytes,"\xff\xd8\xff") || !str_ends_with($bytes,"\xff\xd9")) respond([],400);
             }
             $previous=$record['console']??[];
-            if (($previous['until']??0)>time() && !isset($previous['result'])) respond(['error'=>'Attendi il completamento della richiesta.'],409);
+            // Only observations can be superseded; pending inputs remain exclusive.
+            if (($previous['until']??0)>time() && !isset($previous['result']) && !($operation==='input' && ($previous['operation']??'')==='read')) respond(['error'=>'Attendi il completamento della richiesta.'],409);
             $id=$packet['id'];
-            $state['devices'][$deviceId]['console']=['id'=>$id,'chat_id'=>$chat,'until'=>min(time()+20,$session['auth']['until']),'signed'=>$signed];
+            $state['devices'][$deviceId]['console']=['id'=>$id,'chat_id'=>$chat,'operation'=>$operation,'until'=>min(time()+20,$session['auth']['until']),'signed'=>$signed];
             $result=['request_id'=>$id];
             break;
         case 'console-exchange':

@@ -1,4 +1,4 @@
-// app.js v4.164.3107
+// app.js v4.166.3122
 "use strict";
 OaclisSettings.translate(document.body);
 const $ = (s) => document.querySelector(s);
@@ -377,9 +377,9 @@ async function poll() {
 }
 let polling = false;
 let lastPoll = 0;
-setInterval(async () => {
+async function pollStatus() {
   const transferring = data.job?.status === "running" || document.querySelector('.link-badge[data-motion-phase="transferring"]');
-  if (polling || Date.now() - lastPoll < (transferring ? 500 : 2000)) return;
+  if (document.hidden || polling || Date.now() - lastPoll < (transferring ? 500 : 2000)) return;
   lastPoll = Date.now();
   polling = true;
   try {
@@ -389,11 +389,12 @@ setInterval(async () => {
   } finally {
     polling = false;
   }
-}, 500);
+}
+setInterval(pollStatus, 500);
 
 let refreshing = false;
-setInterval(async () => {
-  if (refreshing || !sourceId || $("#panel").hidden || drag || catalogFailures.has(sourceId) ||
+async function refreshCatalog() {
+  if (document.hidden || refreshing || !sourceId || $("#panel").hidden || drag || catalogFailures.has(sourceId) ||
       (sourceId !== "master" && data.connections[sourceId] !== "online")) return;
   refreshing = true;
   const id = sourceId,
@@ -423,7 +424,9 @@ setInterval(async () => {
   } finally {
     refreshing = false;
   }
-}, 10000);
+}
+setInterval(refreshCatalog, 10000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden){lastPoll=0;pollStatus();refreshCatalog();}});
 window.onresize = () => {
   renderMap();
   for (const panel of document.querySelectorAll('.context-popover:popover-open')) positionContext(panel, panel.opener);

@@ -1,10 +1,11 @@
-// console.js v2.97.1872
+// console.js v2.98.1886
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
 function closeChatTerminal(panel) {
   if (!panel) return;
   clearTimeout(panel.terminalTimer);
+  document.removeEventListener('visibilitychange',panel.terminalVisibility);
   const anchor = panel.opener;
   panel.remove();
   window.OaclisLocalVoice?.close(panel);
@@ -95,11 +96,18 @@ function openChatTerminal(connection, anchor, deviceId) {
     } catch (error) { if (panel.isConnected) {status.textContent=OaclisSettings.text(value.action === "input" ? "Invio non confermato" : "Collegamento temporaneamente non disponibile. Riprova.");status.dataset.error="true";} if (value.action === "open") ready = false; return false; }
     finally { busy = false; done(); }
   };
+  let terminalPolling=false;
   const pollTerminal = async () => {
-    if (!panel.isConnected || !ready) return;
-    await send({ action: "read" });
-    if (panel.isConnected && ready) panel.terminalTimer = setTimeout(pollTerminal, 1500);
+    if (document.hidden || terminalPolling || !panel.isConnected || !ready) return;
+    terminalPolling=true;
+    try { await send({ action: "read" }); }
+    finally {
+      terminalPolling=false;clearTimeout(panel.terminalTimer);
+      if (panel.isConnected && ready && !document.hidden) panel.terminalTimer=setTimeout(pollTerminal,1500);
+    }
   };
+  panel.terminalVisibility=()=>{clearTimeout(panel.terminalTimer);if(!document.hidden)pollTerminal();};
+  document.addEventListener('visibilitychange',panel.terminalVisibility);
   const submit = async () => {
     if (!ready || submitting) return false;
     const text = form.elements.text.value; submitting = true;

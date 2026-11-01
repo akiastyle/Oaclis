@@ -1,4 +1,4 @@
-// app.js v1.76.779
+// app.js v1.77.820
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -40,9 +40,9 @@ async function keepConsoleAwake(){
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')keepConsoleAwake();});
 function show(html){clearTimeout(timer);closeConsole?.();voice.leave();app.innerHTML=html;app.hidden=false;if(screenWakeLock&&!document.getElementById('console-screen')){screenWakeLock.release().catch(()=>{});screenWakeLock=null;}}
 function message(text,error=false){let p=document.getElementById('message');if(!p){p=document.createElement('p');p.id='message';p.setAttribute('role','status');app.append(p);}p.className=error?'error':'status';p.textContent=OaclisSettings.text(text);}
-async function api(action,body={}){
+async function api(action,body={},signal){
  if(action==='console'){const signed=await OaclisMobileSecurity.sign(code,body);const {image,...rest}=body;body={...rest,signed};}
- const r=await fetch('/auth',{method:'POST',headers:{'Content-Type':'application/json','X-Device-Code':code},body:JSON.stringify({action,...body}),cache:'no-store'});
+ const r=await fetch('/auth',{method:'POST',headers:{'Content-Type':'application/json','X-Device-Code':code},body:JSON.stringify({action,...body}),cache:'no-store',signal});
  if(!r.ok)throw Object.assign(new Error(r.status===403?OaclisSettings.text('Accesso non autorizzato.'):OaclisSettings.text('Collegamento temporaneamente non disponibile. Riprova.')),{status:r.status});
  const result=await r.json();
  OaclisMobileSecurity.update(result.security);
@@ -114,7 +114,7 @@ async function openConsole(chat,adjacent=false){
  show(OaclisSettings.html(('<div id="console-panes"></div><form id="console-input"><div class="console-draft"><div class="console-attachment" hidden><img alt=""><button type="button" aria-label="Rimuovi immagine">' + OaclisIcon('close') + '</button></div><textarea aria-label="Messaggio" maxlength="8000" rows="2" placeholder="Scrivi un messaggio" disabled></textarea></div><button id="console-send" type="submit" disabled aria-label="Invia messaggio" aria-haspopup="menu" aria-expanded="false">' + OaclisIcon('arrowUp') + '</button></form><div id="console-keys"><button id="back" class="secondary" type="button" aria-label="Chat autorizzate" title="Chat autorizzate">' + OaclisIcon('chevronLeft') + '</button></div><dialog id="console-picker" class="voice-dialog" aria-label="Affianca chat"></dialog>')));
  const panes=[],container=document.getElementById('console-panes'),form=document.getElementById('console-input'),text=form.querySelector('textarea'),keys=document.getElementById('console-keys'),picker=document.getElementById('console-picker');
  const sendButton=form.querySelector('#console-send'),preview=form.querySelector('.console-attachment');
- let active=null,reader=null,closed=false,pollTimer=null,queue=Promise.resolve(),pending=null,inputBusy=false,polling=false;
+ let active=null,reader=null,closed=false,pollTimer=null,queue=Promise.resolve(),pending=null,reading=null,inputBusy=false,polling=false;
  const split=document.createElement('button');split.type='button';split.className='console-split secondary';split.innerHTML=OaclisIcon('split');
  const fitConsole=()=>{const following=panes.filter(pane=>pane.follow);document.documentElement.style.setProperty('--console-height',(window.visualViewport?.height??innerHeight)+'px');requestAnimationFrame(()=>{if(!closed)for(const pane of following)if(!pane.closed){pane.follow=true;pane.screen.scrollTop=pane.screen.scrollHeight;}});};
  fitConsole();window.visualViewport?.addEventListener('resize',fitConsole);window.addEventListener('resize',fitConsole);
@@ -142,9 +142,9 @@ async function openConsole(chat,adjacent=false){
   element.addEventListener('click',event=>{if(!event.target.closest('button'))activate(pane);});element.addEventListener('focusin',event=>{if(!event.target.closest('button'))activate(pane);});
   return pane;
  }
- async function complete(request){
+ async function complete(request,signal){
   const deadline=request.deadline;let result;
-  do{if(closed)return false;result=await api('console-result',{chat_id:request.pane.chat.id,request_id:request.request_id});}while(result.pending&&Date.now()<deadline);
+  do{if(closed)return false;result=await api('console-result',{chat_id:request.pane.chat.id,request_id:request.request_id},signal);}while(result.pending&&Date.now()<deadline);
   if(closed)return false;
   if(result.pending){pending=null;throw Error(OaclisSettings.text('Collegamento temporaneamente non disponibile. Riprova.'));}
   pending=null;if(result.error)throw Error(result.error);
@@ -164,7 +164,8 @@ async function openConsole(chat,adjacent=false){
  }
  function send(pane,operation,body={}){
   const task=queue.then(async()=>{
-   if(closed||pane.closed)return false;
+   if(closed||pane.closed||operation==='read'&&inputBusy)return false;
+   let controller=null;
    try{
     if(pending){const previous=pending;await complete(previous);if(previous.pane===pane&&operation==='read')return true;}
     if(closed||pane.closed)return false;
@@ -173,18 +174,23 @@ async function openConsole(chat,adjacent=false){
     const currentReader=pane===active?reader:null,speechGeneration=currentReader?.stamp();
     const request=await api('console',{chat_id:pane.chat.id,operation,...body,...currentReader?.request()});
     pending={...request,pane,operation,text:body.text,image:body.image,reader:currentReader,speechGeneration,deadline:Date.now()+23000};
-    return await complete(pending);
-   }catch(error){if(error.status===403){voice.stop();show('');location.replace('/auth');}else if(!closed&&!pane.closed){pane.reconnecting=true;pane.name.textContent=pane.chat.name+OaclisSettings.text(operation==='input'?' · Invio non confermato':' · Riconnessione…');}return false;}
+    if(operation==='read'){
+     controller=new AbortController();reading=controller;
+     if(inputBusy||document.hidden)controller.abort();
+    }
+    return await complete(pending,controller?.signal);
+   }catch(error){if(controller?.signal.aborted){if(pending?.operation==='read')pending=null;return false;}if(error.status===403){voice.stop();show('');location.replace('/auth');}else if(!closed&&!pane.closed){pane.reconnecting=true;pane.name.textContent=pane.chat.name+OaclisSettings.text(operation==='input'?' · Invio non confermato':' · Riconnessione…');}return false;}
+   finally{if(reading===controller)reading=null;}
   });queue=task.catch(()=>false);return task;
  }
  async function poll(){
   if(closed||polling)return;polling=true;
   try{if(!document.hidden&&!inputBusy){for(const pane of [active,...panes.filter(pane=>pane!==active)]){if(closed||inputBusy)break;if(pane&&!pane.closed)await send(pane,pane.ready?'read':'open');}}}
-  finally{polling=false;if(!closed){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
+  finally{polling=false;if(!closed&&!document.hidden){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
  }
  async function submit(pane=active,key='Enter'){
   if(inputBusy||closed||!pane?.ready||pane.preparingImage)return false;
-  inputBusy=true;clearTimeout(pollTimer);
+  inputBusy=true;clearTimeout(pollTimer);reading?.abort();
   const value=pane===active?text.value:drafts.get(pane.chat.id)||'';saveDraft(pane.chat.id,value);
   try{return await send(pane,'input',key==='Enter'?{text:value,key,...(imageDrafts.has(pane.chat.id)?{image:imageDrafts.get(pane.chat.id)}:{})}:{key});}
   finally{inputBusy=false;if(!closed){voice.resume();clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
@@ -219,11 +225,18 @@ async function openConsole(chat,adjacent=false){
   };
   input.click();
  }
- const sendMenu=document.createElement('div');sendMenu.className='console-send-menu';sendMenu.setAttribute('popover','auto');sendMenu.setAttribute('role','menu');sendMenu.setAttribute('aria-label',OaclisSettings.text('Allega o invia'));
+ const sendMenu=document.createElement('div');sendMenu.className='console-send-menu';sendMenu.setAttribute('popover','manual');sendMenu.setAttribute('role','menu');sendMenu.setAttribute('aria-label',OaclisSettings.text('Allega o invia'));
  for(const [label,icon,action]of [['Scatta foto','image',()=>pickImage(true)],['Archivio','folder',()=>pickImage(false)],['Invia','arrowUp',()=>submit()]]){
   const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.innerHTML=OaclisIcon(icon);button.append(document.createTextNode(OaclisSettings.text(label)));button.onclick=()=>{sendMenu.hidePopover();action();};sendMenu.append(button);
  }
  form.append(sendMenu);
+ const dismissSendMenu=event=>{
+  if(!sendMenu.matches(':popover-open'))return;
+  if(event.type==='keydown'?event.key==='Escape':!sendMenu.contains(event.target)&&!sendButton.contains(event.target)){
+   sendMenu.hidePopover();if(event.type==='keydown'){event.preventDefault();sendButton.focus({preventScroll:true});}
+  }
+ };
+ document.addEventListener('pointerdown',dismissSendMenu);document.addEventListener('keydown',dismissSendMenu);
  function showSendMenu(choice=0){
   if(sendButton.disabled||closed)return;
   sendMenu.showPopover();sendButton.setAttribute('aria-expanded','true');
@@ -245,7 +258,7 @@ async function openConsole(chat,adjacent=false){
   const existing=panes.find(pane=>pane.chat.id===selected.id);if(existing){activate(existing);return true;}
   const replaced=beside?panes.find(pane=>pane!==active):active,index=replaced?panes.indexOf(replaced):panes.length;
   if(replaced){if(replaced===active){saveDraft(replaced.chat.id,text.value);reader?.destroy();reader=null;active=null;}remove(replaced);}
-  const pane=add(selected,index);activate(pane);clearTimeout(pollTimer);const ok=await send(pane,'open');if(!closed){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}return ok;
+  const pane=add(selected,index);activate(pane);clearTimeout(pollTimer);const ok=await send(pane,'open');if(!closed&&!document.hidden){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}return ok;
  }
  function toggleSplit(){
   if(panes.length===2){remove(panes.find(pane=>pane!==active));layout();bindVoice(active.chat);return;}
@@ -253,14 +266,14 @@ async function openConsole(chat,adjacent=false){
   for(const [index,selected]of authorizedChats.entries()){const button=chatButton(selected,index,()=>openConsole(selected,true));button.disabled=panes.some(pane=>pane.chat.id===selected.id);picker.append(button);}picker.showModal();
  }
  consoleWorkspace={open,split:()=>panes.length===2,selectPane:position=>activate(panes[['sotto','bottom'].includes(OaclisVoice.normalize(position))?1:0]),list:()=>picker.open?authorizedChats:visibleChatList};
- closeConsole=()=>{if(closed)return;cancelHold();if(sendMenu.matches(':popover-open'))sendMenu.hidePopover();if(active)saveDraft(active.chat.id,text.value);reader?.destroy();for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleActions=null;consoleWorkspace=null;closeConsole=null;};
+ closeConsole=()=>{if(closed)return;document.removeEventListener('pointerdown',dismissSendMenu);document.removeEventListener('keydown',dismissSendMenu);reading?.abort();cancelHold();if(sendMenu.matches(':popover-open'))sendMenu.hidePopover();if(active)saveDraft(active.chat.id,text.value);reader?.destroy();for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleActions=null;consoleWorkspace=null;closeConsole=null;};
  text.addEventListener('input',()=>{if(active)saveDraft(active.chat.id,text.value);});form.onsubmit=async event=>{event.preventDefault();await submit();};text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
  document.getElementById('back').onclick=()=>protectedView().catch(()=>location.replace('/auth'));
  for(const [key,label]of [['Escape','Esc'],['1','1'],['2','2'],['3','3'],['C-c','Ctrl+C']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.key=key;button.onclick=()=>submit(active,key);keys.append(button);}
  for(const id of ['console-mic','console-read']){const slot=document.createElement('span');slot.id=id;keys.append(slot);}
  const info=document.createElement('button');info.type='button';info.className='secondary';info.title=OaclisSettings.text('Comandi vocali');info.setAttribute('aria-label',info.title);info.innerHTML=OaclisIcon('info');info.onclick=()=>voice.showHelp();keys.append(info);
  split.onclick=event=>{event.stopPropagation();toggleSplit();};
- const resume=()=>{if(document.visibilityState==='visible'&&!closed){keepConsoleAwake();clearTimeout(pollTimer);poll();}};document.addEventListener('visibilitychange',resume);
+ const resume=()=>{if(closed)return;clearTimeout(pollTimer);if(document.hidden)reading?.abort();else{keepConsoleAwake();poll();}};document.addEventListener('visibilitychange',resume);
  const pane=add(chat);activate(pane);keepConsoleAwake();const ready=await send(pane,'open');if(!closed)pollTimer=setTimeout(poll,ready?200:1000);
 }
 async function protectedView(){

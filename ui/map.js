@@ -1,4 +1,4 @@
-// map.js v4.122.3041
+// map.js v4.122.3132
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -879,7 +879,8 @@ function renderMobileLinks() {
     if (!group) { group={id,source:connection.source,target:connection.target,active:data.connections[connection.source==='master'?connection.target:connection.source]==='online',entries:[]}; groups.push(group); }
     group.entries.push(connection.entry);
   }
-  const masterNode = [...document.querySelectorAll('.map-node')].find(n => n.dataset.id === 'master');
+  const nodes=new Map([...document.querySelectorAll('.map-node')].map(node=>[node.dataset.id,node]));
+  const masterNode=nodes.get('master');
   if (!groups.length || !masterNode) { svg?.remove(); document.querySelectorAll('.access-chat').forEach(node=>node.remove()); return; }
   if (!svg) {
     svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -891,72 +892,80 @@ function renderMobileLinks() {
   const radius = parseFloat(getComputedStyle(masterNode).borderTopLeftRadius) || 0;
   const keep = new Set();
   const badges = new Set();
+  const markers=new Map([...document.querySelectorAll('.access-chat')].map(marker=>[marker.dataset.accessKey,marker]));
+  const paths=new Map([...svg.querySelectorAll(':scope > path')].map(path=>[path.dataset.id,path]));
+  const arrows=new Map([...svg.querySelector('defs').children].map(marker=>[marker.dataset.id,marker]));
   for (const device of groups) {
-    const node = [...document.querySelectorAll('.map-node')].find(n => n.dataset.id === device.target);
-    const owner = [...document.querySelectorAll('.map-node')].find(n => n.dataset.id === device.source);
+    const node=nodes.get(device.target),owner=nodes.get(device.source);
     if (!node || !owner) continue;
     keep.add(device.id);
-    let path = [...svg.querySelectorAll(':scope > path')].find(p => p.dataset.id === device.id);
+    let path=paths.get(device.id);
     if (!path) {
       path = document.createElementNS(svg.namespaceURI, 'path'); path.dataset.id = device.id;
       const marker = document.createElementNS(svg.namespaceURI, 'marker'); marker.dataset.id = device.id;
       marker.id = 'mobile-arrow-' + device.id; marker.setAttribute('viewBox','0 0 10 10'); marker.setAttribute('refX','9'); marker.setAttribute('refY','5');
       marker.setAttribute('markerWidth','10'); marker.setAttribute('markerHeight','10'); marker.setAttribute('markerUnits','userSpaceOnUse'); marker.setAttribute('orient','auto');
       marker.innerHTML = '<path d="M1 1L9 5L1 9Z"/>'; svg.querySelector('defs').append(marker);
-      path.setAttribute('marker-end','url(#' + marker.id + ')'); svg.append(path);
+      path.setAttribute('marker-end','url(#' + marker.id + ')'); svg.append(path);arrows.set(device.id,marker);
     }
     path.dataset.source=device.source; path.dataset.target=device.target;
     path.setAttribute('d', mobileLinkCurve(owner.getBoundingClientRect(), node.getBoundingClientRect(), base, radius));
     svg.querySelectorAll('.link-flow-trace[data-id="' + CSS.escape(device.id) + '"]').forEach(trace => trace.setAttribute('d', path.getAttribute('d')));
-    renderAccessBadges(path, device, badges);
+    renderAccessBadges(path, device, badges, markers);
     path.dataset.active = String(device.active === true);
-    [...svg.querySelector('defs').children].find(m => m.dataset.id === device.id).dataset.active = path.dataset.active;
+    arrows.get(device.id).dataset.active = path.dataset.active;
   }
   document.querySelectorAll('.access-chat').forEach(node=>{if(!badges.has(node.dataset.accessKey))node.remove();});
   for (const item of [...svg.querySelectorAll(':scope > path, defs > marker')]) if (!keep.has(item.dataset.id)) item.remove();
 }
 
-function renderAccessBadges(path, group, keep) {
+function renderAccessBadges(path, group, keep, markers) {
   group.entries.forEach((entry,index) => {
     const key=[entry.id,...[group.source,group.target].sort()].join(':');
     keep.add(key);
-    let marker=[...document.querySelectorAll('.access-chat')].find(node=>node.dataset.accessKey===key);
+    let marker=markers.get(key);
     if (!marker) {
       marker=document.createElement('div'); marker.className='link-badge access-chat'; marker.dataset.accessKey=key;
       marker.innerHTML='<button type="button" class="link-main"></button><button type="button" class="link-open icon-button">'+OaclisIcon('terminal')+'</button>';
-      $('#nodes').append(marker);
-    }
-    if (marker.dataset.dragging) return;
-    const main=marker.querySelector('.link-main'), open=marker.querySelector('.link-open');
-    const html=badge(entry); if(main.innerHTML!==html)main.innerHTML=html;
-    const name=chatLabel(entry); marker.title=name; main.title=OaclisSettings.text('Trascina ')+name;
-    main.setAttribute('aria-label',main.title); open.title=OaclisSettings.text('Apri console')+' · '+name; open.setAttribute('aria-label',open.title);
-    const color=appearance(entry).color || 'var(--ink)'; marker.style.color=color; marker.querySelector('.chat-badge').style.color=color;
-    open.onclick=()=>openChatTerminal({entry},open,group.source);
-    const midpoint=path.getPointAtLength(path.getTotalLength()*(index+1)/(group.entries.length+1));
-    const offset=linkPositions[key] || {x:0,y:0};
-    marker.style.left=midpoint.x+offset.x+'px'; marker.style.top=midpoint.y+offset.y+'px';
-    const save=()=>{
-      linkPositions[key]={x:marker.offsetLeft-midpoint.x,y:marker.offsetTop-midpoint.y}; linkPositionSaving=true;
-      api('link-position',{id:entry.id,source:group.source,target:group.target,...linkPositions[key]})
-        .catch(error=>notice(error.message)).finally(()=>{linkPositionSaving=false;});
-    };
-    main.onpointerdown=event=>{
-      if(event.button!==0)return;
-      event.preventDefault(); const start={x:event.clientX,y:event.clientY,left:marker.offsetLeft,top:marker.offsetTop};
-      marker.dataset.dragging='true'; main.setPointerCapture(event.pointerId);
-      main.onpointermove=event=>{
-        if(!main.hasPointerCapture(event.pointerId))return;
-        marker.style.left=Math.max(22,Math.min($('#nodes').clientWidth-22,start.left+event.clientX-start.x))+'px';
-        marker.style.top=Math.max(22,Math.min($('#nodes').clientHeight-22,start.top+event.clientY-start.y))+'px';
+      $('#nodes').append(marker);markers.set(key,marker);
+      const main=marker.querySelector('.link-main'),open=marker.querySelector('.link-open');
+      open.onclick=()=>openChatTerminal({entry:marker.accessState.entry},open,marker.accessState.source);
+      const save=()=>{
+        const {entry,source,target,midpoint}=marker.accessState;
+        linkPositions[key]={x:marker.offsetLeft-midpoint.x,y:marker.offsetTop-midpoint.y};linkPositionSaving=true;
+        api('link-position',{id:entry.id,source,target,...linkPositions[key]})
+          .catch(error=>notice(error.message)).finally(()=>{linkPositionSaving=false;});
       };
-      main.onpointerup=event=>{save();delete marker.dataset.dragging;if(main.hasPointerCapture(event.pointerId))main.releasePointerCapture(event.pointerId);};
-      main.onpointercancel=main.onlostpointercapture=()=>{delete marker.dataset.dragging;};
-    };
-    main.onkeydown=event=>{
-      const direction={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[event.key];
-      if(direction){event.preventDefault();marker.style.left=marker.offsetLeft+direction[0]+'px';marker.style.top=marker.offsetTop+direction[1]+'px';save();}
-      if(event.key==='Delete' && group.id.startsWith('console-'))guard(()=>removeConnection({entry,source:group.source,target:group.target},null))();
-    };
+      main.onpointerdown=event=>{
+        if(event.button!==0)return;
+        event.preventDefault();const start={x:event.clientX,y:event.clientY,left:marker.offsetLeft,top:marker.offsetTop};
+        marker.dataset.dragging='true';main.setPointerCapture(event.pointerId);
+        main.onpointermove=event=>{
+          if(!main.hasPointerCapture(event.pointerId))return;
+          marker.style.left=Math.max(22,Math.min($('#nodes').clientWidth-22,start.left+event.clientX-start.x))+'px';
+          marker.style.top=Math.max(22,Math.min($('#nodes').clientHeight-22,start.top+event.clientY-start.y))+'px';
+        };
+        main.onpointerup=event=>{save();delete marker.dataset.dragging;if(main.hasPointerCapture(event.pointerId))main.releasePointerCapture(event.pointerId);};
+        main.onpointercancel=main.onlostpointercapture=()=>{delete marker.dataset.dragging;};
+      };
+      main.onkeydown=event=>{
+        const direction={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[event.key];
+        if(direction){event.preventDefault();marker.style.left=marker.offsetLeft+direction[0]+'px';marker.style.top=marker.offsetTop+direction[1]+'px';save();}
+        if(event.key==='Delete'&&marker.accessState.console){const {entry,source,target}=marker.accessState;guard(()=>removeConnection({entry,source,target,operation:'console'},null))();}
+      };
+    }
+    if(marker.dataset.dragging)return;
+    const main=marker.querySelector('.link-main'),open=marker.querySelector('.link-open');
+    const html=badge(entry),name=chatLabel(entry),color=appearance(entry).color||'var(--ink)';
+    const presentation=JSON.stringify([html,name,color]);
+    if(marker.dataset.presentation!==presentation){
+      main.innerHTML=html;marker.title=name;main.title=OaclisSettings.text('Trascina ')+name;
+      main.setAttribute('aria-label',main.title);open.title=OaclisSettings.text('Apri console')+' · '+name;open.setAttribute('aria-label',open.title);
+      marker.style.color=color;main.querySelector('.chat-badge').style.color=color;marker.dataset.presentation=presentation;
+    }
+    const midpoint=path.getPointAtLength(path.getTotalLength()*(index+1)/(group.entries.length+1));
+    marker.accessState={entry,source:group.source,target:group.target,console:group.id.startsWith('console-'),midpoint};
+    const offset=linkPositions[key]||{x:0,y:0};
+    marker.style.left=midpoint.x+offset.x+'px';marker.style.top=midpoint.y+offset.y+'px';
   });
 }
