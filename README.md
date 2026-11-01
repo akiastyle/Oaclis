@@ -726,3 +726,8 @@ sezioni già ricevute quando non cambiano. Durante un trascinamento i dati
 condivisi rinviati vengono richiesti di nuovo, senza perdere aggiornamenti.
 La console conserva lo scroll se si legge più in alto e mostra lo stato
 immediato dell'invio senza cancellare una nuova bozza.
+
+La nav locale mostra logo e ingranaggio a riposo. Il passaggio del puntatore o
+l'attivazione da tastiera apre i comandi con comparsa progressiva; dopo tre
+secondi senza interazione si richiude, mantenendosi aperta durante l'uso dei
+menu o con il focus da tastiera sui controlli. Rispetta il movimento ridotto.

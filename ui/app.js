@@ -1,4 +1,4 @@
-// app.js v4.162.3080
+// app.js v4.164.3100
 "use strict";
 OaclisSettings.translate(document.body);
 const $ = (s) => document.querySelector(s);
@@ -107,6 +107,26 @@ function updatePalettePreview() {
     if (active) $("#palette").title = button.textContent.trim();
   });
 }
+const toolbar=$('.toolbar'),toolbarActions=$('#toolbar-actions'),toolbarToggle=$('#toolbar-toggle');
+let toolbarTimer;
+toolbarToggle.querySelector('svg').innerHTML=OaclisIcons.settings;
+new ResizeObserver(()=>{
+  const size=toolbarActions.getBoundingClientRect();toolbar.style.setProperty('--toolbar-width',Math.ceil(size.width)+'px');toolbar.style.setProperty('--toolbar-height',Math.ceil(size.height)+'px');
+}).observe(toolbarActions);
+function expandToolbar(){
+  clearTimeout(toolbarTimer);toolbar.dataset.expanded='true';toolbarActions.inert=false;toolbarToggle.setAttribute('aria-expanded','true');toolbarToggle.tabIndex=-1;
+  toolbarActions.querySelectorAll(':scope > button, #local-voice-controls button').forEach((button,index)=>button.style.setProperty('--toolbar-order',index));
+  toolbarTimer=setTimeout(collapseToolbar,3000);
+}
+function collapseToolbar(){
+  if(toolbar.querySelector(':popover-open')||toolbarActions.contains(document.activeElement)&&document.activeElement.matches(':focus-visible')){toolbarTimer=setTimeout(collapseToolbar,3000);return;}
+  if(toolbarActions.contains(document.activeElement))toolbarToggle.focus({preventScroll:true});
+  toolbar.dataset.expanded='false';toolbarActions.inert=true;toolbarToggle.setAttribute('aria-expanded','false');toolbarToggle.tabIndex=0;
+}
+for(const event of ['pointerenter','pointermove','pointerdown','keydown'])toolbar.addEventListener(event,expandToolbar);
+toolbar.addEventListener('focusin',event=>{if(toolbarActions.contains(event.target))expandToolbar();});
+toolbar.addEventListener('toggle',()=>{if(toolbar.dataset.expanded==='true'){clearTimeout(toolbarTimer);toolbarTimer=setTimeout(collapseToolbar,3000);}},true);
+toolbarToggle.onclick=event=>{expandToolbar();if(event.detail===0)toolbarActions.querySelector('button')?.focus();};
 const powerOptions=[...document.querySelectorAll('#power-menu [data-power]')];
 function updatePowerMenu(){
   const runtime=data.device_runtime?.master,mode=runtime?.power_mode||(runtime?.active?'always':'normal');

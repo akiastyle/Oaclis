@@ -1,7 +1,7 @@
-// voice-local.js v1.15.30
+// voice-local.js v1.15.32
 'use strict';
 window.OaclisLocalVoice=(()=>{
- const host=document.createElement('span');host.id='local-voice-controls';document.querySelector('.toolbar').append(host);
+ const host=document.createElement('span');host.id='local-voice-controls';(document.getElementById('toolbar-actions')||document.querySelector('.toolbar')).append(host);
  const micHost=document.createElement('span'),readHost=document.createElement('span');host.append(micHost,readHost);
  const voice=OaclisVoice.create();let active=null,reader=null;
  const chats=()=>visibleChats.filter(chat=>!(data.deleted_chats||[]).includes(chat.id)&&(showHiddenChats||!data.chat_settings?.[chat.id]?.hidden)).map(chat=>({...chat,name:chatLabel(chat)}));

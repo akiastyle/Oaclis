@@ -1,4 +1,4 @@
-<!-- index.html v1.0.175 -->
+<!-- index.html v1.0.181 -->
 <!doctype html>
 <html lang="it">
   <head>
@@ -26,9 +26,9 @@
   <body>
     <main id="map" aria-label="Dispositivi"><canvas id="map-particles" aria-hidden="true"></canvas><div id="nodes"></div></main>
     <small class="app-version" aria-label="Versione Oaclis">__APP_VERSION__</small>
-    <nav class="toolbar" aria-label="Comandi Oaclis">
+    <nav class="toolbar" data-expanded="false" aria-label="Comandi Oaclis">
       <a class="brand" href="/"><span class="brand-mark"><img class="brand-logo" src="/assets/oaclis-particles.png" alt="" width="32" height="32" />__MASTER_CROWN__</span><span class="brand-word">ac<span class="brand-accent">lis</span></span></a
-      ><button
+      ><div class="toolbar-reveal"><div id="toolbar-actions" inert><button
         id="add-device"
         class="icon-button"
         aria-label="Aggiungi dispositivo"
@@ -106,6 +106,8 @@
           <path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z" />
         </svg>
       </button>
+      </div></div>
+      <button id="toolbar-toggle" class="icon-button" type="button" aria-label="Impostazioni" title="Impostazioni" aria-expanded="false" aria-controls="toolbar-actions"><svg viewBox="0 0 24 24" aria-hidden="true"></svg></button>
     </nav>
     <aside id="panel" popover="manual" hidden aria-label="Chat e trasferimento">
       <div class="panel-bar">
