@@ -1,4 +1,4 @@
-// app.js v1.75.767
+// app.js v1.76.779
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -23,7 +23,7 @@ function bindVoice(chat=null){
  if(!host)return;
  voice.bind({chatId:chat?.id,compose,fields:()=>[compose,search].filter(Boolean),chats:()=>authorizedChats,list:()=>consoleWorkspace?.list()||visibleChatList,
   selectChat:async selected=>{if(!authorizedChats.some(item=>item.id===selected.id))return;await openConsole(selected);},
-  ...(chat?{splitChat:selected=>openConsole(selected,true),...(consoleWorkspace?.split()?{selectPane:position=>consoleWorkspace.selectPane(position)}:{}),send:async()=>{if(consoleActions?.chatId!==chat.id||!authorizedChats.some(item=>item.id===chat.id))throw Error();return consoleActions.submit();},sending:()=>consoleActions?.sending()===true,commandOnly:()=>consoleActions?.commandOnly()===true,readOn:()=>consoleActions?.readOn(),readOff:()=>consoleActions?.readOff(),readStop:()=>consoleActions?.readStop()}:{}),
+  ...(chat?{splitChat:selected=>openConsole(selected,true),...(consoleWorkspace?.split()?{selectPane:position=>consoleWorkspace.selectPane(position)}:{}),send:async()=>{if(consoleActions?.chatId!==chat.id||!authorizedChats.some(item=>item.id===chat.id))throw Error();return consoleActions.submit();},sending:()=>consoleActions?.sending()===true,commandOnly:()=>consoleActions?.commandOnly()===true,readOn:()=>consoleActions?.readOn(),readOff:()=>consoleActions?.readOff(),readStop:()=>consoleActions?.readStop(),takePhoto:()=>consoleActions?.takePhoto(),pickImage:()=>consoleActions?.pickImage(),removeImage:()=>consoleActions?.removeImage(),hasAttachment:()=>imageDrafts.has(chat.id)}:{}),
  },host);
  voice.ready();
 }
@@ -130,7 +130,7 @@ async function openConsole(chat,adjacent=false){
   reader?.destroy();active=pane;text.value=drafts.get(pane.chat.id)||'';text.setAttribute('aria-label',OaclisSettings.text('Messaggio')+' · '+pane.chat.name);
   for(const item of panes){const selected=item===pane;item.element.classList.toggle('is-active',selected);item.element.setAttribute('aria-current',String(selected));item.title.id=selected?'console-title':'';item.screen.id=selected?'console-screen':'';}
   reader=OaclisReadAloud.create(document.getElementById('console-read'));
-  consoleActions={chatId:pane.chat.id,submit:()=>submit(pane),sending:()=>inputBusy||!pane.ready||pane.preparingImage===true,commandOnly:()=>reader?.commandOnly()===true,readOn:()=>reader?.enable(),readOff:()=>reader?.disable(),readStop:()=>reader?.skip()};
+  consoleActions={chatId:pane.chat.id,submit:()=>submit(pane),sending:()=>inputBusy||!pane.ready||pane.preparingImage===true,commandOnly:()=>reader?.commandOnly()===true,readOn:()=>reader?.enable(),readOff:()=>reader?.disable(),readStop:()=>reader?.skip(),takePhoto:()=>pickImage(true),pickImage:()=>pickImage(false),removeImage};
   paintAttachment();bindVoice(pane.chat);form.querySelectorAll('textarea,button').forEach(element=>element.disabled=!pane.ready||pane.preparingImage===true);voice.ready();layout();return true;
  }
  function add(selected,index=panes.length){
@@ -193,9 +193,11 @@ async function openConsole(chat,adjacent=false){
   const image=imageDrafts.get(active?.chat.id);preview.hidden=!image;
   if(image)preview.querySelector('img').src=image;else preview.querySelector('img').removeAttribute('src');
  }
- preview.querySelector('button').onclick=()=>{imageDrafts.delete(active?.chat.id);paintAttachment();};
+ function removeImage(){imageDrafts.delete(active?.chat.id);paintAttachment();}
+ preview.querySelector('button').onclick=removeImage;
  async function pickImage(camera){
   const pane=active;if(!pane||inputBusy)return;
+  if(navigator.userActivation&&!navigator.userActivation.isActive){showSendMenu(camera?0:1);return;}
   const input=document.createElement('input');input.type='file';input.accept='image/*';if(camera)input.setAttribute('capture','environment');
   input.onchange=async()=>{
    const file=input.files?.[0];if(!file||closed||pane.closed)return;
@@ -222,11 +224,11 @@ async function openConsole(chat,adjacent=false){
   const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.innerHTML=OaclisIcon(icon);button.append(document.createTextNode(OaclisSettings.text(label)));button.onclick=()=>{sendMenu.hidePopover();action();};sendMenu.append(button);
  }
  form.append(sendMenu);
- function showSendMenu(){
+ function showSendMenu(choice=0){
   if(sendButton.disabled||closed)return;
   sendMenu.showPopover();sendButton.setAttribute('aria-expanded','true');
   const rect=sendButton.getBoundingClientRect();sendMenu.style.left=Math.max(8,Math.min(innerWidth-sendMenu.offsetWidth-8,rect.right-sendMenu.offsetWidth))+'px';sendMenu.style.top=Math.max(8,rect.top-sendMenu.offsetHeight-8)+'px';
-  sendMenu.querySelector('button').focus({preventScroll:true});
+  sendMenu.querySelectorAll('button')[choice].focus({preventScroll:true});
  }
  sendMenu.addEventListener('toggle',event=>sendButton.setAttribute('aria-expanded',String(event.newState==='open')));
  let holdTimer=null,longPressed=false,holdStart;
