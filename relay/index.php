@@ -1,5 +1,5 @@
 <?php
-// index.php v1.6.429
+// index.php v1.8.514
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../oaclis-auth-test-private';
@@ -13,19 +13,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     if (($_SERVER['HTTP_ORIGIN'] ?? '') !== ORIGIN || !str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') || (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 131072) { http_response_code(403); exit; }
     umask(0077);
-    session_name('__Host-Oaclis');
-    session_save_path(PRIVATE_DIR . '/sessions');
-    ini_set('session.use_strict_mode', '1');
-    ini_set('session.gc_maxlifetime', '7200');
-    session_set_cookie_params(['lifetime'=>0, 'path'=>'/', 'secure'=>true, 'httponly'=>true, 'samesite'=>'Strict']);
-    $sessionCookie=$_COOKIE[session_name()]??'';
-    if (is_string($sessionCookie) && preg_match('/^[A-Za-z0-9,-]{16,128}$/D',$sessionCookie)) session_start();
     $config = require PRIVATE_DIR . '/config.php';
+    $cookieKey=hash('sha256','oaclis-cookie-v1:'.$config['admin_hash'],true);
     spl_autoload_register(function ($class) {
         $prefix = 'lbuchs\\WebAuthn\\';
         if (str_starts_with($class, $prefix)) require PRIVATE_DIR . '/library/src/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
     });
-    function respond(array $value, int $code=200): never { http_response_code($code); echo json_encode($value, JSON_THROW_ON_ERROR); exit; }
+    function readCookie(mixed $value,string $key): array {
+        if (!is_string($value) || !str_starts_with($value,'v1.') || strlen($value)>3800) return [];
+        $raw=base64_decode(strtr(substr($value,3),'-_','+/'),true);
+        if ($raw===false || strlen($raw)<29) return [];
+        $plain=openssl_decrypt(substr($raw,28),'aes-256-gcm',$key,OPENSSL_RAW_DATA,substr($raw,0,12),substr($raw,12,16),ORIGIN);
+        if ($plain===false) return [];
+        try {$decoded=json_decode($plain,true,16,JSON_THROW_ON_ERROR);return is_array($decoded)?$decoded:[];} catch (Throwable) {return [];}
+    }
+    function writeCookie(): void {
+        global $session,$originalSession,$cookieKey;
+        if ($session===$originalSession) return;
+        $value='';
+        if ($session) {
+            $iv=random_bytes(12);$tag='';
+            $plain=json_encode($session,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            $encrypted=openssl_encrypt($plain,'aes-256-gcm',$cookieKey,OPENSSL_RAW_DATA,$iv,$tag,ORIGIN,16);
+            if ($encrypted===false) {$session=[];throw new RuntimeException('Session encryption unavailable');}
+            $value='v1.'.rtrim(strtr(base64_encode($iv.$tag.$encrypted),'+/','-_'),'=');
+            if (strlen($value)>3800) {$session=[];throw new RuntimeException('Session cookie too large');}
+        }
+        if (!setcookie('__Host-Oaclis',$value,['expires'=>$value===''?time()-3600:0,'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Strict'])) throw new RuntimeException('Unable to set authentication cookie');
+        $originalSession=$session;
+    }
+    function respond(array $value, int $code=200): never { writeCookie(); http_response_code($code); echo json_encode($value, JSON_THROW_ON_ERROR); exit; }
     function readState(): string {
         $path=PRIVATE_DIR.'/state.json';
         for ($attempt=0;$attempt<5;$attempt++) {
@@ -48,10 +65,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         return $raw;
     }
     function takeChallenge(string $kind, string $device): string {
-        $c=$_SESSION['challenge']??[]; unset($_SESSION['challenge']);
+        global $session,$state;
+        $c=$session['challenge']??[]; unset($session['challenge']);
         if (($c['kind']??'')!==$kind || ($c['device']??'')!==$device || ($c['until']??0)<time()) throw new RuntimeException();
+        $saved=$kind==='get'?($state['devices'][$device]['login_challenge']??''):($state['invitations'][$c['invite']??'']['challenge']??'');
+        if (!is_string($c['nonce']??null) || !hash_equals($saved,hash('sha256',$c['nonce']))) throw new RuntimeException();
+        if ($kind==='get') unset($state['devices'][$device]['login_challenge']);
         return base64_decode($c['bytes'], true);
     }
+    $session=readCookie($_COOKIE['__Host-Oaclis']??null,$cookieKey);$originalSession=$session;
     try {
         $body=file_get_contents('php://input',false,null,0,131073);
         if ($body===false || strlen($body)>131072) respond([],413);
@@ -62,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $admin=$_SERVER['HTTP_X_ADMIN_KEY']??'';
         $isAdmin=hash_equals($config['admin_hash'],hash('sha256',$admin));
         $adminActions=['admin-list','chat-access','set-chat-access','invite','approve','revoke','console-exchange'];
-        $authenticated=$deviceId!=='' && ($_SESSION['auth']['device']??'')===$deviceId && ($_SESSION['auth']['until']??0)>=time();
+        $authenticated=$deviceId!=='' && ($session['auth']['device']??'')===$deviceId && ($session['auth']['until']??0)>=time();
         if (!$isAdmin && !$authenticated) {
             // Fixed shards bound disk usage; use the connection address, never forwarded headers.
             $bucket=substr(hash('sha256',$_SERVER['REMOTE_ADDR']??''),0,2);
@@ -83,6 +105,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $originalState=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
         $state=$originalState;
         $record=$state['devices'][$deviceId]??null;
+        $authenticated=$authenticated && ($record['status']??'')==='approved' && is_string($session['auth']['nonce']??null) && hash_equals($record['auth_token']??'',hash('sha256',$session['auth']['nonce']));
+        if (!$authenticated) unset($session['auth']);
         $result=[];
         if (in_array($action,['register-options','register','login-options','login'],true))
             $web=new \lbuchs\WebAuthn\WebAuthn('Oaclis','oaclis.krprojects.it',['none'],true);
@@ -126,10 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$isAdmin) respond([],403);
             if ($action==='revoke' && ($input['reset_all']??false)===true) {
                 $state['devices']=[]; $state['invitations']=[];
-                if (session_status()===PHP_SESSION_ACTIVE) session_destroy();
-                foreach (glob(PRIVATE_DIR.'/sessions/sess_*')?:[] as $session) {
-                    if (is_file($session) && !unlink($session)) throw new RuntimeException();
-                }
+                $session=[];
                 $result=['ok'=>true]; break;
             }
             $id=$input['id']??'';
@@ -140,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($action==='approve' && $state['devices'][$id]['status']!=='pending') throw new RuntimeException();
             $state['devices'][$id]['status']=$action==='approve'?'approved':'revoked';
             if ($action==='revoke') $state['devices'][$id]['lastSeen']=0;
-            if ($action==='revoke') unset($state['devices'][$id]['console']);
+            if ($action==='revoke') unset($state['devices'][$id]['console'],$state['devices'][$id]['auth_token'],$state['devices'][$id]['login_challenge']);
             $result=['ok'=>true];
             break;
         case 'register-options':
@@ -153,13 +174,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!is_array($pairing) || ($pairing['invite_hash']??null)!==$invite || !is_string($pairing['payload']??null) || strlen($pairing['payload'])>2048 || !is_string($pairing['proof']??null) || !preg_match('/^[a-f0-9]{64}$/D',$pairing['proof']) || !is_string($pairing['key_proof']??null) || !preg_match('/^[a-f0-9]{128}$/D',$pairing['key_proof'])) respond([],403);
             $binding=json_decode($pairing['payload'],true,8,JSON_THROW_ON_ERROR);
             if (!is_array($binding) || !array_is_list($binding) || count($binding)!==4 || $binding[0]!=='oaclis-pair-v1' || $binding[1]!==$deviceId || $binding[2]!==$name || !is_string($binding[3]) || !preg_match('/^04[a-f0-9]{128}$/D',$binding[3])) respond([],403);
-            if (session_status()!==PHP_SESSION_ACTIVE && !session_start()) throw new RuntimeException(error_get_last()['message']??'Unable to open session');
             $args=$web->getCreateArgs(hex2bin($deviceId),$name,$name,60,true,true,false);
-            $_SESSION['challenge']=['kind'=>'create','device'=>$deviceId,'until'=>time()+120,'bytes'=>base64_encode($web->getChallenge()->getBinaryString()),'invite'=>$invite,'name'=>$name,'pairing'=>$pairing];
+            $nonce=bin2hex(random_bytes(32));$state['invitations'][$invite]['challenge']=hash('sha256',$nonce);
+            $session['challenge']=['nonce'=>$nonce,'kind'=>'create','device'=>$deviceId,'until'=>time()+120,'bytes'=>base64_encode($web->getChallenge()->getBinaryString()),'invite'=>$invite,'name'=>$name,'pairing'=>$pairing];
             $result=$args;
             break;
         case 'register':
-            $pending=$_SESSION['challenge']??[];
+            $pending=$session['challenge']??[];
             $challenge=takeChallenge('create',$deviceId);
             $invite=$pending['invite']??'';
             if (!$deviceId || $record || ($state['invitations'][$invite]['until']??0)<time()) respond([],403);
@@ -175,9 +196,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
         case 'login-options':
             if (!$record || $record['status']!=='approved') respond([],403);
-            if (session_status()!==PHP_SESSION_ACTIVE && !session_start()) throw new RuntimeException(error_get_last()['message']??'Unable to open session');
             $args=$web->getGetArgs([base64_decode($record['credential'],true)],60,true,true,true,true,true,true);
-            $_SESSION['challenge']=['kind'=>'get','device'=>$deviceId,'until'=>time()+120,'bytes'=>base64_encode($web->getChallenge()->getBinaryString())];
+            $nonce=bin2hex(random_bytes(32));$state['devices'][$deviceId]['login_challenge']=hash('sha256',$nonce);
+            $session['challenge']=['nonce'=>$nonce,'kind'=>'get','device'=>$deviceId,'until'=>time()+120,'bytes'=>base64_encode($web->getChallenge()->getBinaryString())];
             $result=$args;
             break;
         case 'login':
@@ -188,21 +209,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $state['devices'][$deviceId]['counter']=$web->getSignatureCounter()??0;
             $state['devices'][$deviceId]['lastAccess']=gmdate('c');
             $state['devices'][$deviceId]['lastSeen']=time();
-            session_regenerate_id(true);
-            $_SESSION['auth']=['device'=>$deviceId,'until'=>time()+7200];
+            $nonce=bin2hex(random_bytes(32));$state['devices'][$deviceId]['auth_token']=hash('sha256',$nonce);
+            $session['auth']=['device'=>$deviceId,'until'=>time()+7200,'nonce'=>$nonce];
             $result=['ok'=>true];
             break;
         case 'console': case 'console-result':
-            if (!$record || $record['status']!=='approved' || ($_SESSION['auth']['device']??'')!==$deviceId || ($_SESSION['auth']['until']??0)<time()) respond([],403);
+            if (!$authenticated) respond([],403);
             if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
             $chat=$input['chat_id']??'';
             if (!is_string($chat) || !in_array($chat,array_column($record['chats']??[],'id'),true)) respond([],403);
             if ($action==='console-result') {
                 $job=$state['devices'][$deviceId]['console']??[];
                 if (($job['id']??'')!==($input['request_id']??'') || ($job['chat_id']??'')!==$chat) respond([],403);
-                // Wait without holding the session or state lock: the master must publish the result.
-                $authUntil=$_SESSION['auth']['until'];
-                session_write_close();
+                // Wait without the state lock: the master must publish the result.
+                $authUntil=$session['auth']['until'];
                 $deadline=microtime(true)+2;
                 while (!isset($job['result']) && microtime(true)<$deadline) {
                     flock($db,LOCK_UN);
@@ -213,7 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $state=$originalState;
                     $record=$state['devices'][$deviceId]??null;
                     $job=$record['console']??[];
-                    if (!$record || $record['status']!=='approved' || $authUntil<time() ||
+                    if (!$record || $record['status']!=='approved' || $authUntil<time() || !hash_equals($record['auth_token']??'',hash('sha256',$session['auth']['nonce'])) ||
                         !in_array($chat,array_column($record['chats']??[],'id'),true) ||
                         ($job['id']??'')!==($input['request_id']??'') || ($job['chat_id']??'')!==$chat) respond([],403);
                 }
@@ -231,7 +251,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $previous=$record['console']??[];
             if (($previous['until']??0)>time() && !isset($previous['result'])) respond(['error'=>'Attendi il completamento della richiesta.'],409);
             $id=$packet['id'];
-            $state['devices'][$deviceId]['console']=['id'=>$id,'chat_id'=>$chat,'until'=>min(time()+20,$_SESSION['auth']['until']),'value'=>['chat_id'=>$chat,'action'=>$operation,'text'=>$text,'key'=>$key],'signed'=>$signed];
+            $state['devices'][$deviceId]['console']=['id'=>$id,'chat_id'=>$chat,'until'=>min(time()+20,$session['auth']['until']),'value'=>['chat_id'=>$chat,'action'=>$operation,'text'=>$text,'key'=>$key],'signed'=>$signed];
             $result=['request_id'=>$id];
             break;
         case 'console-exchange':
@@ -260,13 +280,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             break;
         case 'protected':
-            if (!$record || $record['status']!=='approved' || ($_SESSION['auth']['device']??'')!==$deviceId || ($_SESSION['auth']['until']??0)<time()) respond([],403);
+            if (!$authenticated) respond([],403);
             if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
             $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c'),'chats'=>$record['chats']??[],'version'=>$state['app_version']??''];
             break;
         case 'logout':
-            if ($record && ($_SESSION['auth']['device']??'')===$deviceId) $state['devices'][$deviceId]['lastSeen']=0;
-            unset($_SESSION['auth'],$_SESSION['challenge'],$state['devices'][$deviceId]['console']);
+            if ($authenticated) {$state['devices'][$deviceId]['lastSeen']=0;unset($state['devices'][$deviceId]['auth_token'],$state['devices'][$deviceId]['console']);}
+            unset($session['auth'],$session['challenge']);
             $result=['ok'=>true];
             break;
         default: respond([],404);
@@ -282,8 +302,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } finally { if (is_file($temporary)) unlink($temporary); }
         }
         flock($db,LOCK_UN); fclose($db);
+        writeCookie();
         echo json_encode($result,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
-    } catch (Throwable $e) { @file_put_contents(PRIVATE_DIR.'/last-error.json',json_encode(['action'=>is_string($action??null)?substr($action,0,32):'','reason'=>substr($e->getMessage(),0,240),'line'=>$e->getLine(),'time'=>gmdate('c')]),LOCK_EX); error_log('Oaclis auth test: '.$e->getMessage()); http_response_code(400); echo '{"error":"Verifica non riuscita. Riprova."}'; }
+    } catch (Throwable $e) { writeCookie(); @file_put_contents(PRIVATE_DIR.'/last-error.json',json_encode(['action'=>is_string($action??null)?substr($action,0,32):'','reason'=>substr($e->getMessage(),0,240),'line'=>$e->getLine(),'time'=>gmdate('c')]),LOCK_EX); error_log('Oaclis auth test: '.$e->getMessage()); http_response_code(400); echo '{"error":"Verifica non riuscita. Riprova."}'; }
     exit;
 }
 if ($_SERVER['REQUEST_METHOD']!=='GET') {http_response_code(405);exit;}

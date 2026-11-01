@@ -6,8 +6,9 @@ Questo componente PHP gira sull'hosting; Oaclis continua a funzionare in Rust.
 La directory pubblica contiene index.php, gli script e gli stili della PWA,
 il manifest, il service worker, le icone e il suono di conferma.
 La libreria lbuchs/WebAuthn v2.2.0
-(commit 20adb4a240c3997bd8cac7dc4dde38ab0bea0ed1, MIT), la configurazione, lo stato e le
-sessioni restano nella cartella privata oaclis-auth-test-private, fuori da www.
+(commit 20adb4a240c3997bd8cac7dc4dde38ab0bea0ed1, MIT), la configurazione e lo
+stato restano nella cartella privata oaclis-auth-test-private, fuori da www.
+L'autenticazione non usa file di sessione PHP.
 composer.lock documenta la versione della libreria; sul server esistente e' caricata
 come library/src. Non caricare configurazioni, chiavi o stato nella directory pubblica.
 
@@ -47,7 +48,7 @@ console, autorizzazioni e credenziali restano escluse dalla cache.
 Console responsiveness: Rust reuses an HTTPS connection pool instead of launching curl.
 The master checks every 200 ms while a console request is recent, and every two
 seconds otherwise. The phone asks for the result immediately; the relay waits up
-to two seconds, releasing both session and state locks between checks. Revocation,
+to two seconds, releasing the state lock between checks. Revocation,
 chat grants and job identity are checked again after each wait. Console refreshes
 wait 200 ms after a completed read; hidden pages retain the slower 1.5-second wait.
 Input waits for an ongoing read rather than being silently discarded.
@@ -152,7 +153,7 @@ per riprovare una passkey annullata ricaricare. L'invito di nuovo abbinamento
 conserva il modulo necessario a creare la passkey. La console non aggiunge
 logo o footer, per lasciare spazio al testo.
 
-Il sottodominio deve avere HTTPS valido e document root `www/oaclis`. Origin e RP ID sono esclusivamente `oaclis.krprojects.it`: richiedere nuovi abbinamenti e nuove passkey, senza importare le autorizzazioni precedenti. La sessione usa un cookie `__Host-` senza Domain, Secure e con path `/`, per impedire cookie di sessione impostati dagli altri sottodomini.
+Il sottodominio deve avere HTTPS valido e document root `www/oaclis`. Origin e RP ID sono esclusivamente `oaclis.krprojects.it`: richiedere nuovi abbinamenti e nuove passkey, senza importare le autorizzazioni precedenti. L'autenticazione usa un cookie `__Host-Oaclis`, Secure, HttpOnly e SameSite=Strict, senza Domain e con path `/`. Il contenuto e' cifrato e autenticato con AES-256-GCM e scade dopo due ore. La chiave deriva dalla credenziale amministrativa privata con un contesto separato; non viene creato un nuovo file di chiavi. Abbinamenti, permessi, hash di revoca e prove monouso restano nel JSON privato esistente. Logout e revoca invalidano anche una copia precedente del cookie. Le letture non rinnovano o riscrivono il cookie. Nessuna chiamata apre una sessione PHP su disco; dopo il passaggio dal vecchio formato serve la passkey una volta, conservando l'abbinamento.
 
 Le richieste senza sessione valida o chiave amministrativa sono limitate a 60 al minuto per bucket derivato dall’IP di connessione (256 bucket fissi, senza fidarsi di X-Forwarded-For). Le richieste negate non acquisiscono il lock dello stato una volta raggiunto il limite; il traffico autenticato ne è esente. Il limite applicativo non sostituisce le protezioni anti-DDoS del provider.
 
@@ -219,3 +220,8 @@ icone e console. La formula e' identica al master: media di X e Z su tutti i
 file, media di Y sui soli valori positivi, arrotondamento a meta' verso l'alto.
 Non esiste un contatore manuale. I file web contribuiscono anche alla versione
 generale del master. Ricaricare la pagina carica e mostra la nuova release.
+
+I contatori delle richieste anonime sono distinti dall'autenticazione: sull'hosting
+senza APCu restano i 256 bucket fissi gia' esistenti, riusati e di dimensione
+limitata, non un file per chiamata o accesso. Non viene introdotto un servizio
+Redis/Memcached sul server passivo.
