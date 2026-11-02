@@ -1,4 +1,4 @@
-// web.rs v2.28.1813
+// web.rs v2.28.1825
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -304,18 +304,14 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     };
                     let mut v=v;
                     let chat=v["chat_id"].as_str().ok_or_else(||invalid("Chat richiesta"))?.to_owned();
-                    let selected=v.get("access").cloned();
                     if v["action"]=="open" {
                         let preferences=environment::database(&config,"","preferences-get",None)?;
-                        let access=selected.as_ref().unwrap_or(&preferences["preferences"][&chat]["console_access"]);
+                        let access=&preferences["preferences"][&chat]["console_access"];
                         let access=if access.is_null() { "default" } else { access.as_str().ok_or_else(||invalid("Autorizzazione console non valida"))? };
                         crate::terminal::access_flags(access)?;
                         v["access"]=json!(access);
                     }
                     let result=crate::terminal::request(device.as_ref(), &v)?;
-                    if v["action"]=="open" && selected.is_some() {
-                        environment::database(&config,&chat,"console-access",Some(&v["access"]))?;
-                    }
                     Ok(result)
                 }
                 (&Method::Post, "/api/state") => Ok(
@@ -416,6 +412,8 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     let key = v["key"]
                         .as_str()
                         .ok_or_else(|| invalid("Oggetto richiesto"))?;
+                    let access=v.get("console_access").map(|value|value.as_str().ok_or_else(||invalid("Autorizzazione console non valida"))).transpose()?;
+                    if let Some(access)=access{if !key.starts_with("chat:"){return Err(invalid("Autorizzazione riservata alle chat"));}crate::terminal::access_flags(access)?;}
                     let mut value: crate::appearance::Appearance =
                         serde_json::from_value(v["value"].clone()).map_err(io::Error::other)?;
                     value.label = value.label.trim().into();
@@ -431,7 +429,9 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                             }
                         }
                     }
-                    crate::appearance::save(config.join("appearance.json"), &std::collections::BTreeMap::from([(key.into(), value)]))?;
+                    if let Some(access)=access {
+                        environment::database(&config,key.strip_prefix("chat:").unwrap(),"chat-settings",Some(&json!({"value":value,"console_access":access})))?;
+                    }else{crate::appearance::save(config.join("appearance.json"),&std::collections::BTreeMap::from([(key.into(),value)]))?;}
                     Ok(json!({"ok":true}))
                 }
                 (&Method::Post, "/api/app-check") => {

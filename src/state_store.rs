@@ -1,4 +1,4 @@
-// state_store.rs v2.38.1362
+// state_store.rs v2.38.1369
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -591,6 +591,13 @@ fn write_operation(
         "links-delete" => {
             Arc::make_mut(&mut state.links).remove(key);
             read_operation(config, state, key, "links-get")
+        }
+        "chat-settings" => {
+            if !crate::devices::identifier(key){return Err(invalid("Chat non valida"));}
+            let appearance:crate::appearance::Appearance=serde_json::from_value(value["value"].clone()).map_err(io::Error::other)?;appearance.validate()?;
+            let access=value["console_access"].as_str().ok_or_else(||invalid("Autorizzazione console non valida"))?;crate::terminal::access_flags(access)?;
+            let record=chat_record(state,key);record.value=serde_json::to_value(appearance)?;record.sync["console_access"]=json!(access);
+            Ok(json!({"ok":true}))
         }
         "console-access" => {
             let access=value.as_str().ok_or_else(||invalid("Autorizzazione console non valida"))?;

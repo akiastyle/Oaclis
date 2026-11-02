@@ -1,4 +1,4 @@
-// panels.js v3.141.2788
+// panels.js v3.142.2806
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -31,6 +31,10 @@ function closePanel() {
   [...document.querySelectorAll(".map-node")]
     .find((node) => node.dataset.id === origin)
     ?.focus({ preventScroll: true });
+}
+
+function consoleAccessFields(){
+  return OaclisSettings.html('<details><summary>Autorizzazione console</summary><label class="field">Autorizzazione<select name="console_access"><option value="default">Configurazione Codex</option><option value="read-only">Sola lettura</option><option value="workspace-write">Modifica nel progetto</option><option value="full">Accesso completo</option></select></label><small>Si applica al prossimo avvio della chat.</small></details>');
 }
 
 function appearanceFields(value, defaultIcon = "") {
@@ -449,8 +453,9 @@ function editChat(entry, anchor, origin = sourceId || "master", connection = nul
   const panel = document.createElement("div");
   panel.id = "chat-editor-" + crypto.randomUUID(); panel.classList.add("chat-editor"); panel.opener = anchor; panel.dataset.objectId = entry.id; panel.dataset.sourceDevice = origin; panel.dataset.connectionKey = connectionKey;
   panel.setAttribute("popover", "manual"); panel.setAttribute("role", "dialog"); panel.setAttribute("aria-label", OaclisSettings.text("Personalizza chat"));
-  panel.innerHTML = OaclisSettings.html(('<button type="button" class="icon-button chat-visibility" aria-label="Nascondi chat"></button><button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat">' + OaclisIcon('close') + '</button><h2>')) + esc(chatLabel(entry)) + OaclisSettings.html('</h2><form><label class="field">Nome visualizzato<input name="label" maxlength="160" value="') + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + OaclisSettings.html('<label class="field">URL web<input name="url" type="url" maxlength="2048" value="') + esc(value.url || "") + '" placeholder="https://…"></label>' + appearanceFields(value) + OaclisSettings.html('<details><summary>Sincronizza</summary>') + scopeFields(scopes, entry) + OaclisSettings.html('</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>');
+  panel.innerHTML = OaclisSettings.html(('<button type="button" class="icon-button chat-visibility" aria-label="Nascondi chat"></button><button type="button" class="icon-button popover-close" aria-label="Chiudi modifica chat">' + OaclisIcon('close') + '</button><h2>')) + esc(chatLabel(entry)) + OaclisSettings.html('</h2><form><label class="field">Nome visualizzato<input name="label" maxlength="160" value="') + esc(value.label || "") + '" placeholder="' + esc(chatLabel(entry)) + '"></label>' + OaclisSettings.html('<label class="field">URL web<input name="url" type="url" maxlength="2048" value="') + esc(value.url || "") + '" placeholder="https://…"></label>' + appearanceFields(value) + consoleAccessFields()+OaclisSettings.html('<details><summary>Sincronizza</summary>') + scopeFields(scopes, entry) + OaclisSettings.html('</details><button class="primary">Salva</button><button type="button" class="delete-presentation">Elimina</button></form>');
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor);
+  panel.querySelector('[name="console_access"]').value=data.chat_settings?.[entry.id]?.console_access||'default';
   panel.querySelector('.delete-presentation').textContent=connection?OaclisSettings.text("Elimina collegamento"):OaclisSettings.text("Nascondi dalla lista");
   bindPanelDrag(panel, true);
   panel.querySelector('.popover-close').onclick = () => closeChatEditor(panel);
@@ -498,7 +503,9 @@ function editChat(entry, anchor, origin = sourceId || "master", connection = nul
   const readAppearance = bindAppearanceFields(panel);
   const save = async value => {
     const key = "chat:" + entry.id;
-    await api("appearance", { key, value, source_device_id: origin }); data.appearance ??= {}; data.appearance[key] = value;
+    const access=panel.querySelector('[name="console_access"]').value;
+    await api("appearance",{key,value,source_device_id:origin,console_access:access});data.appearance??={};data.appearance[key]=value;
+    data.chat_settings??={};data.chat_settings[entry.id]={...data.chat_settings[entry.id],console_access:access};
     if (value.label) for (const chat of [entry, ...(data.chats || []), ...visibleChats, ...chatLinks.map(link => link.entry)]) {
       if (chat.id === entry.id) chat.name = value.label;
     }
@@ -844,18 +851,19 @@ function openNewChat(anchor){
   const existing=document.querySelector('.new-chat-editor');if(existing){existing.querySelector('[name="label"]').focus();return;}
   const panel=document.createElement('div');panel.className='chat-editor new-chat-editor';panel.id='new-chat-editor';panel.opener=anchor;panel.dataset.objectId=crypto.randomUUID();
   panel.setAttribute('popover','manual');panel.setAttribute('role','dialog');panel.setAttribute('aria-label',OaclisSettings.text('Nuova chat'));
-  panel.innerHTML=OaclisSettings.html('<button type="button" class="icon-button popover-close" aria-label="Chiudi">'+OaclisIcon('close')+'</button><h2>Nuova chat</h2><form><label class="field">Nome<input name="label" maxlength="160" value="Nuova chat" required></label>')+appearanceFields({icon:'chat'})+OaclisSettings.html('<details><summary>Avanzato</summary><label class="field">Cartella di lavoro<input name="cwd" maxlength="2048" placeholder="Predefinita"></label></details><button class="primary">Crea chat</button><small role="status"></small></form>');
+  panel.innerHTML=OaclisSettings.html('<button type="button" class="icon-button popover-close" aria-label="Chiudi">'+OaclisIcon('close')+'</button><h2>Nuova chat</h2><form><label class="field">Nome<input name="label" maxlength="160" value="Nuova chat" required></label>')+appearanceFields({icon:'chat'})+consoleAccessFields()+OaclisSettings.html('<details><summary>Avanzato</summary><label class="field">Cartella di lavoro<input name="cwd" maxlength="2048" placeholder="Predefinita"></label></details><button class="primary">Crea chat</button><small role="status"></small></form>');
   document.body.append(panel);panel.showPopover();positionContext(panel,anchor);bindAppearanceFields(panel);
+  panel.querySelector('[name="console_access"]').value=data.chat_settings?.[parent]?.console_access||'default';
   panel.querySelector('.popover-close').onclick=()=>closeChatEditor(panel);
   panel.querySelector('form').onsubmit=guard(async event=>{
     event.preventDefault();const form=event.target,button=form.querySelector('.primary');if(button.disabled)return;button.disabled=true;
     try{
       const value=Object.fromEntries(new FormData(form));
-      const result=await api('chat/create',{device_id:device,chat_id:parent,text:value.label.trim(),icon:value.icon,color:value.color,cwd:value.cwd.trim()});
+      const result=await api('chat/create',{device_id:device,chat_id:parent,text:value.label.trim(),icon:value.icon,color:value.color,cwd:value.cwd.trim(),access:value.console_access});
       const entry=result.new_chat;data.appearance??={};data.appearance['chat:'+entry.id]={label:entry.name,icon:value.icon,color:value.color};
       data.chat_settings??={};data.chat_settings[entry.id]={console_access:entry.console_access||'default'};
       if(device==='master'&&!data.chats.some(chat=>chat.id===entry.id))data.chats.unshift(entry);if(sourceId===device){if(!visibleChats.some(chat=>chat.id===entry.id))visibleChats.unshift(entry);renderLibrary();}
-      closeChatEditor(panel);openChatTerminal({entry},anchor,device,true);
+      closeChatEditor(panel);openChatTerminal({entry},anchor,device);
     }catch(error){form.querySelector('[role="status"]').textContent=error.message;}
     finally{button.disabled=false;}
   });

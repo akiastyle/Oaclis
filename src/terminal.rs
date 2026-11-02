@@ -1,4 +1,4 @@
-// terminal.rs v1.20.350
+// terminal.rs v1.20.352
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -137,7 +137,7 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         let appearance=crate::appearance::Appearance{label:name.into(),icon:value["icon"].as_str().unwrap_or("").into(),color:value["color"].as_str().unwrap_or("").into(),..Default::default()};
         crate::appearance::save(config.join("appearance.json"),&std::collections::BTreeMap::from([(format!("chat:{id}"),appearance)]))?;
         let preferences=crate::state_store::database(&config,"","preferences-get",None)?;
-        let access=preferences["preferences"][chat]["console_access"].as_str().unwrap_or("default");
+        let access=value["access"].as_str().or_else(||preferences["preferences"][chat]["console_access"].as_str()).unwrap_or("default");
         crate::state_store::database(&config,id,"console-access",Some(&json!(access)))?;
         return Ok(json!({"new_chat":{"id":id,"name":name,"icon":value["icon"].as_str().unwrap_or(""),"color":value["color"].as_str().unwrap_or(""),"console_access":access}}));
     }

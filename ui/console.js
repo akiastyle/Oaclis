@@ -1,4 +1,4 @@
-// console.js v2.98.1889
+// console.js v2.99.1920
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -37,13 +37,14 @@ function chooseChatTerminal(connection, anchor) {
   menu.querySelector(".terminal-destinations button").focus();
 }
 
-function openChatTerminal(connection, anchor, deviceId, startImmediately=false) {
+function openChatTerminal(connection, anchor, deviceId) {
   const existing = [...document.querySelectorAll(".chat-terminal")].find(p =>
     p.dataset.chatId === connection.entry.id && p.dataset.deviceId === deviceId);
   if (existing) {
     existing.hidePopover(); existing.showPopover();
     window.OaclisLocalVoice?.activate(existing);
     existing.querySelector("textarea").focus();
+    existing.openTerminal?.();
     return;
   }
   const panel = document.createElement("section");
@@ -68,7 +69,7 @@ function openChatTerminal(connection, anchor, deviceId, startImmediately=false) 
   const status = document.createElement("small"); status.className = "terminal-state"; status.setAttribute("role", "status"); panel.querySelector("h2").after(status);
   let followOutput = true;
   screen.addEventListener("scroll", () => { followOutput = screen.scrollHeight-screen.clientHeight-screen.scrollTop <= 24; }, {passive:true});
-  let busy = false, ready = false, submitting = false, waitingInputs = 0, idle = Promise.resolve(), activeAccess = "existing";
+  let busy = false, ready = false, submitting = false, waitingInputs = 0, idle = Promise.resolve();
   const send = async value => {
     if (value.action !== "read") status.textContent = OaclisSettings.text("Ricevuto");
     if (value.action === "read") { if (busy || waitingInputs) return false; }
@@ -81,7 +82,6 @@ function openChatTerminal(connection, anchor, deviceId, startImmediately=false) 
       const stamp = window.OaclisLocalVoice?.stamp(panel);
       const result = await api("terminal", { ...payload, ...value, ...window.OaclisLocalVoice?.request(panel) });
       if (!panel.isConnected) return false;
-      if(value.action === "open") activeAccess=result.active_access || "existing";
       const top=screen.scrollTop,left=screen.scrollLeft;
       OaclisTerminal.render(screen,result.screen,result.screen_ansi);
       if (value.action === "input" || value.action === "open") followOutput = true;
@@ -139,26 +139,13 @@ function openChatTerminal(connection, anchor, deviceId, startImmediately=false) 
     const keys = { ArrowUp: "Up", ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right", Enter: "Enter", Tab: "Tab", Backspace: "BSpace" };
     if (ready && keys[e.key]) { e.preventDefault(); send({ action: "input", key: keys[e.key] }); }
   };
-  const accessRow=document.createElement("div");
-  accessRow.className="terminal-access";
-  accessRow.innerHTML=OaclisSettings.html('<label class="field">Autorizzazione<select aria-label="Autorizzazione console"><option value="default">Configurazione Codex</option><option value="read-only">Sola lettura</option><option value="workspace-write">Modifica nel progetto</option><option value="full">Accesso completo</option></select></label><button type="button" class="primary">Apri console</button><small></small>');
-  panel.querySelector("h2").after(accessRow);
-  const access=accessRow.querySelector("select"), start=accessRow.querySelector("button"), note=accessRow.querySelector("small");
-  access.value=data.chat_settings?.[connection.entry.id]?.console_access || "default";
-  start.onclick=async()=>{
-    start.disabled=true;
-    const selected=access.value;
-    clearTimeout(panel.terminalTimer);
-    if(await send({action:"open",access:selected})) {
-      data.chat_settings ??= {};data.chat_settings[connection.entry.id] ??= {};data.chat_settings[connection.entry.id].console_access=selected;
-      start.hidden=true;
-      const activeLabel=[...access.options].find(option=>option.value===activeAccess)?.textContent || OaclisSettings.text("Sessione già attiva");
-      note.textContent=OaclisSettings.text("Console attiva: ")+activeLabel+(activeAccess!==selected?". "+OaclisSettings.text("Le modifiche valgono al prossimo avvio di Codex. La console attiva mantiene i suoi permessi."):"");
+  panel.openTerminal=async()=>{
+    if(ready||busy)return;
+    if(await send({action:'open'})){
+      if(!panel.isConnected)return;
       form.elements.text.focus();pollTerminal();
-    } else start.disabled=false;
+    }
   };
-  access.onchange=()=>{start.hidden=false;start.disabled=false;start.textContent=OaclisSettings.text(ready?"Salva autorizzazione":"Apri console");};
-  screen.textContent=OaclisSettings.text("Scegli l’autorizzazione e apri la console.");
   window.OaclisLocalVoice?.activate(panel);
-  if(startImmediately)start.click();
+  panel.openTerminal();
 }
