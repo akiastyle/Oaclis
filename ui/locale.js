@@ -1,4 +1,4 @@
-// locale.js v1.3.498
+// locale.js v1.3.515
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -9,6 +9,23 @@ window.OaclisSettings=(()=>{
  document.documentElement.lang=language;
  const en={
   "Modello":"Model",
+  "Motori AI":"AI engines",
+  "Motore":"Engine",
+  "Motore predefinito":"Default engine",
+  "Abilitato":"Enabled",
+  "Chiave API":"API key",
+  "Già configurata · lascia vuoto per conservarla":"Already configured · leave blank to keep it",
+  "Inserisci chiave":"Enter key",
+  "Autenticazione Codex presente":"Existing Codex authentication",
+  "Accedi da Codex per usare questo motore.":"Sign in with Codex to use this engine.",
+  "Chat per questo motore non ancora disponibili":"Chats for this engine are not available yet",
+  "Configura questo motore nelle impostazioni.":"Configure this engine in settings.",
+  "Caricamento modelli…":"Loading models…",
+  "Nessun modello disponibile":"No models available",
+  "Collegamento llama.cpp non disponibile":"llama.cpp connection unavailable",
+  "Configurazione non disponibile. Riapri il pannello.":"Configuration unavailable. Reopen this panel.",
+  "Salva la chiave per verificare il collegamento.":"Save the key to check the connection.",
+
   "Predefinito Codex":"Codex default",
   "Apri in una finestra separata":"Open in a separate window",
   "Consenti l’apertura della finestra nel browser.":"Allow the window to open in your browser.",

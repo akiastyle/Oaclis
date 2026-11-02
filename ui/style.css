@@ -1,4 +1,4 @@
-/* style.css v2.0.1513 */
+/* style.css v2.0.1519 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1372,3 +1372,9 @@ html[data-console-window] body > :not(.chat-terminal):not(.voice-panel):not(#not
 html[data-console-window] .chat-terminal:not([data-window-active]) { display: none !important; }
 html[data-console-window] .chat-terminal { inset: 8px !important; width: calc(100vw - 16px) !important; height: calc(100dvh - 16px) !important; min-width: 0; min-height: 0; max-width: none; max-height: none; resize: none; animation: none; }
 html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: var(--space-24); }
+
+.engine-editor { max-height: calc(100dvh - 32px); overflow-y: auto; }
+.engine-editor details { margin-block: 12px; }
+.engine-editor .engine-enabled { display: flex; align-items: center; gap: 8px; margin-block: 12px; }
+.engine-editor .engine-enabled input { width: auto; }
+.engine-editor small, [data-engine-status]:not(:empty) { display: block; margin-block: 8px; }

@@ -1,4 +1,4 @@
-// panels.js v3.142.2827
+// panels.js v3.143.2875
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -860,15 +860,16 @@ function openNewChat(anchor){
   const existing=document.querySelector('.new-chat-editor');if(existing){existing.querySelector('[name="label"]').focus();return;}
   const panel=document.createElement('div');panel.className='chat-editor new-chat-editor';panel.id='new-chat-editor';panel.opener=anchor;panel.dataset.objectId=crypto.randomUUID();
   panel.setAttribute('popover','manual');panel.setAttribute('role','dialog');panel.setAttribute('aria-label',OaclisSettings.text('Nuova chat'));
-  panel.innerHTML=OaclisSettings.html('<button type="button" class="icon-button popover-close" aria-label="Chiudi">'+OaclisIcon('close')+'</button><h2>Nuova chat</h2><form><label class="field">Nome<input name="label" maxlength="160" value="Nuova chat" required></label><label class="field">Modello<input name="model" maxlength="160" placeholder="Predefinito Codex"></label>')+appearanceFields({icon:'chat'})+consoleAccessFields()+OaclisSettings.html('<details><summary>Avanzato</summary><label class="field">Cartella di lavoro<input name="cwd" maxlength="2048" placeholder="Predefinita"></label></details><button class="primary">Crea chat</button><small role="status"></small></form>');
+  panel.innerHTML=OaclisSettings.html('<button type="button" class="icon-button popover-close" aria-label="Chiudi">'+OaclisIcon('close')+'</button><h2>Nuova chat</h2><form><label class="field">Nome<input name="label" maxlength="160" value="Nuova chat" required></label>')+OaclisEngines.fields()+OaclisSettings.html('')+appearanceFields({icon:'chat'})+consoleAccessFields()+OaclisSettings.html('<details><summary>Avanzato</summary><label class="field">Cartella di lavoro<input name="cwd" maxlength="2048" placeholder="Predefinita"></label></details><button class="primary">Crea chat</button><small role="status"></small></form>');
   document.body.append(panel);panel.showPopover();positionContext(panel,anchor);bindAppearanceFields(panel);
   panel.querySelector('[name="console_access"]').value=data.chat_settings?.[parent]?.console_access||'default';
+  OaclisEngines.bind(panel.querySelector('form'),async()=>(await api('terminal',{device_id:device,chat_id:parent,action:'engines'})).engines,()=>api('terminal',{device_id:device,chat_id:parent,action:'models'}));
   panel.querySelector('.popover-close').onclick=()=>closeChatEditor(panel);
   panel.querySelector('form').onsubmit=guard(async event=>{
     event.preventDefault();const form=event.target,button=form.querySelector('.primary');if(button.disabled)return;button.disabled=true;
     try{
       const value=Object.fromEntries(new FormData(form));
-      const result=await api('chat/create',{device_id:device,chat_id:parent,text:value.label.trim(),model:value.model.trim(),icon:value.icon,color:value.color,cwd:value.cwd.trim(),access:value.console_access});
+      const result=await api('chat/create',{device_id:device,chat_id:parent,text:value.label.trim(),engine:value.engine,model:value.model.trim(),icon:value.icon,color:value.color,cwd:value.cwd.trim(),access:value.console_access});
       const entry=result.new_chat;data.appearance??={};data.appearance['chat:'+entry.id]={label:entry.name,icon:value.icon,color:value.color};
       data.chat_settings??={};data.chat_settings[entry.id]={console_access:entry.console_access||'default'};
       if(device==='master'&&!data.chats.some(chat=>chat.id===entry.id))data.chats.unshift(entry);if(sourceId===device){if(!visibleChats.some(chat=>chat.id===entry.id))visibleChats.unshift(entry);renderLibrary();}
@@ -877,4 +878,47 @@ function openNewChat(anchor){
     finally{button.disabled=false;}
   });
   panel.querySelector('[name="label"]').value=OaclisSettings.text('Nuova chat');panel.querySelector('[name="label"]').select();
+}
+
+async function openEngineSettings(anchor){
+  const existing=document.querySelector('.engine-editor');if(existing){existing.querySelector('select')?.focus();return;}
+  const panel=document.createElement('div');panel.className='chat-editor engine-editor';panel.opener=anchor;panel.dataset.objectId=crypto.randomUUID();
+  panel.setAttribute('popover','manual');panel.setAttribute('role','dialog');panel.setAttribute('aria-label',OaclisSettings.text('Motori AI'));
+  panel.innerHTML=OaclisSettings.html('<button type="button" class="icon-button popover-close" aria-label="Chiudi">'+OaclisIcon('close')+'</button><h2>Motori AI</h2><form><label class="field">Motore predefinito<select name="default_engine"></select></label><div data-providers></div><button class="primary" disabled>Salva</button><small role="status"></small></form>');
+  document.body.append(panel);panel.showPopover();positionContext(panel,anchor);panel.querySelector('.popover-close').onclick=()=>closeChatEditor(panel);
+  const form=panel.querySelector('form'),status=form.querySelector('[role="status"]'),button=form.querySelector('.primary');
+  try{
+    const settings=await api('engines');if(!panel.isConnected)return;
+    const defaults=form.elements.default_engine,providers=form.querySelector('[data-providers]');
+    for(const provider of settings.providers){
+      const option=document.createElement('option');option.value=provider.id;option.textContent=OaclisEngines.names[provider.id];defaults.append(option);
+      const section=document.createElement('details');section.dataset.engine=provider.id;
+      const summary=document.createElement('summary');summary.textContent=OaclisEngines.names[provider.id];section.append(summary);
+      const enabled=document.createElement('label');enabled.className='engine-enabled';const check=document.createElement('input');check.type='checkbox';check.name='enabled';check.value=provider.id;check.checked=provider.enabled;enabled.append(check,document.createTextNode(OaclisSettings.text('Abilitato')));section.append(enabled);
+      const state=document.createElement('small');state.textContent=OaclisSettings.text(provider.id==='codex'?(provider.credentials?'Autenticazione Codex presente':'Accedi da Codex per usare questo motore.'):'Chat per questo motore non ancora disponibili');section.append(state);
+      if(provider.id!=='codex'){
+        const label=document.createElement('label');label.className='field';label.textContent=OaclisSettings.text('Chiave API');const key=document.createElement('input');key.name='key_'+provider.id;key.type='password';key.autocomplete='new-password';key.maxLength=4096;key.placeholder=OaclisSettings.text(provider.credentials?'Già configurata · lascia vuoto per conservarla':'Inserisci chiave');label.append(key);section.append(label);
+      }
+      const label=document.createElement('label');label.className='field';label.textContent=OaclisSettings.text('Modello');const model=document.createElement('input');model.name='model_'+provider.id;model.maxLength=160;model.value=provider.model;model.placeholder=OaclisSettings.text('Predefinita');label.append(model);section.append(label);
+      if(provider.id==='llamacpp'){
+        const list=document.createElement('datalist');list.id='engine-llama-models';model.setAttribute('list',list.id);section.append(list);
+        section.addEventListener('toggle',async()=>{
+          if(!section.open||list.dataset.loaded)return;list.dataset.loaded='true';
+          try{const reply=await api('llama/models');for(const item of reply.models){const option=document.createElement('option');option.value=item.id;list.append(option);}}
+          catch(_){list.dataset.loaded='';state.textContent=OaclisSettings.text('Salva la chiave per verificare il collegamento.');}
+        });
+      }
+      section.addEventListener('toggle',()=>{if(section.open)for(const other of providers.children)if(other!==section)other.open=false;});providers.append(section);
+    }
+    defaults.value=settings.default_engine;button.disabled=false;
+    form.onsubmit=async event=>{
+      event.preventDefault();if(button.disabled)return;button.disabled=true;status.textContent='';
+      const values=new FormData(form),models={},keys={};
+      for(const provider of settings.providers){models[provider.id]=String(values.get('model_'+provider.id)||'').trim();if(provider.id!=='codex')keys[provider.id]=String(values.get('key_'+provider.id)||'').trim();}
+      try{data.engines=await api('engines/save',{default_engine:values.get('default_engine'),enabled:values.getAll('enabled'),models,keys});closeChatEditor(panel);}
+      catch(error){status.textContent=error.message;button.disabled=false;}
+      finally{for(const input of form.querySelectorAll('input[type="password"]'))input.value='';}
+    };
+    positionContext(panel,anchor);
+  }catch(error){status.textContent=error.message;}
 }

@@ -1,4 +1,4 @@
-// web.rs v2.28.1829
+// web.rs v2.28.1836
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -225,6 +225,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     "text/css; charset=utf-8",
                 )),
                 "/badge-motion.css" => Some((include_str!("../ui/badge-motion.css").into(), "text/css; charset=utf-8")),
+                "/engines.js" => Some((include_str!("../ui/engines.js").into(), "text/javascript; charset=utf-8")),
                 "/locale.js" => Some((include_str!("../ui/locale.js").into(), "text/javascript; charset=utf-8")),
                 "/icons.js" => Some((include_str!("../ui/icons.js").into(), "text/javascript; charset=utf-8")),
                 "/badge-motion.js" => Some((include_str!("../ui/badge-motion.js").into(), "text/javascript; charset=utf-8")),
@@ -259,6 +260,8 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
         if !matches!(url.as_str(),"/api/state"|"/api/status"|"/api/log"|"/api/links"|"/api/peers"|"/api/mobile/qr"|"/api/mobile/pending") { crate::state_transport::log(format!("HTTP POST {url}")); }
         let result = (|| -> io::Result<Value> {
             match (request.method(), url.as_str()) {
+                (&Method::Post, "/api/engines") => crate::engines::settings(&home),
+                (&Method::Post, "/api/engines/save") => crate::engines::save(&home,&body(&mut request)?),
                 (&Method::Post, "/api/llama/models") => {
                     if role != "master" { return Err(invalid("Comando disponibile dal master")); }
                     crate::llama::models(&home)
@@ -319,7 +322,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                     Ok(result)
                 }
                 (&Method::Post, "/api/state") => Ok(
-                    json!({"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"deleted_chats":crate::chat_deletion::ids(crate::state_store::snapshot(&config)?.as_ref()),"ssh_settings":crate::ssh_settings::settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
+                    json!({"engines":crate::engines::settings(&home).unwrap_or(Value::Null),"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"deleted_chats":crate::chat_deletion::ids(crate::state_store::snapshot(&config)?.as_ref()),"ssh_settings":crate::ssh_settings::settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
                 ),
                 (&Method::Post, "/api/device/control") => {
                     let value = body(&mut request)?;
@@ -333,7 +336,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Post, "/api/status") => {
                     let known=body(&mut request)?;
                     let snapshot = environment::database(&config,"","status-read",None)?;
-                    compact_status(json!({"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
+                    compact_status(json!({"engines":crate::engines::settings(&home).unwrap_or(Value::Null),"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
                         "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":snapshot["links"],"chat_settings":snapshot["preferences"],"deleted_chats":crate::chat_deletion::ids(crate::state_store::snapshot(&config)?.as_ref()),"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}),&known["revisions"])
                 }
                 (&Method::Post, "/api/link-position") => {

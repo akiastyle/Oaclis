@@ -1,4 +1,4 @@
-// llama.rs v1.4.65
+// llama.rs v1.4.68
 //! Read-only discovery through the existing AI-LAB SSH tunnel; no model is loaded.
 use serde_json::{Value, json};
 use std::{io::{self, Read}, path::Path, time::Duration};
@@ -31,8 +31,7 @@ fn discover(endpoint: &str, key: &str) -> io::Result<Value> {
 }
 
 pub(crate) fn models(home: &Path) -> io::Result<Value> {
-    let key = std::fs::read_to_string(home.join(".config/ai-lab/api.key"))
-        .map_err(|_| io::Error::other("Collegamento llama.cpp non configurato"))?;
+    let key = crate::engines::llama_key(home)?;
     // Reuse the installed tunnel. Never expose the Jetson listener or its key to browsers.
     discover("http://127.0.0.1:18085/v1/models", key.trim())
 }

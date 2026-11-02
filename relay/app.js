@@ -1,4 +1,4 @@
-// app.js v1.91.943
+// app.js v1.92.965
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -69,7 +69,9 @@ function newMobileChat(){
  const base=authorizedChats.find(chat=>chat.id===consoleActions?.chatId)||authorizedChats[0];if(!base)return;
  const existing=document.getElementById('new-chat-dialog');if(existing){existing.querySelector('input').focus();return;}
  const dialog=document.createElement('dialog');dialog.id='new-chat-dialog';dialog.className='voice-dialog new-chat-dialog';dialog.setAttribute('aria-label',OaclisSettings.text('Nuova chat'));
- dialog.innerHTML=OaclisSettings.html('<button type="button" class="voice-close secondary" aria-label="Chiudi">'+OaclisIcon('close')+'</button><h1>Nuova chat</h1><form><label>Nome<input name="name" maxlength="160" value="Nuova chat" required></label><label>Modello<input name="model" maxlength="160" placeholder="Predefinito Codex"></label><details><summary>Icone</summary><input type="hidden" name="icon" value="chat"><div class="new-chat-icons" role="group" aria-label="Icone"></div></details><button>Crea chat</button><small role="status"></small></form>');
+ dialog.innerHTML=OaclisSettings.html('<button type="button" class="voice-close secondary" aria-label="Chiudi">'+OaclisIcon('close')+'</button><h1>Nuova chat</h1><form><label>Nome<input name="name" maxlength="160" value="Nuova chat" required></label>')+OaclisEngines.fields()+OaclisSettings.html('<details><summary>Icone</summary><input type="hidden" name="icon" value="chat"><div class="new-chat-icons" role="group" aria-label="Icone"></div></details><button>Crea chat</button><small role="status"></small></form>');
+ const query=async operation=>{if(consoleWorkspace)return consoleWorkspace.query(operation);const request=await api('console',{chat_id:base.id,operation});const result=await consoleResult(base.id,request.request_id);if(result.pending)throw Error('pending');return result;};
+ OaclisEngines.bind(dialog.querySelector('form'),async()=>(await query('engines')).engines,()=>query('models'));
  const grid=dialog.querySelector('.new-chat-icons');
  for(const id of Object.keys(icons)){
   const button=document.createElement('button');button.type='button';button.className='secondary';button.innerHTML=OaclisIcon(id);button.title=OaclisIconNames[id];button.setAttribute('aria-label',button.title);button.setAttribute('aria-pressed',String(id==='chat'));
@@ -79,10 +81,10 @@ function newMobileChat(){
  dialog.querySelector('form').onsubmit=async event=>{
   event.preventDefault();const form=event.target,button=form.querySelector('button:not([type="button"])');if(button.disabled)return;button.disabled=true;
   try{
-   const values=new FormData(form),text=String(values.get('name')).trim(),icon=String(values.get('icon')),model=String(values.get('model')).trim();
+   const values=new FormData(form),text=String(values.get('name')).trim(),icon=String(values.get('icon')),model=String(values.get('model')).trim(),engine=String(values.get('engine'));
    let created;
-   if(consoleWorkspace)created=await consoleWorkspace.create(text,icon,model);
-   else{const request=await api('console',{chat_id:base.id,operation:'create',text,key:'',icon,model});const result=await consoleResult(base.id,request.request_id);created=result.new_chat;}
+   if(consoleWorkspace)created=await consoleWorkspace.create(text,icon,model,engine);
+   else{const request=await api('console',{chat_id:base.id,operation:'create',text,key:'',icon,model,engine});const result=await consoleResult(base.id,request.request_id);created=result.new_chat;}
    if(!created?.id)throw Error(OaclisSettings.text('Creazione non confermata. Controlla la lista prima di riprovare.'));
    if(!authorizedChats.some(chat=>chat.id===created.id))authorizedChats.push(created);
    dialog.remove();await openConsole(created);
@@ -165,6 +167,7 @@ async function openConsole(chat,adjacent=false){
   if(result.pending){pending=null;throw Error(OaclisSettings.text('Collegamento temporaneamente non disponibile. Riprova.'));}
   pending=null;if(result.error)throw Error(result.error);
   if(request.operation==='create')return result.new_chat;
+  if(request.operation==='engines'||request.operation==='models')return result;
   const pane=request.pane;if(pane.closed)return true;
   if(request.operation==='input'&&typeof request.text==='string'&&(drafts.get(pane.chat.id)||'')===request.text){saveDraft(pane.chat.id,'');if(pane===active&&text.value===request.text)text.value='';}
   if(request.image&&imageDrafts.get(pane.chat.id)===request.image){imageDrafts.delete(pane.chat.id);if(pane===active)paintAttachment();}
@@ -196,7 +199,7 @@ async function openConsole(chat,adjacent=false){
      if(inputBusy||document.hidden)controller.abort();
     }
     return await complete(pending,controller?.signal);
-   }catch(error){if(controller?.signal.aborted){if(pending?.operation==='read')pending=null;return false;}if(error.status===403){voice.stop();show('');location.replace('/auth');}else if(!closed&&!pane.closed){pane.reconnecting=true;pane.name.textContent=pane.chat.name+OaclisSettings.text(operation==='input'?' · Invio non confermato':' · Riconnessione…');}return false;}
+   }catch(error){if(controller?.signal.aborted){if(pending?.operation==='read')pending=null;return false;}if(error.status===403){voice.stop();show('');location.replace('/auth');}else if(operation==='engines'||operation==='models')throw error;else if(!closed&&!pane.closed){pane.reconnecting=true;pane.name.textContent=pane.chat.name+OaclisSettings.text(operation==='input'?' · Invio non confermato':' · Riconnessione…');}return false;}
    finally{if(reading===controller)reading=null;}
   });queue=task.catch(()=>false);return task;
  }
@@ -248,10 +251,15 @@ async function openConsole(chat,adjacent=false){
   picker.replaceChildren();const heading=document.createElement('h1');heading.textContent=OaclisSettings.text('Affianca chat');const close=document.createElement('button');close.type='button';close.className='voice-close secondary';close.setAttribute('aria-label',OaclisSettings.text('Annulla'));close.innerHTML=OaclisIcon('close');close.onclick=()=>picker.close();picker.append(heading,close);
   for(const [index,selected]of authorizedChats.entries()){const button=chatButton(selected,index,()=>openConsole(selected,true));button.disabled=panes.some(pane=>pane.chat.id===selected.id);picker.append(button);}picker.showModal();
  }
- consoleWorkspace={open,create:async(text,icon,model)=>{
+ consoleWorkspace={open,query:async operation=>{
+  if(inputBusy||!active?.ready)throw Error(OaclisSettings.text('Attendi il completamento della richiesta.'));
+  inputBusy=true;clearTimeout(pollTimer);reading?.abort();
+  try{return await send(active,operation);}
+  finally{inputBusy=false;if(!closed&&!document.hidden){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
+ },create:async(text,icon,model,engine)=>{
   if(inputBusy||!active?.ready)return false;
   inputBusy=true;clearTimeout(pollTimer);reading?.abort();
-  try{return await send(active,'create',{text,icon,model,key:''});}
+  try{return await send(active,'create',{text,icon,model,engine,key:''});}
   finally{inputBusy=false;if(!closed&&!document.hidden){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
  },split:()=>panes.length===2,selectPane:position=>activate(panes[['sotto','bottom'].includes(OaclisVoice.normalize(position))?1:0]),list:()=>picker.open?authorizedChats:visibleChatList};
  closeConsole=()=>{if(closed)return;closeSendMenu();reading?.abort();if(active)saveDraft(active.chat.id,text.value);reader?.destroy();for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleActions=null;consoleWorkspace=null;closeConsole=null;};

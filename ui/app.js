@@ -1,4 +1,4 @@
-// app.js v4.166.3145
+// app.js v4.166.3147
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -310,6 +310,7 @@ $("#reset-map").onclick = () => {
 $("#check").onclick = guard(() => api("check", {}));
 $("#add-device").onclick = () => openDiscovery();
 $('#new-chat').onclick=()=>openNewChat($('#new-chat'));
+$('#engine-settings').onclick=()=>openEngineSettings($('#engine-settings'));
 $("#edit-device").onclick = () => editDevice(data.devices.find(d => d.id === sourceId), $("#edit-device"));
 const lastConnection = {};
 let statusRevisions = {};
@@ -445,6 +446,7 @@ guard(async () => {
     if(sourceId!=='master')api('catalog',{device_id:sourceId}).then(result=>{visibleChats=result.chats||[entry];}).catch(()=>{});
     return;
   }
+  if(!data.engines?.configured&&!data.chats?.length&&!data.devices?.length&&!data.mobile_devices?.length)openEngineSettings($('#toolbar-toggle'));
   consoleChannel?.postMessage('discover');
   updatePowerMenu();
   chatLinks = data.links || [];

@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.556
+// index.php v1.8.572
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -238,7 +238,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
             }
             $operation=$input['operation']??''; $text=$input['text']??''; $key=$input['key']??'';
-            if (!in_array($operation,['open','read','input','create'],true) || !is_string($text) || mb_strlen($text)>8000 || str_contains($text,"\0") || !in_array($key,['','Enter','Escape','Tab','Up','Down','Left','Right','BSpace','C-c','1','2','3'],true)) throw new RuntimeException();
+            if (!in_array($operation,['open','read','input','create','engines','models'],true) || !is_string($text) || mb_strlen($text)>8000 || str_contains($text,"\0") || !in_array($key,['','Enter','Escape','Tab','Up','Down','Left','Right','BSpace','C-c','1','2','3'],true)) throw new RuntimeException();
             $signed=$input['signed']??null;
             if (!is_array($signed) || !is_string($signed['payload']??null) || strlen($signed['payload'])>786432 || !is_string($signed['signature']??null) || !preg_match('/^[a-f0-9]{128}$/D',$signed['signature'])) respond([],403);
             $packet=json_decode($signed['payload'],true,16,JSON_THROW_ON_ERROR);
@@ -253,7 +253,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $previous=$record['console']??[];
             // Only observations can be superseded; pending inputs remain exclusive.
-            if (($previous['until']??0)>time() && !isset($previous['result']) && !(in_array($operation,['input','create'],true) && ($previous['operation']??'')==='read')) respond(['error'=>'Attendi il completamento della richiesta.'],409);
+            if (($previous['until']??0)>time() && !isset($previous['result']) && !(in_array($operation,['input','create','engines','models'],true) && ($previous['operation']??'')==='read')) respond(['error'=>'Attendi il completamento della richiesta.'],409);
             $id=$packet['id'];
             $state['devices'][$deviceId]['console']=['id'=>$id,'chat_id'=>$chat,'operation'=>$operation,'until'=>min(time()+20,$session['auth']['until']),'signed'=>$signed];
             $result=['request_id'=>$id];
@@ -272,6 +272,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (!is_string($chat['id']??null)||!preg_match('/^[a-f0-9-]{36}$/D',$chat['id'])||!is_string($chat['name']??null)||mb_strlen($chat['name'])>160||!is_string($chat['icon']??null)||!preg_match('/^[a-z]*$/D',$chat['icon'])) throw new RuntimeException('Invalid new chat');
                     if (!in_array($chat['id'],array_column($state['devices'][$target]['chats']??[],'id'),true)) $state['devices'][$target]['chats'][]=$chat;
                     $state['devices'][$target]['console']['result']=['new_chat'=>$chat];
+                    continue;
+                }
+                if (($job['operation']??'')==='engines' && is_array($answer['engines']??null) && strlen(json_encode($answer['engines']))<=16384) {
+                    $state['devices'][$target]['console']['result']=['engines'=>$answer['engines']];
+                    continue;
+                }
+                if (($job['operation']??'')==='models' && is_array($answer['models']??null) && array_is_list($answer['models']) && strlen(json_encode($answer['models']))<=32768) {
+                    $state['devices'][$target]['console']['result']=['models'=>$answer['models']];
                     continue;
                 }
                 $screen=$answer['screen']??null;
@@ -322,7 +330,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD']!=='GET') {http_response_code(405);exit;}
 function pwaVersion(): string {
     $sums=[0,0,0]; $counts=[0,0,0];
-    foreach (['index.php','app.js','style.css','voice.js','read-aloud.js','security.js','sw.js','locale.js','icons.js','terminal-format.js'] as $file) {
+    foreach (['index.php','app.js','style.css','voice.js','read-aloud.js','security.js','sw.js','locale.js','engines.js','icons.js','terminal-format.js'] as $file) {
         $source=file_get_contents(__DIR__.'/'.$file,false,null,0,512);
         if ($source===false || !preg_match('/'.preg_quote($file,'/').' v([0-9]+)\.([0-9]+)\.([0-9]+)/',$source,$match)) throw new RuntimeException('Missing PWA source version');
         for ($i=0;$i<3;$i++) {
@@ -337,5 +345,5 @@ function pwaVersion(): string {
 }
 ?>
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><meta name="theme-color" content="#111314"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-192.png"><link rel="stylesheet" href="/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/locale.js?v=<?= hash_file('sha256', __DIR__.'/locale.js') ?>"></script><script defer src="/icons.js?v=<?= hash_file('sha256', __DIR__.'/icons.js') ?>"></script><script defer src="/voice.js?v=<?= hash_file('sha256', __DIR__.'/voice.js') ?>"></script><script defer src="/security.js?v=<?= hash_file('sha256', __DIR__.'/security.js') ?>"></script><script defer src="/terminal-format.js?v=<?= hash_file('sha256', __DIR__.'/terminal-format.js') ?>"></script><script defer src="/read-aloud.js?v=<?= hash_file('sha256', __DIR__.'/read-aloud.js') ?>"></script><script defer src="/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><meta name="theme-color" content="#111314"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-192.png"><link rel="stylesheet" href="/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/locale.js?v=<?= hash_file('sha256', __DIR__.'/locale.js') ?>"></script><script defer src="/engines.js?v=<?= hash_file('sha256', __DIR__.'/engines.js') ?>"></script><script defer src="/icons.js?v=<?= hash_file('sha256', __DIR__.'/icons.js') ?>"></script><script defer src="/voice.js?v=<?= hash_file('sha256', __DIR__.'/voice.js') ?>"></script><script defer src="/security.js?v=<?= hash_file('sha256', __DIR__.'/security.js') ?>"></script><script defer src="/terminal-format.js?v=<?= hash_file('sha256', __DIR__.'/terminal-format.js') ?>"></script><script defer src="/read-aloud.js?v=<?= hash_file('sha256', __DIR__.'/read-aloud.js') ?>"></script><script defer src="/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
 <body><main id="app" data-pwa-version="<?= pwaVersion() ?>" hidden aria-live="polite"></main></body></html>

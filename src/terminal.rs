@@ -1,4 +1,4 @@
-// terminal.rs v1.21.371
+// terminal.rs v1.21.383
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -17,6 +17,9 @@ pub(crate) fn validate_model(model:&str)->io::Result<()> {
     if model.len()>160||!model.bytes().all(|c|c.is_ascii_alphanumeric()||b"._-:/".contains(&c)){return Err(invalid("Modello non valido"));}Ok(())
 }
 fn validate(value: &Value) -> io::Result<&str> {
+    if let Some(engine)=value.get("engine") {
+        if engine!="codex" {return Err(invalid("Chat per questo motore non ancora disponibili"));}
+    }
     if let Some(model)=value.get("model"){validate_model(model.as_str().ok_or_else(||invalid("Modello non valido"))?)?;}
     if let Some(access)=value.get("access") { access_flags(access.as_str().ok_or_else(||invalid("Autorizzazione console non valida"))?)?; }
     if let Some(speech)=value.get("speech") { if !speech.is_boolean() {return Err(invalid("Lettura non valida"));} }
@@ -24,7 +27,7 @@ fn validate(value: &Value) -> io::Result<&str> {
     let chat = value["chat_id"].as_str().filter(|s| !s.is_empty() && s.len()<=160 && s.bytes().all(|b|b.is_ascii_alphanumeric() || b"_-".contains(&b)))
         .ok_or_else(||invalid("Chat non valida"))?;
     match value["action"].as_str() {
-        Some("open"|"read") => {},
+        Some("open"|"read"|"engines"|"models") => {},
         Some("create") => {crate::appearance::Appearance{label:value["text"].as_str().unwrap_or("").into(),icon:value["icon"].as_str().unwrap_or("").into(),color:value["color"].as_str().unwrap_or("").into(),..Default::default()}.validate()?;},
         Some("input") => {
             let text = value.get("text").map_or(Some(""),Value::as_str).ok_or_else(||invalid("Messaggio non valido"))?;
@@ -130,6 +133,10 @@ fn session_lock(chat: &str) -> io::Result<std::sync::Arc<std::sync::Mutex<()>>> 
 }
 pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let chat=validate(value)?;
+    if matches!(value["action"].as_str(),Some("engines"|"models")) {
+        let home=env::var_os("HOME").map(PathBuf::from).ok_or_else(||invalid("HOME non definita"))?;
+        return if value["action"]=="engines" {Ok(json!({"engines":crate::engines::settings(&home)?}))} else {crate::llama::models(&home)};
+    }
     if let Some(home)=env::var_os("HOME") {
         if crate::chat_deletion::blocked(&PathBuf::from(home).join(".config/oaclis"),chat)? { return Err(invalid("Chat eliminata definitivamente")); }
     }
@@ -138,7 +145,8 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         let root=env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(||home.join(".codex"));
         let cwd=value["cwd"].as_str().filter(|v|!v.is_empty()).map(PathBuf::from).map(Ok).unwrap_or_else(||working_directory(&home,&root,chat))?;
         let name=value["text"].as_str().unwrap_or("").trim();
-        let entry=crate::catalog::create(&home,&root,&cwd,name,value["model"].as_str().unwrap_or(""))?;let id=entry["id"].as_str().unwrap();
+        let default_model=crate::engines::creation(&home,value)?;
+        let entry=crate::catalog::create(&home,&root,&cwd,name,value["model"].as_str().filter(|v|!v.is_empty()).unwrap_or(&default_model))?;let id=entry["id"].as_str().unwrap();
         let config=home.join(".config/oaclis");
         let appearance=crate::appearance::Appearance{label:name.into(),icon:value["icon"].as_str().unwrap_or("").into(),color:value["color"].as_str().unwrap_or("").into(),..Default::default()};
         let preferences=crate::state_store::database(&config,"","preferences-get",None)?;
