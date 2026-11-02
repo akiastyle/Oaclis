@@ -1,7 +1,10 @@
-// console.js v3.122.2150
+// console.js v3.123.2190
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
-const detachedConsoles=new Map();
+const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet();
+let consoleChannel=null;
+try{if(typeof BroadcastChannel==='function')consoleChannel=new BroadcastChannel('oaclis-console-windows');}catch{}
+consoleChannel?.addEventListener('message',event=>{if(event.data==='discover'&&document.documentElement.dataset.consoleWindow)document.querySelector('.chat-terminal[data-window-active]')?.sendWindowDraft?.();});
 
 function closeChatTerminal(panel) {
   if (!panel) return;
@@ -104,6 +107,22 @@ function activateConsoleWindow(panel,entry,deviceId){
   history.replaceState(null,'',location.pathname+'#console='+encodeURIComponent(JSON.stringify({id:entry.id,name:chatLabel(entry),device:deviceId})));
 }
 
+function trackConsoleWindow(child,connection,anchor,deviceId,draft){
+  const key=JSON.stringify([deviceId,connection.entry.id]);let returnConnection=connection;
+  const receive=event=>{
+    if(event.origin!==location.origin||event.source!==child||event.data?.device_id!==deviceId)return;
+    if(event.data.kind==='oaclis-console-ready'&&event.data.chat_id===returnConnection.entry.id)child.postMessage({kind:'oaclis-console-draft',chat_id:returnConnection.entry.id,device_id:deviceId,draft},location.origin);
+    if(event.data.kind==='oaclis-console-draft'&&event.data.active&&typeof event.data.entry?.id==='string'&&/^[\w-]{1,160}$/.test(event.data.entry.id)){draft=event.data.draft;returnConnection={entry:event.data.entry};}
+  };
+  window.addEventListener('message',receive);detachedConsoles.set(key,child);
+  const watch=setInterval(()=>{
+    if(!child.closed)return;
+    clearInterval(watch);window.removeEventListener('message',receive);detachedConsoles.delete(key);returnedConsoleWindows.add(child);
+    openChatTerminal(returnConnection,anchor?.isConnected?anchor:document.querySelector('#add-device'),deviceId,true);
+    [...document.querySelectorAll('.chat-terminal')].find(panel=>panel.dataset.chatId===returnConnection.entry.id&&panel.dataset.deviceId===deviceId)?.restoreDraft(draft);
+  },500);
+}
+
 function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   const windowKey=JSON.stringify([deviceId,connection.entry.id]),detached=detachedConsoles.get(windowKey);
   if(detached&&!detached.closed){detached.focus();return;}
@@ -177,20 +196,8 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
       const url=new URL(location.pathname,location.origin);url.hash='console='+encodeURIComponent(JSON.stringify({id:connection.entry.id,name:chatLabel(connection.entry),device:deviceId}));
       const child=window.open(url,'oaclis-console-'+deviceId+'-'+connection.entry.id,'popup=yes,width='+Math.min(window.screen.availWidth,Math.max(480,panel.offsetWidth+16))+',height='+Math.min(window.screen.availHeight,Math.max(400,panel.offsetHeight+16)));
       if(!child){notice(OaclisSettings.text('Consenti l’apertura della finestra nel browser.'));return;}
-      let draft=panel.consoleDraft(),returnConnection=connection;
-      const receive=event=>{
-        if(event.origin!==location.origin||event.source!==child||event.data?.device_id!==deviceId)return;
-        if(event.data.kind==='oaclis-console-ready'&&event.data.chat_id===returnConnection.entry.id)child.postMessage({kind:'oaclis-console-draft',chat_id:returnConnection.entry.id,device_id:deviceId,draft},location.origin);
-        if(event.data.kind==='oaclis-console-draft'&&event.data.active&&typeof event.data.entry?.id==='string'&&/^[\w-]{1,160}$/.test(event.data.entry.id)){draft=event.data.draft;returnConnection={entry:event.data.entry};}
-      };
       try{localStorage.setItem('oaclis-console-mode:'+windowKey,'window');}catch{}
-      window.addEventListener('message',receive);detachedConsoles.set(windowKey,child);child.focus();closeChatTerminal(panel);
-      const watch=setInterval(()=>{
-        if(!child.closed)return;
-        clearInterval(watch);window.removeEventListener('message',receive);detachedConsoles.delete(windowKey);
-        openChatTerminal(returnConnection,anchor?.isConnected?anchor:document.querySelector('#add-device'),deviceId,true);
-        [...document.querySelectorAll('.chat-terminal')].find(p=>p.dataset.chatId===returnConnection.entry.id&&p.dataset.deviceId===deviceId)?.restoreDraft(draft);
-      },500);
+      trackConsoleWindow(child,connection,anchor,deviceId,panel.consoleDraft());child.focus();closeChatTerminal(panel);
     };
     panel.querySelector('.popover-close').before(detach);
   }
@@ -308,6 +315,7 @@ window.addEventListener('pagehide',()=>document.querySelectorAll('.chat-terminal
 
 window.addEventListener('message',event=>{
   const value=event.data;
-  if(document.documentElement.dataset.consoleWindow||event.origin!==location.origin||!event.source||event.source===window||[...detachedConsoles.values()].includes(event.source)||value?.kind!=='oaclis-console-draft'||!value.returning||!value.active||typeof value.entry?.id!=='string'||!/^[\w-]{1,160}$/.test(value.entry.id)||typeof value.device_id!=='string'||!/^[\w-]{1,160}$/.test(value.device_id))return;
-  setTimeout(()=>{if(!event.source.closed)return;const entry={id:value.entry.id,name:typeof value.entry.name==='string'?value.entry.name.slice(0,160):'Chat'};openChatTerminal({entry},document.querySelector('#add-device'),value.device_id,true);[...document.querySelectorAll('.chat-terminal')].find(panel=>panel.dataset.chatId===entry.id&&panel.dataset.deviceId===value.device_id)?.restoreDraft(value.draft);},500);
+  if(document.documentElement.dataset.consoleWindow||event.origin!==location.origin||!event.source||event.source===window||returnedConsoleWindows.has(event.source)||[...detachedConsoles.values()].includes(event.source)||value?.kind!=='oaclis-console-draft'||!value.active||typeof value.entry?.id!=='string'||!/^[\w-]{1,160}$/.test(value.entry.id)||typeof value.device_id!=='string'||!/^[\w-]{1,160}$/.test(value.device_id))return;
+  const entry={id:value.entry.id,name:typeof value.entry.name==='string'?value.entry.name.slice(0,160):'Chat'};
+  trackConsoleWindow(event.source,{entry},document.querySelector('#add-device'),value.device_id,value.draft);
 });

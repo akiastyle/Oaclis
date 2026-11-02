@@ -1,4 +1,4 @@
-// voice.js v1.38.651
+// voice.js v1.38.654
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -49,6 +49,7 @@ window.OaclisVoice=(()=>{
   const feedback=text=>{if(status)status.textContent=locale.text(text);};
   const paint=()=>{
    if(!button)return;
+   if(button.disabled){button.dataset.mode='off';button.setAttribute('aria-pressed','false');button.title=locale.text('Voce non disponibile in questo browser.');button.setAttribute('aria-label',button.title);return;}
    const mode=!wanted?'off':paused?'paused':state==='listening'&&!blocked()?'listening':'busy';
    button.dataset.state=state;button.dataset.mode=mode;button.setAttribute('aria-pressed',String(wanted));
    button.title=locale.text(({off:'Attiva voce',paused:'Dettatura in pausa · riprendi',listening:'Dettatura attiva · clic per spegnere',busy:'Collegamento o elaborazione vocale · clic per spegnere'})[mode]);
@@ -226,7 +227,7 @@ window.OaclisVoice=(()=>{
   function focus(event){
    if(valid(event.target)&&target!==event.target){
     cancelAutoSend();target=event.target;revision++;clearPending();
-    if(recognition){invalidate();if(wanted&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},0);}
+    if(recognition){invalidate();if(wanted&&!blocked()&&!button.disabled)retryTimer=setTimeout(()=>{retryTimer=null;start();},0);}
    }
   }
   function input(event){

@@ -1,4 +1,4 @@
-// app.js v4.166.3144
+// app.js v4.166.3145
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -445,6 +445,7 @@ guard(async () => {
     if(sourceId!=='master')api('catalog',{device_id:sourceId}).then(result=>{visibleChats=result.chats||[entry];}).catch(()=>{});
     return;
   }
+  consoleChannel?.postMessage('discover');
   updatePowerMenu();
   chatLinks = data.links || [];
   const oldPositions = positions;
