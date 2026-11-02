@@ -1,4 +1,4 @@
-// catalog.rs v2.35.1616
+// catalog.rs v2.35.1620
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -191,7 +191,7 @@ impl NativeClient {
             }
         });
         let mut client = Self { child, input, replies, next: 0 };
-        client.request("initialize", json!({"clientInfo":{"name":"oaclis","version":env!("OACLIS_APP_VERSION")}}))?;
+        client.request("initialize", json!({"clientInfo":{"name":"oaclis","version":env!("OACLIS_APP_VERSION")},"capabilities":{"experimentalApi":true}}))?;
         use std::io::Write;
         client.input.write_all(b"{\"method\":\"initialized\",\"params\":{}}\n")?;
         Ok(client)
@@ -251,7 +251,7 @@ pub(crate) fn create(home:&Path,root:&Path,cwd:&Path,name:&str,model:&str)->io::
         let models=available["data"].as_array().ok_or_else(||crate::invalid("Elenco modelli non disponibile"))?;
         let selected=if model.is_empty(){config["config"]["model"].as_str().or_else(||models.iter().find(|m|m["isDefault"]==true).and_then(|m|m["model"].as_str())).ok_or_else(||crate::invalid("Scegli il modello per la nuova chat"))?}else{model};
         if !models.iter().any(|m|m["model"]==selected){return Err(crate::invalid("Modello non disponibile in Codex"));}
-        let result=client.request("thread/start",json!({"cwd":cwd,"model":selected,"ephemeral":false,"persistExtendedHistory":true}))?;
+        let result=client.request("thread/start",json!({"cwd":cwd,"model":selected,"ephemeral":false,"historyMode":"legacy","persistExtendedHistory":true}))?;
         let thread=&result["thread"];let id=thread["id"].as_str().filter(|id|id.len()==36&&crate::devices::identifier(id)).ok_or_else(||crate::invalid("Identificativo nuova chat non valido"))?;
         client.request("thread/name/set",json!({"threadId":id,"name":name}))?;
         Ok(json!({"id":id,"name":name,"path":thread["path"],"cwd":cwd,"model":selected}))
