@@ -1,4 +1,4 @@
-// state_store.rs v2.38.1373
+// state_store.rs v2.38.1383
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -680,7 +680,11 @@ pub fn database(
             if let Some(saved) = cache.as_ref().filter(|saved|Arc::ptr_eq(&saved.state,&state) && saved.mapping == mapping) {
                 return Ok(saved.value.clone());
             }
-            let value = read_operation(config, &state, key, operation)?;
+            let mut value = read_operation(config, &state, key, operation)?;
+            use sha2::{Digest,Sha256};
+            for field in ["analyses","app_checks","transfers","preparations"] {
+                value["revisions"][field]=json!(Sha256::digest(serde_json::to_vec(&value[field])?).iter().map(|byte|format!("{byte:02x}")).collect::<String>());
+            }
             *cache = Some(StatusCache { state, mapping, value: value.clone() });
             return Ok(value);
         }
@@ -732,6 +736,10 @@ mod optimization_tests {
         let after=database(&root,"","status-read",None).unwrap();
         assert_eq!(after["preferences"]["chat"]["console_access"],"full");
         assert!(!Arc::ptr_eq(&store(&root).unwrap().status.lock().unwrap().as_ref().unwrap().state,&first));
+        change(&root,|state|{Arc::make_mut(&mut state.analysis).insert("fixture".into(),json!({"status":"ready"}));Ok(())}).unwrap();
+        let changed=database(&root,"","status-read",None).unwrap();
+        assert_ne!(changed["revisions"]["analyses"],before["revisions"]["analyses"]);
+        assert_eq!(changed["revisions"]["transfers"],before["revisions"]["transfers"]);
         std::fs::write(root.join("pairing.json"),"invalid mapping").unwrap();
         assert!(database(&root,"","status-read",None).is_err());
         std::fs::remove_dir_all(root).unwrap();

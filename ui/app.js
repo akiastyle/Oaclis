@@ -1,4 +1,4 @@
-// app.js v4.166.3148
+// app.js v4.166.3184
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -31,6 +31,7 @@ let data = {
   linkPositions = {},
   linkPositionSaving = false,
   catalogRequest = 0,
+  catalogLoading = 0,
   noticeTimer;
 try {
   positions = JSON.parse(localStorage.getItem("oaclis-map") || "{}");
@@ -270,6 +271,7 @@ async function loadChats() {
     return;
   }
   $("#library-list").innerHTML = OaclisSettings.html('<p class="muted">Caricamento…</p>');
+  catalogLoading++;lastCatalog=Date.now();
   try {
     const result = await api("catalog", { device_id: id });
     if (request !== catalogRequest || sourceId !== id) return;
@@ -282,7 +284,7 @@ async function loadChats() {
     $("#library-list").innerHTML =
       '<p class="muted">' + esc(e.message) + "</p>";
     throw e;
-  }
+  } finally { catalogLoading--; }
 }
 $("#refresh").onclick = guard(loadChats);
 $("#search").oninput = renderLibrary;
@@ -381,28 +383,27 @@ async function poll() {
     if (connection) updateBadgeMotion(marker, connection);
   }
 }
-let polling = false;
-let lastPoll = 0;
+let polling = false, runtimeTimer;
 async function pollStatus() {
-  const transferring = data.job?.status === "running" || document.querySelector('.link-badge[data-motion-phase="transferring"]');
-  if (document.hidden || polling || Date.now() - lastPoll < (transferring ? 500 : 2000)) return;
-  lastPoll = Date.now();
-  polling = true;
-  try {
-    await poll();
-  } catch (e) {
-    notice(e.message);
-  } finally {
+  clearTimeout(runtimeTimer);
+  if (document.hidden || polling) return;
+  polling = true;const started=Date.now();
+  refreshCatalog();
+  try { await poll(); }
+  catch (e) { notice(e.message); }
+  finally {
     polling = false;
+    const transferring=data.job?.status==='running'||document.querySelector('.link-badge[data-motion-phase="transferring"]');
+    if(!document.hidden)runtimeTimer=setTimeout(pollStatus,Math.max(0,(transferring?500:2000)-(Date.now()-started)));
   }
 }
-if(!consoleWindow)setInterval(pollStatus, 500);
+if(!consoleWindow)runtimeTimer=setTimeout(pollStatus,500);
 
-let refreshing = false;
+let refreshing = false, lastCatalog=0;
 async function refreshCatalog() {
-  if (document.hidden || refreshing || !sourceId || $("#panel").hidden || drag || catalogFailures.has(sourceId) ||
+  if (document.hidden || refreshing || catalogLoading || Date.now()-lastCatalog<10000 || !sourceId || $("#panel").hidden || drag || catalogFailures.has(sourceId) ||
       (sourceId !== "master" && data.connections[sourceId] !== "online")) return;
-  refreshing = true;
+  refreshing = true;lastCatalog=Date.now();
   const id = sourceId,
     version = catalogRequest;
   try {
@@ -431,8 +432,7 @@ async function refreshCatalog() {
     refreshing = false;
   }
 }
-if(!consoleWindow)setInterval(refreshCatalog, 10000);
-if(!consoleWindow)document.addEventListener('visibilitychange',()=>{if(!document.hidden){lastPoll=0;pollStatus();refreshCatalog();}});
+if(!consoleWindow)document.addEventListener('visibilitychange',()=>{clearTimeout(runtimeTimer);if(!document.hidden){lastCatalog=0;pollStatus();}});
 window.onresize = () => {
   if(consoleWindow)return;
   renderMap();

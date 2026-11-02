@@ -1,4 +1,4 @@
-// jobs.js v1.20.136
+// jobs.js v1.20.146
 'use strict';
 window.OaclisJobs=(()=>{
  const text=value=>OaclisSettings.text(value);
@@ -19,7 +19,7 @@ window.OaclisJobs=(()=>{
  function indicator(){
   const button=document.createElement('button');button.type='button';button.className='job-progress';button.setAttribute('aria-expanded','false');
   const detail=document.createElement('div');detail.className='job-text';detail.id='job-'+crypto.randomUUID();detail.setAttribute('popover','manual');detail.setAttribute('role','tooltip');button.setAttribute('aria-controls',detail.id);document.body.append(detail);
-  let timer,doneTimer,doneEvent=null,disposed=false;
+  let timer,doneTimer,doneEvent=null,disposed=false,lastUpdate;
   function hide(){clearTimeout(timer);if(detail.matches(':popover-open'))detail.hidePopover();button.setAttribute('aria-expanded','false');}
   function show(){
    clearTimeout(timer);if(!detail.textContent)return;
@@ -35,6 +35,8 @@ window.OaclisJobs=(()=>{
    const parent=button.parentElement;if(parent?.classList.contains('jobs-inline')&&[...parent.children].every(item=>item.hidden))parent.hidden=true;
   }
   return {button,show,update(job){
+   const fingerprint=JSON.stringify([job.id,job.chat_id,job.device_id,job.progress,job.text,job.updated_at,job.stale]);
+   if(lastUpdate===fingerprint&&button.dataset.stale===String(job.stale===true))return !button.hidden;lastUpdate=fingerprint;
    if(job.progress===100){
     const event=JSON.stringify([job.device_id,job.chat_id,job.id,job.updated_at]);
     if(doneEvent!==event){doneEvent=event;clearTimeout(doneTimer);completed(job).then(until=>{if(disposed||doneEvent!==event)return;const remaining=until-Date.now();if(remaining<=0){dismiss();return;}button.hidden=false;const row=button.closest('.job-row');if(row)row.hidden=false;const parent=button.parentElement;if(parent?.classList.contains('jobs-inline'))parent.hidden=false;button.classList.add('job-complete');doneTimer=setTimeout(dismiss,remaining);});}
@@ -57,7 +59,7 @@ window.OaclisJobs=(()=>{
   const rows=new Map(),message=document.createElement('small');message.className='jobs-message';message.setAttribute('role','status');root.append(message);
   const endpoint=document.createElement('footer');endpoint.className='jobs-endpoint';
   const url=document.createElement('code'),command=document.createElement('code');url.textContent='http://127.0.0.1:23232/api/jobs/status';command.textContent="curl --max-time 2 -X POST "+url.textContent+" -H 'Content-Type: application/json' -d '{}'";endpoint.append(url,command);root.append(endpoint);
-  let stopped=false,timer,controller;
+  let stopped=false,timer,controller,loading=false;
   function render(jobs){
    const seen=new Set();
    for(const job of jobs){
@@ -77,12 +79,12 @@ window.OaclisJobs=(()=>{
    message.textContent=[...rows.values()].some(entry=>!entry.item.hidden)?'':text('Nessun dato disponibile');
   }
   async function poll(){
-   clearTimeout(timer);if(stopped||document.hidden)return;controller=new AbortController();
+   clearTimeout(timer);if(stopped||document.hidden||loading)return;loading=true;controller=new AbortController();
    try{
     const response=await fetch('/api/jobs/list',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}',cache:'no-store',signal:controller.signal});
     if(!response.ok)throw Error('unavailable');const reply=await response.json();if(!stopped)render(reply.jobs);
    }catch(error){if(!stopped&&error.name!=='AbortError'){message.textContent=text('Monitor temporaneamente non disponibile');for(const entry of rows.values())entry.progress.button.dataset.stale='true';}}
-   finally{controller=null;if(!stopped&&!document.hidden)timer=setTimeout(poll,2000);}
+   finally{const delay=controller?.signal.aborted?0:2000;controller=null;loading=false;if(!stopped&&!document.hidden)timer=setTimeout(poll,delay);}
   }
   function visibility(){if(document.hidden){clearTimeout(timer);controller?.abort();}else poll();}
   document.addEventListener('visibilitychange',visibility);poll();

@@ -1,4 +1,4 @@
-// app.js v1.93.999
+// app.js v2.94.1016
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -172,11 +172,11 @@ async function openConsole(chat,adjacent=false){
   const pane=request.pane;if(pane.closed)return true;
   if(request.operation==='input'&&typeof request.text==='string'&&(drafts.get(pane.chat.id)||'')===request.text){saveDraft(pane.chat.id,'');if(pane===active&&text.value===request.text)text.value='';}
   if(request.image&&imageDrafts.get(pane.chat.id)===request.image){imageDrafts.delete(pane.chat.id);if(pane===active)paintAttachment();}
-  pane.reconnecting=false;pane.name.textContent=pane.chat.name;pane.jobsStatus.update(result.jobs);
+  pane.reconnecting=false;if(pane.name.textContent!==pane.chat.name)pane.name.textContent=pane.chat.name;pane.jobsStatus.update(result.jobs);
   if(request.operation==='open'||request.operation==='input')pane.follow=true;
   const top=pane.saved?.top??pane.screen.scrollTop,left=pane.saved?.left??pane.screen.scrollLeft;
   const savedFollow=pane.saved?.follow;if(request.operation==='open'&&savedFollow===false)pane.follow=false;
-  OaclisTerminal.render(pane.screen,OaclisTerminal.consoleScreen(result.screen),result.screen_ansi);pane.saved=null;
+  OaclisTerminal.renderConsole(pane.screen,result.screen,result.screen_ansi);pane.saved=null;
   if(pane===active&&request.reader===reader){if(request.operation==='input'&&typeof request.text==='string')reader.defer(2000);reader.update(result.speech,request.speechGeneration);}
   if(pane.follow)pane.screen.scrollTop=pane.screen.scrollHeight;else{pane.screen.scrollTop=top;pane.screen.scrollLeft=left;}
   pane.ready=true;
@@ -204,17 +204,18 @@ async function openConsole(chat,adjacent=false){
    finally{if(reading===controller)reading=null;}
   });queue=task.catch(()=>false);return task;
  }
+ function schedulePoll(delay=200){clearTimeout(pollTimer);if(!closed&&!document.hidden)pollTimer=setTimeout(poll,delay);}
  async function poll(){
   if(closed||polling)return;polling=true;
   try{if(!document.hidden&&!inputBusy){for(const pane of [active,...panes.filter(pane=>pane!==active)]){if(closed||inputBusy)break;if(pane&&!pane.closed)await send(pane,pane.ready?'read':'open');}}}
-  finally{polling=false;if(!closed&&!document.hidden){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
+  finally{polling=false;schedulePoll();}
  }
  async function submit(pane=active,key='Enter'){
   if(inputBusy||closed||!pane?.ready||pane.preparingImage)return false;
   inputBusy=true;clearTimeout(pollTimer);reading?.abort();
   const value=pane===active?text.value:drafts.get(pane.chat.id)||'';saveDraft(pane.chat.id,value);
   try{return await send(pane,'input',key==='Enter'?{text:value,key,...(imageDrafts.has(pane.chat.id)?{image:imageDrafts.get(pane.chat.id)}:{})}:{key});}
-  finally{inputBusy=false;if(!closed){voice.resume();clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
+  finally{inputBusy=false;if(!closed)voice.resume();schedulePoll();}
  }
  function paintAttachment(){
   const image=imageDrafts.get(active?.chat.id);preview.hidden=!image;
@@ -246,7 +247,7 @@ async function openConsole(chat,adjacent=false){
   const existing=panes.find(pane=>pane.chat.id===selected.id);if(existing){activate(existing);return true;}
   const replaced=beside?panes.find(pane=>pane!==active):active,index=replaced?panes.indexOf(replaced):panes.length;
   if(replaced){if(replaced===active){saveDraft(replaced.chat.id,text.value);reader?.destroy();reader=null;active=null;}remove(replaced);}
-  const pane=add(selected,index);activate(pane);clearTimeout(pollTimer);const ok=await send(pane,'open');if(!closed&&!document.hidden){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}return ok;
+  const pane=add(selected,index);activate(pane);clearTimeout(pollTimer);const ok=await send(pane,'open');schedulePoll();return ok;
  }
  function toggleSplit(){
   if(panes.length===2){remove(panes.find(pane=>pane!==active));layout();bindVoice(active.chat);return;}
@@ -257,12 +258,12 @@ async function openConsole(chat,adjacent=false){
   if(inputBusy||!active?.ready)throw Error(OaclisSettings.text('Attendi il completamento della richiesta.'));
   inputBusy=true;clearTimeout(pollTimer);reading?.abort();
   try{return await send(active,operation);}
-  finally{inputBusy=false;if(!closed&&!document.hidden){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
+  finally{inputBusy=false;schedulePoll();}
  },create:async(text,icon,model,engine)=>{
   if(inputBusy||!active?.ready)return false;
   inputBusy=true;clearTimeout(pollTimer);reading?.abort();
   try{return await send(active,'create',{text,icon,model,engine,key:''});}
-  finally{inputBusy=false;if(!closed&&!document.hidden){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
+  finally{inputBusy=false;schedulePoll();}
  },split:()=>panes.length===2,selectPane:position=>activate(panes[['sotto','bottom'].includes(OaclisVoice.normalize(position))?1:0]),list:()=>picker.open?authorizedChats:visibleChatList};
  closeConsole=()=>{if(closed)return;closeSendMenu();closeImageInput();reading?.abort();if(active)saveDraft(active.chat.id,text.value);reader?.destroy();for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleActions=null;consoleWorkspace=null;closeConsole=null;};
  text.addEventListener('input',()=>{if(active)saveDraft(active.chat.id,text.value);});form.onsubmit=async event=>{event.preventDefault();await submit();};text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
@@ -272,7 +273,7 @@ async function openConsole(chat,adjacent=false){
  const info=document.createElement('button');info.type='button';info.className='secondary';info.title=OaclisSettings.text('Comandi vocali');info.setAttribute('aria-label',info.title);info.innerHTML=OaclisIcon('info');info.onclick=()=>voice.showHelp();keys.append(info);
  split.onclick=event=>{event.stopPropagation();toggleSplit();};
  const resume=()=>{if(closed)return;clearTimeout(pollTimer);if(document.hidden)reading?.abort();else{keepConsoleAwake();poll();}};document.addEventListener('visibilitychange',resume);
- const pane=add(chat);activate(pane);keepConsoleAwake();const ready=await send(pane,'open');if(!closed)pollTimer=setTimeout(poll,ready?200:1000);
+ const pane=add(chat);activate(pane);keepConsoleAwake();const ready=await send(pane,'open');schedulePoll(ready?200:1000);
 }
 async function protectedView(){
  voice.pause();

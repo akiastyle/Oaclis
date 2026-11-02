@@ -1,4 +1,4 @@
-// automation.rs v1.16.528
+// automation.rs v1.16.536
 //! Compare links periodically; transfers always require explicit Play.
 use crate::{devices, environment, link_flow, peers, transfer_job};
 use serde_json::{Value, json};
@@ -143,14 +143,12 @@ mod tests {
         fs::create_dir(&path).unwrap();
         fs::write(path.join("devices.json"),json!([{"id":"peer","name":"Peer","ssh_alias":"alias"}]).to_string()).unwrap();
         fs::write(path.join("pairing.json"),json!({"approved":{"stable":{"device_id":"peer"}}}).to_string()).unwrap();
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
-        fs::write(path.join("shared-status.json"),json!({"runtime":{"peer":{"available":true,"received_at":now}}}).to_string()).unwrap();
+        crate::shared_settings::publish_runtime(&path,"peer",Ok(json!({"available":true}))).unwrap();
         assert_eq!(connection_states(&path,&json!({})).unwrap()["peer"],"online");
-        fs::write(path.join("shared-status.json"),json!({"runtime":{"peer":{"available":false,"received_at":now}}}).to_string()).unwrap();
+        crate::shared_settings::publish_runtime(&path,"peer",Ok(json!({"available":false}))).unwrap();
         let lan=json!({"peers":[{"device_id":"peer","connected":true}]});
         assert_eq!(connection_states(&path,&lan).unwrap()["peer"],"offline");
-        fs::write(path.join("shared-status.json"),json!({"runtime":{"peer":{"available":true,"received_at":0}}}).to_string()).unwrap();
-        assert_eq!(connection_states(&path,&json!({})).unwrap()["peer"],"offline");
+        crate::shared_settings::publish_runtime(&path,"peer",Ok(json!({"available":true}))).unwrap();
         assert_eq!(connection_states(&path,&lan).unwrap()["peer"],"online");
         fs::remove_dir_all(path).unwrap();
     }

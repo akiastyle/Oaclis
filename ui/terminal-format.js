@@ -1,4 +1,4 @@
-// terminal-format.js v1.20.161
+// terminal-format.js v1.21.167
 "use strict";
 const OaclisTerminal = (() => {
   const palette=['#000000','#cd3131','#0dbc79','#e5e510','#2472c8','#bc3fbc','#11a8cd','#e5e5e5','#666666','#f14c4c','#23d18b','#f5f543','#3b8eea','#d670d6','#29b8db','#ffffff'];
@@ -81,6 +81,10 @@ const OaclisTerminal = (() => {
     while(element.childNodes.length>chunks.length)element.lastChild.remove();
     element.terminalText=text;element.terminalAnsi=ansi;
   }
+  function renderConsole(element,screen,ansi){
+    if(element.consoleSource===screen&&element.consoleSourceAnsi===ansi&&element.textContent===element.terminalText)return false;
+    render(element,consoleScreen(screen),ansi);element.consoleSource=screen;element.consoleSourceAnsi=ansi;return true;
+  }
 function consoleScreen(value){
  const lines=String(value??'').split('\n');
  let last=lines.findLastIndex(line=>line.trim());
@@ -154,5 +158,5 @@ function consoleScreen(value){
  sendButton.onkeydown=event=>{if(event.key==='ArrowDown'||event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();showSendMenu();}};
  return Object.assign(()=>{document.removeEventListener('pointerdown',dismissSendMenu);document.removeEventListener('keydown',dismissSendMenu);cancelHold();sendMenu.remove();},{show:showSendMenu});
   }
-  return {render,parse,consoleScreen,imageData,attachImages,attachSendMenu};
+  return {render,renderConsole,parse,consoleScreen,imageData,attachImages,attachSendMenu};
 })();

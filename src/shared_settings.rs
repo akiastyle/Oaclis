@@ -1,4 +1,4 @@
-// shared_settings.rs v1.12.534
+// shared_settings.rs v1.12.611
 //! Native settings replication over existing, mutually approved SSH connections.
 use crate::{
     invalid, shared_records as records,
@@ -9,7 +9,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     io,
     path::{Path, PathBuf},
-    sync::{mpsc, Arc},
+    sync::{mpsc, Arc, Mutex, OnceLock},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
@@ -69,48 +69,22 @@ pub fn start(home: PathBuf) {
         }
     });
 }
-// Expire each peer separately; a response from one peer cannot refresh another.
-pub(crate) fn runtime(config: &Path) -> io::Result<Value> {
-    let mut runtime = read_json(&config.join("shared-status.json"), json!({}))?["runtime"].clone();
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
-    if let Some(states) = runtime.as_object_mut() {
-        states.retain(|_, status| {
-            status["received_at"]
-                .as_u64()
-                .is_some_and(|time| now.saturating_sub(time) < 30_000)
-        });
-    } else {
-        runtime = json!({});
-    }
-    Ok(runtime)
+// Runtime telemetry is volatile; each peer keeps its own 30-second freshness.
+static RUNTIME:OnceLock<Mutex<BTreeMap<PathBuf,Value>>>=OnceLock::new();
+pub(crate) fn runtime(config:&Path)->io::Result<Value> {
+    let mut cache=RUNTIME.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Stato device non disponibile"))?;
+    let states=cache.entry(config.into()).or_insert_with(||json!({}));
+    let now=SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+    states.as_object_mut().unwrap().retain(|_,status|status["received_at"].as_u64().is_some_and(|time|now.saturating_sub(time)<30_000));
+    Ok(states.clone())
 }
-fn publish_runtime(config: &Path, device: &str, result: io::Result<Value>) -> io::Result<()> {
-    let mut status = read_json(
-        &config.join("shared-status.json"),
-        json!({"errors":{},"runtime":{}}),
-    )?;
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64;
-    let mut value = match result {
-        Ok(value) => {
-            status["errors"]
-                .as_object_mut()
-                .map(|errors| errors.remove(device));
-            value
-        }
-        Err(error) => {
-            status["errors"][device] = json!(error.to_string());
-            json!({"available":false,"error":error.to_string(),"observed_at":now})
-        }
-    };
-    value["received_at"] = json!(now);
-    status["runtime"][device] = value;
-    save_changed(&config.join("shared-status.json"), &status)
+pub(crate) fn publish_runtime(config:&Path,device:&str,result:io::Result<Value>)->io::Result<()> {
+    let now=SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+    let mut value=result.unwrap_or_else(|error|json!({"available":false,"error":error.to_string(),"observed_at":now}));
+    value["received_at"]=json!(now);
+    let mut cache=RUNTIME.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Stato device non disponibile"))?;
+    cache.entry(config.into()).or_insert_with(||json!({}))[device]=value;
+    Ok(())
 }
 pub fn read_positions(config: &Path, file: &str) -> io::Result<Value> {
     read_json(&config.join(file), json!({}))
@@ -308,25 +282,18 @@ mod tests {
             Ok(json!({"available":true,"active":false,"observed_at":1})),
         )
         .unwrap();
-        let first =
-            read_json(&path.join("shared-status.json"), Value::Null).unwrap()["runtime"]["fast"]
-                .clone();
+        let first=runtime(&path).unwrap()["fast"].clone();
         publish_runtime(&path, "slow", Err(io::Error::other("timeout"))).unwrap();
-        let saved = read_json(&path.join("shared-status.json"), Value::Null).unwrap();
-        assert_eq!(saved["runtime"]["fast"], first);
+        let saved=runtime(&path).unwrap();
+        assert_eq!(saved["fast"],first);
+        assert!(!path.join("shared-status.json").exists());
         assert_eq!(runtime(&path).unwrap()["fast"]["available"], true);
         assert_eq!(runtime(&path).unwrap()["slow"]["available"], false);
-        let mut saved = saved;
-        saved["runtime"]["slow"]["received_at"] = json!(0);
-        save_changed(&path.join("shared-status.json"), &saved).unwrap();
+        RUNTIME.get().unwrap().lock().unwrap().get_mut(&path).unwrap()["slow"]["received_at"]=json!(0);
         publish_runtime(&path, "fast", Ok(json!({"available":true,"active":true}))).unwrap();
         assert!(runtime(&path).unwrap().get("slow").is_none());
         publish_runtime(&path, "slow", Ok(json!({"available":true,"active":false}))).unwrap();
-        assert!(
-            read_json(&path.join("shared-status.json"), Value::Null).unwrap()["errors"]
-                .get("slow")
-                .is_none()
-        );
+        assert!(runtime(&path).unwrap()["slow"].get("error").is_none());
         assert_eq!(runtime(&path).unwrap()["slow"]["available"], true);
         std::fs::remove_dir_all(path).unwrap();
     }
