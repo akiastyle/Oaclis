@@ -1,4 +1,4 @@
-// map.js v4.122.3149
+// map.js v4.123.3226
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -63,25 +63,6 @@ function positionConnectionPorts() {
     const rect = node.getBoundingClientRect(), cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
     const peers = [...document.querySelectorAll('.map-node')].filter(other => other !== node);
     if (!peers.length) continue;
-    const linked = new Set(chatLinks.filter(value => value.source === node.dataset.id || value.target === node.dataset.id)
-      .map(value => value.source === node.dataset.id ? value.target : value.source));
-    const nearest = peers.slice().sort((a, b) => {
-      const ar = a.getBoundingClientRect(), br = b.getBoundingClientRect();
-      return Math.hypot(ar.left + ar.width / 2 - cx, ar.top + ar.height / 2 - cy) - Math.hypot(br.left + br.width / 2 - cx, br.top + br.height / 2 - cy);
-    });
-    const targets = peers.filter(other => linked.has(other.dataset.id));
-    if (!targets.length) targets.push(nearest[0]);
-    let tx = 0, ty = 0;
-    for (const peer of targets) {
-      const r = peer.getBoundingClientRect(), dx = r.left + r.width / 2 - cx, dy = r.top + r.height / 2 - cy;
-      const distance = Math.max(1, Math.hypot(dx, dy));
-      tx += dx / distance; ty += dy / distance;
-    }
-    if (Math.hypot(tx, ty) < 0.01) {
-      const r = nearest[0].getBoundingClientRect(); tx = r.left + r.width / 2 - cx; ty = r.top + r.height / 2 - cy;
-    }
-    const scale = Math.max(rect.width, rect.height) * 2 / Math.max(0.01, Math.hypot(tx, ty));
-    tx *= scale; ty *= scale;
     const size = rect.width + ':' + rect.height;
     let orbit = node.portOrbit;
     if (!orbit || orbit.size !== size) {
@@ -94,25 +75,46 @@ function positionConnectionPorts() {
     }
     const wrap = value => (value % orbit.length + orbit.length) % orbit.length;
     const delta = (a, b) => wrap(a - b + orbit.length / 2) - orbit.length / 2;
-    let ideal = 0, best = Infinity;
-    for (let index = 0; index < 128; index++) {
-      const a = orbit.samples[index], b = orbit.samples[index + 1], dx = b.x - a.x, dy = b.y - a.y;
-      const t = Math.max(0, Math.min(1, ((tx - a.x) * dx + (ty - a.y) * dy) / (dx * dx + dy * dy)));
-      const distance = (a.x + dx * t - tx) ** 2 + (a.y + dy * t - ty) ** 2;
-      if (distance < best) { best = distance; ideal = (index + t) * orbit.length / 128; }
-    }
-    if (orbit.phase === undefined) orbit.phase = orbit.target = ideal;
-    if (Math.abs(delta(ideal, orbit.target)) > 7) orbit.target = ideal;
-    const remaining = delta(orbit.target, orbit.phase);
-    if (reduced || Math.abs(remaining) <= 0.1) orbit.phase = orbit.target;
-    else { orbit.phase = wrap(orbit.phase + remaining * (1 - Math.exp(-Math.min(40, Math.max(1, now - orbit.time)) / 85))); moving = true; }
-    orbit.time = now;
-    const reverse = tx < 0 ? -1 : 1;
+    const reserved=[],drawn=[];
+    orbit.ports??={};
+    const elapsed=1-Math.exp(-Math.min(40,Math.max(1,now-orbit.time))/85);
     for (const [index, operation] of ['sync', 'send', 'receive', 'console'].entries()) {
-      const port = node.querySelector('.connection-port.' + operation);
-      if (!port) continue;
-      const position = orbit.phase + (index - 1.5) * 44 * reverse;
-      const point = orbit.path.getPointAtLength(wrap(position));
+      const port=node.querySelector('.connection-port.'+operation);
+      if(!port)continue;
+      const linked=new Set(chatLinks.filter(value=>operation==='console'?value.operation==='console'&&(value.source===node.dataset.id||value.target===node.dataset.id):operation==='sync'?value.operation==='sync'&&(value.source===node.dataset.id||value.target===node.dataset.id):value.operation!=='sync'&&value.operation!=='console'&&(operation==='send'?value.source===node.dataset.id:value.target===node.dataset.id)).map(value=>value.source===node.dataset.id?value.target:value.source));
+      if(operation==='console'&&node.dataset.id==='master')for(const phone of data.mobile_devices||[])linked.add(phone.id);
+      const targets=peers.filter(peer=>linked.has(peer.dataset.id)).map(peer=>{const r=peer.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};});
+      let ideal=index*orbit.length/4;
+      if(targets.length){
+        let best=Infinity;
+        for(let sample=0;sample<128;sample++){
+          const point=orbit.samples[sample];
+          const distance=targets.reduce((sum,peer)=>sum+Math.hypot(cx+point.x-peer.x,cy+point.y-peer.y),0);
+          if(distance<best){best=distance;ideal=sample*orbit.length/128;}
+        }
+      }
+      const width=port.offsetWidth,height=port.offsetHeight;
+      const fits=(point,occupied)=>occupied.every(other=>Math.abs(point.x-other.x)>=(width+other.width)/2+6||Math.abs(point.y-other.y)>=(height+other.height)/2+6);
+      const candidates=orbit.samples.slice(0,128).map((point,i)=>({point,phase:i*orbit.length/128}));
+      candidates.sort((a,b)=>Math.abs(delta(a.phase,ideal))-Math.abs(delta(b.phase,ideal)));
+      const target=candidates.find(candidate=>fits(candidate.point,reserved));
+      if(!target)continue;
+      reserved.push({x:target.point.x,y:target.point.y,width,height});
+      const state=orbit.ports[operation]??={phase:target.phase,target:target.phase};
+      state.target=target.phase;
+      const remaining=delta(state.target,state.phase);
+      let position=reduced||Math.abs(remaining)<=.1?state.target:wrap(state.phase+remaining*elapsed);
+      let point=orbit.path.getPointAtLength(position);
+      if(!fits(point,drawn)){
+        candidates.sort((a,b)=>Math.abs(delta(a.phase,state.target))-Math.abs(delta(b.phase,state.target)));
+        const safe=candidates.find(candidate=>fits(candidate.point,drawn));
+        if(!safe)continue;
+        position=safe.phase;point=safe.point;
+      }
+      state.phase=position;
+      if(Math.abs(delta(state.target,position))>.1)moving=true;
+      drawn.push({x:point.x,y:point.y,width,height});
+
       const before = orbit.path.getPointAtLength(wrap(position - 0.5)), after = orbit.path.getPointAtLength(wrap(position + 0.5));
       const length = Math.hypot(after.x - before.x, after.y - before.y);
       port.portNormal = { x: (after.y - before.y) / length, y: (before.x - after.x) / length };
@@ -121,6 +123,7 @@ function positionConnectionPorts() {
       port.style.top = rect.height / 2 + point.y - node.clientTop + 'px';
       port.querySelector('svg').style.transform = `rotate(${Math.atan2(port.portNormal.y, port.portNormal.x)}rad)`;
     }
+    orbit.time=now;orbit.phase=Object.values(orbit.ports).map(port=>port.phase).join(':');
   }
   if (moving && !portMotionFrame) portMotionFrame = requestAnimationFrame(() => { portMotionFrame = 0; renderLink(true); });
 }
