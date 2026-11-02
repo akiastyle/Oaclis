@@ -1,4 +1,4 @@
-// catalog.rs v2.35.1595
+// catalog.rs v2.35.1604
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -221,10 +221,10 @@ pub(crate) fn rename(home: &Path, root: &Path, id: &str, name: &str) -> io::Resu
         return Err(crate::invalid("Nome chat non valido"));
     }
     crate::appearance::Appearance { label: name.into(), ..Default::default() }.validate()?;
-    native(home,root,|client|client.request("thread/name/set",json!({"threadId":id,"name":name})).map(|_|()))
+    native(home,root,false,|client|client.request("thread/name/set",json!({"threadId":id,"name":name})).map(|_|()))
         .map_err(|_|io::Error::other("Impossibile rinominare la chat in Codex. Riprova."))
 }
-fn native<T>(home:&Path,root:&Path,work:impl FnOnce(&mut NativeClient)->io::Result<T>)->io::Result<T> {
+fn native<T>(home:&Path,root:&Path,release:bool,work:impl FnOnce(&mut NativeClient)->io::Result<T>)->io::Result<T> {
     static CLIENT:std::sync::OnceLock<std::sync::Mutex<Option<(std::path::PathBuf,NativeClient)>>>=std::sync::OnceLock::new();
     let mut saved=CLIENT.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Codex non disponibile"))?;
     if saved.as_ref().is_some_and(|(path,_)|path!=root){*saved=None;}
@@ -237,16 +237,17 @@ fn native<T>(home:&Path,root:&Path,work:impl FnOnce(&mut NativeClient)->io::Resu
         work(&mut saved.as_mut().unwrap().1)
     })();
     if let Err(error)=&result{*saved=None;crate::state_transport::log(format!("Codex: {error}"));}
+    // The creator must release thread ownership before the terminal resumes it.
+    if release{*saved=None;}
     result
 }
 pub(crate) fn create(home:&Path,root:&Path,cwd:&Path,name:&str)->io::Result<Value> {
     if name.trim().is_empty()||name!=name.trim()||!cwd.is_absolute()||!cwd.is_dir(){return Err(crate::invalid("Nome o cartella chat non validi"));}
     crate::appearance::Appearance{label:name.into(),..Default::default()}.validate()?;
-    native(home,root,|client|{
+    native(home,root,true,|client|{
         let result=client.request("thread/start",json!({"cwd":cwd,"ephemeral":false,"persistExtendedHistory":true}))?;
         let thread=&result["thread"];let id=thread["id"].as_str().filter(|id|id.len()==36&&crate::devices::identifier(id)).ok_or_else(||crate::invalid("Identificativo nuova chat non valido"))?;
         client.request("thread/name/set",json!({"threadId":id,"name":name}))?;
-        let _=client.request("thread/unsubscribe",json!({"threadId":id}));
         Ok(json!({"id":id,"name":name,"path":thread["path"],"cwd":cwd}))
     })
 }
