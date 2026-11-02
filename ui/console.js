@@ -1,4 +1,4 @@
-// console.js v2.106.1977
+// console.js v2.106.1981
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -61,15 +61,15 @@ function openChatTerminal(connection, anchor, deviceId) {
   panel.querySelector("h2 .chat-badge").style.color=appearance(connection.entry).color||"var(--ink)";
   document.body.append(panel);
   panel.showPopover();
+  bindPanelDrag(panel, true);
   positionContext(panel, anchor);
   const count = document.querySelectorAll(".chat-terminal").length - 1;
   panel.style.left = Math.max(8, Math.min(parseFloat(panel.style.left) + count * 24, innerWidth - panel.offsetWidth - 8)) + "px";
   panel.style.top = Math.max(8, Math.min(parseFloat(panel.style.top) + count * 24, innerHeight - panel.offsetHeight - 8)) + "px";
-  bindPanelDrag(panel, true);
   panel.addEventListener("click",event=>{
     if(!panel.isConnected||event.target.closest(".console-send-menu")||panel.querySelector(".console-send-menu:popover-open"))return;
     const focus=event.target.closest("textarea,input,button,select,pre,h2")||panel.querySelector("textarea");
-    panel.hidePopover();panel.showPopover();
+    panel.dataset.raised="true";panel.hidePopover();panel.showPopover();
     focus.focus({preventScroll:true});window.OaclisLocalVoice?.activate(panel);
   },true);
   panel.querySelector(".popover-close").onclick = () => closeChatTerminal(panel);

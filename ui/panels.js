@@ -1,4 +1,4 @@
-// panels.js v3.142.2806
+// panels.js v3.142.2811
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -326,11 +326,12 @@ function bindPanelDrag(panel, reference = false) {
   panel.classList.add("draggable-panel");
   if (panel.matches(".chat-terminal, #orchestrator-log")) {
     panel.classList.add("resizable-panel");
-    panel.addEventListener("pointerdown", () => {
+    panel.addEventListener("pointerdown", event => {
       const rect = panel.getBoundingClientRect();
+      if(event.clientX<rect.right-18||event.clientY<rect.bottom-18)return;
       const width = Math.max(0, innerWidth - rect.left - 8), height = Math.max(0, innerHeight - rect.top - 8);
       panel.style.minWidth = Math.min(280, width) + "px";
-      panel.style.minHeight = Math.min(240, height) + "px";
+      panel.style.minHeight = Math.min(panel.matches(".chat-terminal")?320:240, height) + "px";
       panel.style.maxWidth = width + "px";
       panel.style.maxHeight = height + "px";
     });

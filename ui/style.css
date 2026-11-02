@@ -1,4 +1,4 @@
-/* style.css v2.0.1492 */
+/* style.css v2.0.1497 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1244,7 +1244,10 @@ select {
 }
 .chat-terminal.resizable-panel:popover-open,
 #orchestrator-log.resizable-panel:not([hidden]) { display: flex; flex-direction: column; }
-.chat-terminal.resizable-panel { height: min(740px, calc(100dvh - 16px)); }
+.chat-terminal.resizable-panel { height: min(560px, calc(100dvh - 16px)); min-height: min(320px, calc(100dvh - 16px)); gap: var(--space-8); }
+.chat-terminal.resizable-panel > h2, .chat-terminal.resizable-panel > pre, .chat-terminal.resizable-panel > .terminal-keys { margin: 0; }
+.chat-terminal.resizable-panel > .terminal-state { flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-terminal[data-raised="true"]:popover-open { animation: none; }
 #orchestrator-log.resizable-panel { height: min(480px, calc(100dvh - 96px)); }
 .resizable-panel > h2, .resizable-panel > form, .resizable-panel > .terminal-keys { flex-shrink: 0; }
 .chat-terminal.resizable-panel .terminal-screen,
