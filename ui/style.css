@@ -1,4 +1,4 @@
-/* style.css v2.0.1471 */
+/* style.css v2.0.1477 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1336,13 +1336,13 @@ select {
 .toolbar .brand { min-height: 36px; }
 .toolbar-reveal { flex-shrink: 0; overflow: hidden; width: 0; height: 36px; transition: width var(--duration-ui) var(--ease-ui), height var(--duration-ui) var(--ease-ui); }
 #toolbar-actions { width: max-content; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8); min-width: 0; min-height: 0; max-width: calc(100vw - 180px); overflow: hidden; }
-#toolbar-actions > .icon-button, #local-voice-controls .icon-button { flex-shrink: 0; opacity: 0; transform: translateX(-8px) scale(.94); transition: opacity var(--duration-ui) var(--ease-ui), transform var(--duration-ui) var(--ease-ui); }
+#toolbar-actions > .icon-button, #toolbar-actions #local-voice-controls .icon-button { flex-shrink: 0; opacity: 0; transform: translateX(-8px) scale(.94); transition: opacity var(--duration-ui) var(--ease-ui), transform var(--duration-ui) var(--ease-ui); }
 .toolbar[data-expanded="true"] .toolbar-reveal { width: var(--toolbar-width); height: var(--toolbar-height); }
-.toolbar[data-expanded="true"] #toolbar-actions > .icon-button, .toolbar[data-expanded="true"] #local-voice-controls .icon-button { opacity: 1; transform: none; transition-delay: calc(var(--toolbar-order, 0) * 24ms); }
+.toolbar[data-expanded="true"] #toolbar-actions > .icon-button, .toolbar[data-expanded="true"] #toolbar-actions #local-voice-controls .icon-button { opacity: 1; transform: none; transition-delay: calc(var(--toolbar-order, 0) * 24ms); }
 #toolbar-toggle { flex-shrink: 0; width: calc(var(--size-20) + var(--space-9) * 2); overflow: hidden; transition: width var(--duration-ui) var(--ease-ui), padding var(--duration-ui) var(--ease-ui), opacity var(--duration-ui) var(--ease-ui), transform var(--duration-ui) var(--ease-ui); }
 .toolbar[data-expanded="true"] #toolbar-toggle { width: 0; padding-inline: 0; opacity: 0; transform: rotate(65deg); pointer-events: none; }
 @media (prefers-reduced-motion: reduce) {
-  .toolbar-reveal, #toolbar-toggle, #toolbar-actions > .icon-button, #local-voice-controls .icon-button { transition: none; }
+  .toolbar-reveal, #toolbar-toggle, #toolbar-actions > .icon-button, #toolbar-actions #local-voice-controls .icon-button { transition: none; }
 }
 
 .library-row > .library-console{right:calc(var(--space-3) + 2 * (var(--size-24) + var(--space-4)))}
