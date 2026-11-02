@@ -1,4 +1,4 @@
-/* style.css v2.0.1469 */
+/* style.css v2.0.1471 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1021,7 +1021,7 @@ select {
 .terminal-input { display: flex; gap: var(--space-8); }
 .terminal-input textarea { width: 100%; box-sizing: border-box; }
 .terminal-input textarea { flex: 1; min-width: 0; background: color-mix(in srgb, var(--panel) var(--glass-opacity), transparent); color: var(--ink); border: var(--border-width) solid var(--line); border-radius: var(--radius-control); padding: var(--space-8); font: inherit; }
-.terminal-keys { display: flex; gap: var(--space-8); margin-top: var(--space-8); }
+.terminal-keys { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8); margin-top: var(--space-8); }
 
 .terminal-destinations { display: flex; flex-direction: column; gap: var(--space-8); }
 
