@@ -1,4 +1,4 @@
-// terminal.rs v1.21.385
+// terminal.rs v1.23.437
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -122,14 +122,27 @@ fn open(home: &Path, root: &Path, chat: &str, session: &str, access: &str, model
     tmux(&["set-option","-t",session,"@oaclis-access",access])?;
     Ok(())
 }
-fn session_lock(chat: &str) -> io::Result<std::sync::Arc<std::sync::Mutex<()>>> {
-    use std::sync::{Arc, Mutex, OnceLock, Weak};
-    static SESSIONS: OnceLock<Mutex<std::collections::HashMap<String, Weak<Mutex<()>>>>> = OnceLock::new();
+#[derive(Default)]
+struct ConsoleCapture {
+    screen: Option<(std::time::Instant, String, String)>,
+}
+impl ConsoleCapture {
+    fn read(&mut self, load: impl FnOnce() -> io::Result<String>) -> io::Result<(String, String)> {
+        if let Some((at, plain, ansi)) = &self.screen {
+            if at.elapsed() < Duration::from_millis(100) { return Ok((plain.clone(), ansi.clone())); }
+        }
+        let ansi = load()?;
+        let plain = sgr().replace_all(&ansi, "").into_owned();
+        self.screen = Some((std::time::Instant::now(), plain.clone(), ansi.clone()));
+        Ok((plain, ansi))
+    }
+}
+fn session_lock(chat: &str) -> io::Result<std::sync::Arc<std::sync::Mutex<ConsoleCapture>>> {
+    use std::sync::{Arc, Mutex, OnceLock};
+    static SESSIONS: OnceLock<Mutex<std::collections::HashMap<String, Arc<Mutex<ConsoleCapture>>>>> = OnceLock::new();
     let mut sessions = SESSIONS.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Console non disponibile"))?;
-    sessions.retain(|_, session| session.strong_count() > 0);
-    let session = sessions.get(chat).and_then(Weak::upgrade).unwrap_or_else(||Arc::new(Mutex::new(())));
-    sessions.insert(chat.to_owned(), Arc::downgrade(&session));
-    Ok(session)
+    sessions.retain(|_, session| Arc::strong_count(session) > 1 || session.try_lock().map(|s|s.screen.as_ref().is_some_and(|(at,_,_)|at.elapsed()<Duration::from_secs(60))).unwrap_or(true));
+    Ok(sessions.entry(chat.into()).or_default().clone())
 }
 pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let chat=validate(value)?;
@@ -154,8 +167,9 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         crate::state_store::database(&config,id,"chat-settings",Some(&json!({"value":appearance,"console_access":access,"console_model":entry["model"]})))?;
         return Ok(json!({"new_chat":{"id":id,"name":name,"icon":value["icon"].as_str().unwrap_or(""),"color":value["color"].as_str().unwrap_or(""),"console_access":access,"model":entry["model"]}}));
     }
-    let session_lock = if value["action"] == "read" { None } else { Some(session_lock(chat)?) };
-    let _guard = session_lock.as_ref().map(|lock|lock.lock().map_err(|_|io::Error::other("Console non disponibile"))).transpose()?;
+    let session_lock = session_lock(chat)?;
+    let mut capture = session_lock.lock().map_err(|_|io::Error::other("Console non disponibile"))?;
+    if value["action"] != "read" { capture.screen = None; }
     let session=format!("oaclis-{chat}");let target=format!("{session}:0.0");
     match value["action"].as_str().unwrap() {
         "open" => {
@@ -183,12 +197,15 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         },
         _ => {},
     }
-    let screen=tmux(&["capture-pane","-p","-e","-t",&target,"-S","-200"]).map_err(|_|invalid("Sessione terminata: riapri la chat"))?;
-    let ansi=String::from_utf8(screen).map_err(io::Error::other)?;
+    let (plain, ansi)=capture.read(|| {
+        let screen=tmux(&["capture-pane","-p","-e","-t",&target,"-S","-200"]).map_err(|_|invalid("Sessione terminata: riapri la chat"))?;
+        String::from_utf8(screen).map_err(io::Error::other)
+    })?;
+    drop(capture);
     let access=if value["action"]=="open" {
         tmux(&["show-options","-v","-t",&session,"@oaclis-access"]).ok().and_then(|v|String::from_utf8(v).ok()).map(|v|v.trim().to_owned()).filter(|v|access_flags(v).is_ok()).unwrap_or_else(||"existing".into())
     } else { String::new() };
-    let mut result=json!({"screen":sgr().replace_all(&ansi,""),"screen_ansi":ansi,"active_access":access,"jobs":crate::jobs::for_chat(chat)});
+    let mut result=json!({"screen":plain,"screen_ansi":ansi,"active_access":access,"jobs":crate::jobs::for_chat(chat)});
     if value["speech"]==true {result["speech"]=crate::assistant_stream::snapshot(chat,value["speech_cursor"].as_u64());}
     Ok(result)
 }
@@ -228,6 +245,17 @@ pub fn request(device: Option<&Device>, value: &Value) -> io::Result<Value> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn capture_reuses_recent_screen_and_invalidation_reads_again() {
+        let mut capture = super::ConsoleCapture::default();
+        assert_eq!(capture.read(||Ok("\x1b[31mfirst".into())).unwrap().0, "first");
+        assert_eq!(capture.read(||panic!("duplicate capture")).unwrap().0, "first");
+        capture.screen = None;
+        assert_eq!(capture.read(||Ok("second".into())).unwrap().0, "second");
+        capture.screen.as_mut().unwrap().0 -= std::time::Duration::from_secs(1);
+        assert_eq!(capture.read(||Ok("third".into())).unwrap().0, "third");
+    }
+
     use super::*;
     #[test]
     fn inputs_share_a_lock_only_for_the_same_chat() {

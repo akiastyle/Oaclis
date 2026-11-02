@@ -1,4 +1,4 @@
-// catalog.rs v2.35.1620
+// catalog.rs v2.36.1794
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -6,7 +6,8 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fs,
     io::{self, BufRead, BufReader},
-    path::Path,
+    path::{Path, PathBuf},
+    os::unix::fs::MetadataExt,
     time::UNIX_EPOCH,
 };
 
@@ -20,6 +21,17 @@ pub(crate) fn cached<'a>(catalogs: &'a mut Catalogs, id: &str, load: impl FnOnce
     }
 }
 
+type Stamp = (u64, i64, i64, i64, i64, u64);
+fn stamp(metadata: &fs::Metadata) -> Stamp {
+    (metadata.ino(), metadata.mtime(), metadata.mtime_nsec(), metadata.ctime(), metadata.ctime_nsec(), metadata.len())
+}
+#[derive(Default)]
+struct ArchiveIndex {
+    titles: Vec<Option<Stamp>>,
+    names: BTreeMap<String, String>,
+    hidden: BTreeSet<String>,
+    directories: HashMap<PathBuf, (Stamp, Vec<(PathBuf, bool)>)>,
+}
 pub(crate) fn local(root: &Path) -> io::Result<Vec<Value>> {
     let home = std::env::var_os("HOME").ok_or_else(|| crate::invalid("HOME non definita"))?;
     local_at(root, &Path::new(&home).join(".config/oaclis"))
@@ -30,6 +42,10 @@ pub(crate) fn local_at(root: &Path, config: &Path) -> io::Result<Vec<Value>> {
     } else {
         std::env::current_dir()?.join(root)
     };
+    use std::sync::{Arc, Mutex, OnceLock};
+    static INDEXES: OnceLock<Mutex<HashMap<PathBuf, Arc<Mutex<ArchiveIndex>>>>> = OnceLock::new();
+    let index = INDEXES.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Catalogo non disponibile"))?.entry(root.clone()).or_default().clone();
+    let mut index = index.lock().map_err(|_|io::Error::other("Catalogo non disponibile"))?;
     let mut names = BTreeMap::new();
     let mut hidden = BTreeSet::new();
     let database = if root.join("state_5.sqlite").exists() {
@@ -37,64 +53,75 @@ pub(crate) fn local_at(root: &Path, config: &Path) -> io::Result<Vec<Value>> {
     } else {
         root.join("sqlite/state_5.sqlite")
     };
-    if database.is_file() {
-        let db = rusqlite::Connection::open_with_flags(
-            database,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )
-        .map_err(io::Error::other)?;
-        let mut query = db
-            .prepare("SELECT id,name,title,source FROM threads")
+    let titles = [database.clone(), database.with_file_name("state_5.sqlite-wal"), root.join("session_index.jsonl")]
+        .iter().map(|path|fs::metadata(path).ok().map(|m|stamp(&m))).collect::<Vec<_>>();
+    if index.titles != titles {
+        if database.is_file() {
+            let db = rusqlite::Connection::open_with_flags(
+                database,
+                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+            )
             .map_err(io::Error::other)?;
-        let rows = query
-            .query_map([], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    r.get::<_, Option<String>>(1)?,
-                    r.get::<_, Option<String>>(2)?,
-                    r.get::<_, Option<String>>(3)?,
-                ))
-            })
-            .map_err(io::Error::other)?;
-        for row in rows {
-            let (id, name, title, source) = row.map_err(io::Error::other)?;
-            if let Some(source) = source {
-                if source.starts_with('{')
-                    && serde_json::from_str::<Value>(&source)?
-                        .get("subagent")
-                        .is_some()
-                {
-                    hidden.insert(id.clone());
+            let mut query = db
+                .prepare("SELECT id,name,title,source FROM threads")
+                .map_err(io::Error::other)?;
+            let rows = query
+                .query_map([], |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, Option<String>>(1)?,
+                        r.get::<_, Option<String>>(2)?,
+                        r.get::<_, Option<String>>(3)?,
+                    ))
+                })
+                .map_err(io::Error::other)?;
+            for row in rows {
+                let (id, name, title, source) = row.map_err(io::Error::other)?;
+                if let Some(source) = source {
+                    if source.starts_with('{')
+                        && serde_json::from_str::<Value>(&source)?
+                            .get("subagent")
+                            .is_some()
+                    {
+                        hidden.insert(id.clone());
+                    }
                 }
-            }
-            let title = name
-                .filter(|s| !s.is_empty())
-                .or(title)
-                .unwrap_or_default()
-                .trim()
-                .to_owned();
-            if !title.is_empty() {
-                names.insert(id, title);
-            }
-        }
-    }
-    if let Ok((file, _)) = crate::open_regular(&root.join("session_index.jsonl")) {
-        for line in BufReader::new(file).lines() {
-            let line = line?;
-            if let Ok(value) = serde_json::from_str::<Value>(&line) {
-                if let (Some(id), Some(name)) = (
-                    value["id"].as_str(),
-                    value["thread_name"]
-                        .as_str()
-                        .filter(|s| !s.trim().is_empty()),
-                ) {
-                    names.entry(id.to_owned()).or_insert(name.into());
+                let title = name
+                    .filter(|s| !s.is_empty())
+                    .or(title)
+                    .unwrap_or_default()
+                    .trim()
+                    .to_owned();
+                if !title.is_empty() {
+                    names.insert(id, title);
                 }
             }
         }
+        if let Ok((file, _)) = crate::open_regular(&root.join("session_index.jsonl")) {
+            for line in BufReader::new(file).lines() {
+                let line = line?;
+                if let Ok(value) = serde_json::from_str::<Value>(&line) {
+                    if let (Some(id), Some(name)) = (
+                        value["id"].as_str(),
+                        value["thread_name"]
+                            .as_str()
+                            .filter(|s| !s.trim().is_empty()),
+                    ) {
+                        names.entry(id.to_owned()).or_insert(name.into());
+                    }
+                }
+            }
+        }
+        index.names = names;
+        index.hidden = hidden;
+        index.titles = titles;
     }
     let mut chats = Vec::new();
-    walk(&root, &root.join("sessions"), &names, &hidden, &mut chats)?;
+    let mut visited = BTreeSet::new();
+    let ArchiveIndex { names, hidden, directories, .. } = &mut *index;
+    walk(&root, &root.join("sessions"), names, hidden, directories, &mut visited, &mut chats)?;
+    directories.retain(|path, _|visited.contains(path));
+    drop(index);
     let state = state_store::snapshot(config)?;
     let id = state_store::identity(config)?;
     for chat in &mut chats {
@@ -124,25 +151,34 @@ fn walk(
     directory: &Path,
     names: &BTreeMap<String, String>,
     hidden: &BTreeSet<String>,
+    directories: &mut HashMap<PathBuf, (Stamp, Vec<(PathBuf, bool)>)>,
+    visited: &mut BTreeSet<PathBuf>,
     chats: &mut Vec<Value>,
 ) -> io::Result<()> {
-    let entries = match fs::read_dir(directory) {
-        Ok(entries) => entries,
+    let metadata = match fs::symlink_metadata(directory) {
+        Ok(metadata) if metadata.is_dir() => metadata,
+        Ok(_) => return Ok(()),
         Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(e) => return Err(e),
     };
-    for entry in entries {
-        let entry = entry?;
-        let kind = entry.file_type()?;
-        let path = entry.path();
-        if kind.is_dir() {
-            walk(root, &path, names, hidden, chats)?;
+    visited.insert(directory.to_path_buf());
+    let signature = stamp(&metadata);
+    if !directories.get(directory).is_some_and(|(old,_)|*old == signature) {
+        let mut entries = Vec::new();
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            let kind = entry.file_type()?;
+            if kind.is_dir() || kind.is_file() { entries.push((entry.path(), kind.is_dir())); }
+        }
+        directories.insert(directory.to_path_buf(), (signature, entries));
+    }
+    let entries = directories[directory].1.clone();
+    for (path, directory_entry) in entries {
+        if directory_entry {
+            walk(root, &path, names, hidden, directories, visited, chats)?;
             continue;
         }
-        if !kind.is_file() {
-            continue;
-        }
-        let filename = entry.file_name();
+        let filename = path.file_name().unwrap();
         let Some(filename) = filename.to_str() else {
             continue;
         };
@@ -156,7 +192,12 @@ fn walk(
         if hidden.contains(id) {
             continue;
         }
-        let metadata = entry.metadata()?;
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(metadata) if metadata.is_file() => metadata,
+            Ok(_) => continue,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(e),
+        };
         chats.push(json!({"id":id,"name":names.get(id).map(String::as_str).unwrap_or("Senza titolo"),"path":path,"relative_path":path.strip_prefix(root).map_err(io::Error::other)?,"bytes":metadata.len(),"modified_ns":metadata.modified()?.duration_since(UNIX_EPOCH).map_err(io::Error::other)?.as_nanos().to_string()}));
     }
     Ok(())
@@ -317,6 +358,11 @@ mod tests {
             local_at(&root, &root.join("config")).unwrap()[0]["name"],
             "Titolo aggiornato"
         );
+        let path = PathBuf::from(titled[0]["path"].as_str().unwrap());
+        fs::write(&path, "changed archive contents").unwrap();
+        assert_eq!(local_at(&root, &root.join("config")).unwrap()[0]["bytes"], 24);
+        fs::remove_file(path).unwrap();
+        assert!(local_at(&root, &root.join("config")).unwrap().is_empty());
         fs::remove_dir_all(root).unwrap();
     }
     #[test]
