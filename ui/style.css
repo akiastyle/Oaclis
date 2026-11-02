@@ -1,4 +1,4 @@
-/* style.css v2.0.1521 */
+/* style.css v2.0.1526 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1378,3 +1378,8 @@ html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: va
 .engine-editor .engine-enabled { display: flex; align-items: center; gap: 8px; margin-block: 12px; }
 .engine-editor .engine-enabled input { width: auto; }
 .engine-editor small, [data-engine-status]:not(:empty) { display: block; margin-block: 8px; }
+
+/* Keep decorative motion suspended while the map is not visible. */
+.map-hidden #nodes *, .map-hidden #nodes *::before, .map-hidden #nodes *::after {
+  animation-play-state: paused !important;
+}

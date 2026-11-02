@@ -1,4 +1,4 @@
-// map.js v4.123.3226
+// map.js v4.124.3284
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -54,14 +54,18 @@ function previewLinkFlow(node) {
 }
 
 // One shared group of ports per device; multiple links reuse the same buttons.
-let portMotionFrame = 0;
+let linkFrame = 0, linkForce = false, mapMotionUntil = 0;
 function positionConnectionPorts() {
-  const nodes = [...document.querySelectorAll('.map-node[data-kind="computer"]')];
+  const allNodes = [...document.querySelectorAll('.map-node')];
+  const rectangles = new Map(allNodes.map(node => [node, node.getBoundingClientRect()]));
+  const nodes = allNodes.filter(node => node.dataset.kind === 'computer');
+  const topology = JSON.stringify([chatLinks.map(({source,target,operation})=>[source,target,operation]), (data.mobile_devices||[]).map(phone=>phone.id)]);
+  const geometry = JSON.stringify(allNodes.map(node=>{const r=rectangles.get(node);return [node.dataset.id,r.x,r.y,r.width,r.height];}));
   const now = performance.now(), reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let moving = false;
   for (const node of nodes) {
-    const rect = node.getBoundingClientRect(), cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-    const peers = [...document.querySelectorAll('.map-node')].filter(other => other !== node);
+    const rect = rectangles.get(node), cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    const peers = allNodes.filter(other => other !== node);
     if (!peers.length) continue;
     const size = rect.width + ':' + rect.height;
     let orbit = node.portOrbit;
@@ -73,6 +77,10 @@ function positionConnectionPorts() {
       const length = path.getTotalLength();
       orbit = node.portOrbit = { size, path, length, samples: Array.from({ length: 129 }, (_, index) => path.getPointAtLength(index * length / 128)), time: now };
     }
+    const signature = topology + geometry + [...node.querySelectorAll('.connection-port')].map(port=>port.offsetWidth+':'+port.offsetHeight).join(',');
+    if (orbit.signature === signature && !orbit.moving) continue;
+    orbit.signature = signature;
+    orbit.moving = false;
     const wrap = value => (value % orbit.length + orbit.length) % orbit.length;
     const delta = (a, b) => wrap(a - b + orbit.length / 2) - orbit.length / 2;
     const reserved=[],drawn=[];
@@ -83,7 +91,7 @@ function positionConnectionPorts() {
       if(!port)continue;
       const linked=new Set(chatLinks.filter(value=>operation==='console'?value.operation==='console'&&(value.source===node.dataset.id||value.target===node.dataset.id):operation==='sync'?value.operation==='sync'&&(value.source===node.dataset.id||value.target===node.dataset.id):value.operation!=='sync'&&value.operation!=='console'&&(operation==='send'?value.source===node.dataset.id:value.target===node.dataset.id)).map(value=>value.source===node.dataset.id?value.target:value.source));
       if(operation==='console'&&node.dataset.id==='master')for(const phone of data.mobile_devices||[])linked.add(phone.id);
-      const targets=peers.filter(peer=>linked.has(peer.dataset.id)).map(peer=>{const r=peer.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};});
+      const targets=peers.filter(peer=>linked.has(peer.dataset.id)).map(peer=>{const r=rectangles.get(peer);return {x:r.left+r.width/2,y:r.top+r.height/2};});
       let ideal=index*orbit.length/4;
       if(targets.length){
         let best=Infinity;
@@ -112,7 +120,7 @@ function positionConnectionPorts() {
         position=safe.phase;point=safe.point;
       }
       state.phase=position;
-      if(Math.abs(delta(state.target,position))>.1)moving=true;
+      if(Math.abs(delta(state.target,position))>.1){moving=true;orbit.moving=true;}
       drawn.push({x:point.x,y:point.y,width,height});
 
       const before = orbit.path.getPointAtLength(wrap(position - 0.5)), after = orbit.path.getPointAtLength(wrap(position + 0.5));
@@ -125,10 +133,30 @@ function positionConnectionPorts() {
     }
     orbit.time=now;orbit.phase=Object.values(orbit.ports).map(port=>port.phase).join(':');
   }
-  if (moving && !portMotionFrame) portMotionFrame = requestAnimationFrame(() => { portMotionFrame = 0; renderLink(true); });
+  if (moving) renderLink(true);
 }
 
 function renderLink(force = false) {
+  linkForce ||= force;
+  if (drawingMap || document.hidden || linkFrame) return;
+  linkFrame = requestAnimationFrame(() => {
+    linkFrame = 0;
+    if (document.hidden) return;
+    const force = linkForce;
+    linkForce = false;
+    renderLinkNow(force);
+    if (performance.now() < mapMotionUntil) renderLink(true);
+  });
+}
+
+document.addEventListener('visibilitychange', () => {
+  cancelAnimationFrame(linkFrame);
+  linkFrame = 0;
+  document.documentElement.classList.toggle('map-hidden', document.hidden);
+  if (!document.hidden) renderLink(true);
+});
+
+function renderLinkNow(force = false) {
   if (drawingMap) return;
   positionConnectionPorts();
   renderMobileLinks();
@@ -513,15 +541,10 @@ function savePosition(node) {
 }
 
 function followMapMotion() {
-  cancelAnimationFrame(mapMotionFrame);
   const duration = getComputedStyle(document.documentElement).getPropertyValue("--duration-ui").trim();
   const milliseconds = parseFloat(duration) * (duration.endsWith("ms") ? 1 : 1000);
-  const until = performance.now() + (matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : milliseconds);
-  const frame = () => {
-    renderLink(true);
-    if (performance.now() < until) mapMotionFrame = requestAnimationFrame(frame);
-  };
-  mapMotionFrame = requestAnimationFrame(frame);
+  mapMotionUntil = performance.now() + (matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : milliseconds);
+  renderLink(true);
 }
 
 function renderMap(animate = false) {
@@ -971,7 +994,12 @@ function renderAccessBadges(path, group, keep, markers) {
       main.setAttribute('aria-label',main.title);open.title=OaclisSettings.text('Apri console')+' · '+name;open.setAttribute('aria-label',open.title);
       marker.style.color=color;main.querySelector('.chat-badge').style.color=color;marker.dataset.presentation=presentation;
     }
-    const midpoint=path.getPointAtLength(path.getTotalLength()*(index+1)/(group.entries.length+1));
+    const geometry = JSON.stringify([path.getAttribute('d'),index,group.entries.length]);
+    if (marker.dataset.geometry !== geometry) {
+      marker.accessMidpoint = path.getPointAtLength(path.getTotalLength()*(index+1)/(group.entries.length+1));
+      marker.dataset.geometry = geometry;
+    }
+    const midpoint = marker.accessMidpoint;
     marker.accessState={entry,source:group.source,target:group.target,console:group.id.startsWith('console-'),midpoint};
     const offset=linkPositions[key]||{x:0,y:0};
     marker.style.left=midpoint.x+offset.x+'px';marker.style.top=midpoint.y+offset.y+'px';

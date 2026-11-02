@@ -1,4 +1,4 @@
-// app.js v4.166.3184
+// app.js v4.166.3185
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -303,7 +303,6 @@ function badge(entry) {
   return '<span class="chat-badge" aria-hidden="true">' + iconBody(appearance(entry).icon, chatLabel(entry)) + '</span>';
 }
 let positionTimer, positionsSaving = false;
-let mapMotionFrame;
 $("#reset-map").onclick = () => {
   positions = {};
   savePositions();
