@@ -1,4 +1,4 @@
-// console.js v2.99.1936
+// console.js v2.99.1942
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -65,6 +65,12 @@ function openChatTerminal(connection, anchor, deviceId) {
   panel.style.left = Math.max(8, Math.min(parseFloat(panel.style.left) + count * 24, innerWidth - panel.offsetWidth - 8)) + "px";
   panel.style.top = Math.max(8, Math.min(parseFloat(panel.style.top) + count * 24, innerHeight - panel.offsetHeight - 8)) + "px";
   bindPanelDrag(panel, true);
+  panel.addEventListener("click",event=>{
+    if(!panel.isConnected)return;
+    const focus=event.target.closest("textarea,input,button,select,pre,h2")||panel.querySelector("textarea");
+    panel.hidePopover();panel.showPopover();
+    focus.focus({preventScroll:true});window.OaclisLocalVoice?.activate(panel);
+  },true);
   panel.querySelector(".popover-close").onclick = () => closeChatTerminal(panel);
   const screen = panel.querySelector("pre"), form = panel.querySelector("form");
   const payload = { device_id: deviceId, chat_id: connection.entry.id };
