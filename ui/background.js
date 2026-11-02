@@ -1,6 +1,7 @@
-// background.js v1.2.65
+// background.js v1.2.66
 "use strict";
 (() => {
+  if(document.documentElement.dataset.consoleWindow)return;
   const canvas = document.querySelector('#map-particles');
   const context = canvas?.getContext('2d', { alpha: true });
   if (!context) return;

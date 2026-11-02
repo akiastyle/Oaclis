@@ -1,6 +1,9 @@
-// app.js v4.166.3127
+// app.js v4.166.3144
 "use strict";
 OaclisSettings.translate(document.body);
+let consoleWindow=null;
+try{if(location.hash.startsWith('#console=')){const value=JSON.parse(decodeURIComponent(location.hash.slice(9)));if(value&&typeof value.id==='string'&&/^[\w-]{1,160}$/.test(value.id)&&typeof value.device==='string'&&/^[\w-]{1,160}$/.test(value.device))consoleWindow=value;}}catch{}
+if(consoleWindow)document.documentElement.dataset.consoleWindow='true';
 const $ = (s) => document.querySelector(s);
 sessionStorage.removeItem('oaclis-local-access');
 if (/^#access=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
@@ -391,7 +394,7 @@ async function pollStatus() {
     polling = false;
   }
 }
-setInterval(pollStatus, 500);
+if(!consoleWindow)setInterval(pollStatus, 500);
 
 let refreshing = false;
 async function refreshCatalog() {
@@ -426,14 +429,22 @@ async function refreshCatalog() {
     refreshing = false;
   }
 }
-setInterval(refreshCatalog, 10000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden){lastPoll=0;pollStatus();refreshCatalog();}});
+if(!consoleWindow)setInterval(refreshCatalog, 10000);
+if(!consoleWindow)document.addEventListener('visibilitychange',()=>{if(!document.hidden){lastPoll=0;pollStatus();refreshCatalog();}});
 window.onresize = () => {
+  if(consoleWindow)return;
   renderMap();
   for (const panel of document.querySelectorAll('.context-popover:popover-open')) {if(panel.dataset.snap&&panel.snapConsole)panel.snapConsole(panel.dataset.snap);else positionContext(panel,panel.opener);}
 };
 guard(async () => {
   data = await api("state");
+  if(consoleWindow){
+    sourceId=consoleWindow.device;visibleChats=data.chats||[];
+    const entry=visibleChats.find(chat=>chat.id===consoleWindow.id)||{id:consoleWindow.id,name:typeof consoleWindow.name==='string'?consoleWindow.name.slice(0,160):'Chat'};
+    openChatTerminal({entry},null,sourceId);
+    if(sourceId!=='master')api('catalog',{device_id:sourceId}).then(result=>{visibleChats=result.chats||[entry];}).catch(()=>{});
+    return;
+  }
   updatePowerMenu();
   chatLinks = data.links || [];
   const oldPositions = positions;

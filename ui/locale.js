@@ -1,4 +1,4 @@
-// locale.js v1.3.494
+// locale.js v1.3.496
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -8,6 +8,8 @@ window.OaclisSettings=(()=>{
  const speechLanguage=language==='it'?'it-IT':'en-US';
  document.documentElement.lang=language;
  const en={
+  "Apri in una finestra separata":"Open in a separate window",
+  "Consenti l’apertura della finestra nel browser.":"Allow the window to open in your browser.",
   "Affianca chat":"Split chat",
   "Chat singola":"Single chat",
   "Ricevuto":"Received",

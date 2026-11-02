@@ -1,4 +1,4 @@
-/* style.css v2.0.1503 */
+/* style.css v2.0.1513 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1246,7 +1246,10 @@ select {
 #orchestrator-log.resizable-panel:not([hidden]) { display: flex; flex-direction: column; }
 .chat-terminal.resizable-panel { height: min(560px, calc(100dvh - 16px)); min-height: min(320px, calc(100dvh - 16px)); gap: var(--space-8); }
 .chat-terminal.resizable-panel > h2, .chat-terminal.resizable-panel > pre, .chat-terminal.resizable-panel > .terminal-keys { margin: 0; }
-.chat-terminal.resizable-panel > .terminal-state { flex-shrink: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chat-terminal h2 { min-width: 0; padding-right: calc((var(--size-20) + var(--space-9) * 2) * 2 + var(--space-8)); }
+.chat-terminal .terminal-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-terminal .terminal-state { flex: 0 1 auto; max-width: 45%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: normal calc(var(--font-body) * .833333) var(--font-family); }
+.chat-terminal .console-detach { position: absolute; top: var(--space-4); right: calc(var(--size-20) + var(--space-9) * 2 + var(--space-4)); }
 .chat-terminal[data-raised="true"]:popover-open { animation: none; }
 #orchestrator-log.resizable-panel { height: min(480px, calc(100dvh - 96px)); }
 .resizable-panel > h2, .resizable-panel > form, .resizable-panel > .terminal-keys { flex-shrink: 0; }
@@ -1364,3 +1367,8 @@ select {
 .terminal-input .console-send-menu button svg { width: 20px; height: 20px; flex: none; }
 
 .console-snap-preview { position: fixed; pointer-events: none; z-index: 1000; border: 2px solid var(--ink); border-radius: var(--radius-panel); background: color-mix(in srgb, var(--ink) 10%, transparent); transition: none; }
+
+html[data-console-window] body > :not(.chat-terminal):not(.voice-panel):not(#notice) { display: none !important; }
+html[data-console-window] .chat-terminal:not([data-window-active]) { display: none !important; }
+html[data-console-window] .chat-terminal { inset: 8px !important; width: calc(100vw - 16px) !important; height: calc(100dvh - 16px) !important; min-width: 0; min-height: 0; max-width: none; max-height: none; resize: none; animation: none; }
+html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: var(--space-24); }

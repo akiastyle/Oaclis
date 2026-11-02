@@ -1,4 +1,4 @@
-// voice-local.js v1.15.43
+// voice-local.js v1.15.45
 'use strict';
 window.OaclisLocalVoice=(()=>{
  const toolbar=document.getElementById('toolbar-actions')||document.querySelector('.toolbar');
@@ -6,7 +6,7 @@ window.OaclisLocalVoice=(()=>{
  const micHost=document.createElement('span'),readHost=document.createElement('span');host.append(micHost,readHost);
  const voice=OaclisVoice.create();let active=null,reader=null;
  const chats=()=>visibleChats.filter(chat=>!(data.deleted_chats||[]).includes(chat.id)&&(showHiddenChats||!data.chat_settings?.[chat.id]?.hidden)).map(chat=>({...chat,name:chatLabel(chat)}));
- const list=()=>{const byId=new Map(chats().map(chat=>[chat.id,chat]));return [...document.querySelectorAll('#library-list [data-chat-id]')].map(button=>byId.get(button.dataset.chatId)).filter(Boolean);};
+ const list=()=>{if(document.documentElement.dataset.consoleWindow)return chats();const byId=new Map(chats().map(chat=>[chat.id,chat]));return [...document.querySelectorAll('#library-list [data-chat-id]')].map(button=>byId.get(button.dataset.chatId)).filter(Boolean);};
  function bind(panel){
   const destination=panel?.querySelector('.terminal-keys')||toolbar;
   if(host.parentElement!==destination)destination.append(host);
