@@ -1,4 +1,4 @@
-// panels.js v3.142.2811
+// panels.js v3.142.2823
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -329,6 +329,7 @@ function bindPanelDrag(panel, reference = false) {
     panel.addEventListener("pointerdown", event => {
       const rect = panel.getBoundingClientRect();
       if(event.clientX<rect.right-18||event.clientY<rect.bottom-18)return;
+      if(panel.dataset.snap){delete panel.dataset.snap;panel.freeGeometry=null;}
       const width = Math.max(0, innerWidth - rect.left - 8), height = Math.max(0, innerHeight - rect.top - 8);
       panel.style.minWidth = Math.min(280, width) + "px";
       panel.style.minHeight = Math.min(panel.matches(".chat-terminal")?320:240, height) + "px";
@@ -357,18 +358,25 @@ function bindPanelDrag(panel, reference = false) {
     event.preventDefault();
     if (panel.hasAttribute("popover")) { panel.hidePopover(); panel.showPopover(); }
     const start = { x: event.clientX, y: event.clientY, left: panel.offsetLeft, top: panel.offsetTop };
+    let started=false;
     panel.dataset.dragging = "true";
     heading.setPointerCapture(event.pointerId);
     heading.onpointermove = e => {
-      if (heading.hasPointerCapture(e.pointerId)) move(start.left + e.clientX - start.x, start.top + e.clientY - start.y);
+      if (!heading.hasPointerCapture(e.pointerId))return;
+      if(!started){
+        if(Math.hypot(e.clientX-start.x,e.clientY-start.y)<4)return;
+        panel.dragStart?.(event);start.left=panel.offsetLeft;start.top=panel.offsetTop;started=true;
+      }
+      move(start.left+e.clientX-start.x,start.top+e.clientY-start.y);panel.dragMove?.(e);
     };
     const finish = e => {
       delete panel.dataset.dragging;
+      panel.dragEnd?.(e);
       if (heading.hasPointerCapture(e.pointerId)) heading.releasePointerCapture(e.pointerId);
     };
     heading.onpointerup = finish;
     heading.onpointercancel = finish;
-    heading.onlostpointercapture = () => delete panel.dataset.dragging;
+    heading.onlostpointercapture = () => {delete panel.dataset.dragging;panel.cancelSnap?.();};
   };
   if (reference) bindPanelReference(panel);
 }

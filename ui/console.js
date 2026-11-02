@@ -1,9 +1,10 @@
-// console.js v3.107.2004
+// console.js v3.115.2066
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
 function closeChatTerminal(panel) {
   if (!panel) return;
+  panel.cancelSnap?.();
   panel.saveGeometry?.();
   clearTimeout(panel.terminalTimer);
   panel.closeSendMenu?.();
@@ -39,6 +40,59 @@ function chooseChatTerminal(connection, anchor) {
   menu.querySelector(".terminal-destinations button").focus();
 }
 
+function bindConsoleSnap(panel) {
+  const modes=['left','right','top-left','top-right','bottom-left','bottom-right','full'];
+  let preview=null,zone=null;
+  const bounds=mode=>{
+    const width=innerWidth-16,height=innerHeight-16,halfWidth=(width-8)/2,halfHeight=(height-8)/2;
+    if(mode!=='full'&&(halfWidth<280||mode.includes('-')&&halfHeight<320))mode='full';
+    return {mode,left:mode.includes('right')?16+halfWidth:8,top:mode.startsWith('bottom-')?16+halfHeight:8,width:mode==='full'?width:halfWidth,height:mode.includes('-')?halfHeight:height};
+  };
+  const apply=rect=>{
+    panel.style.minWidth='min(280px, calc(100vw - 16px))';panel.style.minHeight='min(320px, calc(100dvh - 16px))';
+    panel.style.maxWidth='calc(100vw - 16px)';panel.style.maxHeight='calc(100dvh - 16px)';
+    for(const key of ['width','height'])panel.style[key]=Math.min(key==='width'?innerWidth-16:innerHeight-16,rect[key])+'px';
+    panel.style.left=Math.max(8,Math.min(rect.left,innerWidth-panel.offsetWidth-8))+'px';
+    panel.style.top=Math.max(8,Math.min(rect.top,innerHeight-panel.offsetHeight-8))+'px';panel.dataset.moved='true';
+  };
+  panel.snapConsole=mode=>{
+    if(mode==='restore'){
+      if(panel.freeGeometry)apply(panel.freeGeometry);
+      delete panel.dataset.snap;panel.freeGeometry=null;
+    }else if(modes.includes(mode)){
+      if(!panel.dataset.snap)panel.freeGeometry={left:panel.offsetLeft,top:panel.offsetTop,width:panel.offsetWidth,height:panel.offsetHeight};
+      const rect=bounds(mode);panel.dataset.snap=rect.mode;apply(rect);
+    }else return;
+    panel.saveGeometry?.();
+  };
+  panel.cancelSnap=()=>{preview?.remove();preview=null;zone=null;};
+  panel.dragStart=event=>{
+    if(!panel.dataset.snap)return;
+    const ratio=(event.clientX-panel.offsetLeft)/panel.offsetWidth,top=event.clientY-panel.offsetTop;
+    panel.snapConsole('restore');
+    apply({left:event.clientX-ratio*panel.offsetWidth,top:event.clientY-top,width:panel.offsetWidth,height:panel.offsetHeight});
+  };
+  panel.dragMove=event=>{
+    const x=event.clientX,y=event.clientY,left=x<=24,right=x>=innerWidth-24,top=y<=24,bottom=y>=innerHeight-24;
+    zone=(left||right)&&(y<innerHeight/4||y>innerHeight*3/4)?(y<innerHeight/2?'top-':'bottom-')+(left?'left':'right'):
+      (top||bottom)&&(x<innerWidth/4||x>innerWidth*3/4)?(top?'top-':'bottom-')+(x<innerWidth/2?'left':'right'):
+      left?'left':right?'right':top?'full':null;
+    if(!zone){panel.cancelSnap();return;}
+    if(!preview){preview=document.createElement('div');preview.className='console-snap-preview';preview.setAttribute('aria-hidden','true');document.body.append(preview);}
+    const rect=bounds(zone);for(const key of ['left','top','width','height'])preview.style[key]=rect[key]+'px';
+  };
+  panel.dragEnd=event=>{const mode=zone;panel.cancelSnap();if(event.type==='pointerup'&&mode)panel.snapConsole(mode);};
+  panel.addEventListener('keydown',event=>{
+    if(!event.altKey||event.ctrlKey||event.metaKey||event.shiftKey||!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;
+    event.preventDefault();event.stopImmediatePropagation();
+    const mode=panel.dataset.snap||'',side=mode.includes('left')?'left':mode.includes('right')?'right':'';
+    panel.snapConsole(event.key==='ArrowLeft'||event.key==='ArrowRight'?(mode.includes('-')?mode.split('-')[0]+'-':'')+(event.key==='ArrowLeft'?'left':'right'):
+      event.key==='ArrowUp'?(side&&!mode.startsWith('top-')?'top-'+side:'full'):
+      side&&!mode.startsWith('bottom-')?'bottom-'+side:'restore');
+  },true);
+  panel.querySelector('h2').addEventListener('dblclick',event=>{if(!event.target.closest('button'))panel.snapConsole(panel.dataset.snap==='full'?'restore':'full');});
+}
+
 function openChatTerminal(connection, anchor, deviceId) {
   const existing = [...document.querySelectorAll(".chat-terminal")].find(p =>
     p.dataset.chatId === connection.entry.id && p.dataset.deviceId === deviceId);
@@ -62,7 +116,7 @@ function openChatTerminal(connection, anchor, deviceId) {
   panel.querySelector("h2 .chat-badge").style.color=appearance(connection.entry).color||"var(--ink)";
   document.body.append(panel);
   panel.showPopover();
-  bindPanelDrag(panel, true);
+  bindPanelDrag(panel);
   positionContext(panel, anchor);
   const count = document.querySelectorAll(".chat-terminal").length - 1;
   panel.style.left = Math.max(8, Math.min(parseFloat(panel.style.left) + count * 24, innerWidth - panel.offsetWidth - 8)) + "px";
@@ -76,15 +130,19 @@ function openChatTerminal(connection, anchor, deviceId) {
       panel.style.height=Math.min(innerHeight-16,Math.max(320,saved.height))+'px';
       panel.style.left=Math.max(8,Math.min(saved.left,innerWidth-panel.offsetWidth-8))+'px';
       panel.style.top=Math.max(8,Math.min(saved.top,innerHeight-panel.offsetHeight-8))+'px';panel.dataset.moved='true';
+      if(['left','right','top-left','top-right','bottom-left','bottom-right','full'].includes(saved.snap))panel.dataset.snap=saved.snap;
+      if(saved.restore&&['left','top','width','height'].every(key=>Number.isFinite(saved.restore[key]))&&saved.restore.width>0&&saved.restore.height>0)panel.freeGeometry=saved.restore;
     }
   }catch{}
   let savedGeometry='';
   panel.saveGeometry=()=>{
     if(!panel.isConnected||!panel.matches(':popover-open'))return;
-    const value=JSON.stringify({left:panel.offsetLeft,top:panel.offsetTop,width:panel.offsetWidth,height:panel.offsetHeight});
+    const value=JSON.stringify({left:panel.offsetLeft,top:panel.offsetTop,width:panel.offsetWidth,height:panel.offsetHeight,snap:panel.dataset.snap||null,restore:panel.freeGeometry||null});
     if(value===savedGeometry)return;
     try{localStorage.setItem(geometryKey,value);savedGeometry=value;}catch{}
   };
+  bindConsoleSnap(panel);
+  if(panel.dataset.snap)panel.snapConsole(panel.dataset.snap);
   panel.addEventListener('pointerup',panel.saveGeometry);
   panel.addEventListener('keyup',event=>{if(event.target.matches('h2'))panel.saveGeometry();});
   panel.addEventListener("click",event=>{

@@ -1,4 +1,4 @@
-// app.js v4.166.3125
+// app.js v4.166.3127
 "use strict";
 OaclisSettings.translate(document.body);
 const $ = (s) => document.querySelector(s);
@@ -430,7 +430,7 @@ setInterval(refreshCatalog, 10000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden){lastPoll=0;pollStatus();refreshCatalog();}});
 window.onresize = () => {
   renderMap();
-  for (const panel of document.querySelectorAll('.context-popover:popover-open')) positionContext(panel, panel.opener);
+  for (const panel of document.querySelectorAll('.context-popover:popover-open')) {if(panel.dataset.snap&&panel.snapConsole)panel.snapConsole(panel.dataset.snap);else positionContext(panel,panel.opener);}
 };
 guard(async () => {
   data = await api("state");
