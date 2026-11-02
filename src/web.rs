@@ -1,4 +1,4 @@
-// web.rs v2.28.1825
+// web.rs v2.28.1829
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -259,6 +259,10 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
         if !matches!(url.as_str(),"/api/state"|"/api/status"|"/api/log"|"/api/links"|"/api/peers"|"/api/mobile/qr"|"/api/mobile/pending") { crate::state_transport::log(format!("HTTP POST {url}")); }
         let result = (|| -> io::Result<Value> {
             match (request.method(), url.as_str()) {
+                (&Method::Post, "/api/llama/models") => {
+                    if role != "master" { return Err(invalid("Comando disponibile dal master")); }
+                    crate::llama::models(&home)
+                }
                 (&Method::Post, "/api/mobile/qr") => {
                     if role != "master" { return Err(invalid("Comando disponibile dal master")); }
                     crate::mobile::access_qr()
