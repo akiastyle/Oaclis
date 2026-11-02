@@ -1,4 +1,4 @@
-// terminal-format.js v1.4.84
+// terminal-format.js v1.16.146
 "use strict";
 const OaclisTerminal = (() => {
   const palette=['#000000','#cd3131','#0dbc79','#e5e510','#2472c8','#bc3fbc','#11a8cd','#e5e5e5','#666666','#f14c4c','#23d18b','#f5f543','#3b8eea','#d670d6','#29b8db','#ffffff'];
@@ -81,5 +81,65 @@ const OaclisTerminal = (() => {
     while(element.childNodes.length>chunks.length)element.lastChild.remove();
     element.terminalText=text;element.terminalAnsi=ansi;
   }
-  return {render,parse};
+function consoleScreen(value){
+ const lines=String(value??'').split('\n');
+ let last=lines.findLastIndex(line=>line.trim());
+ // Only terminal chrome at the screen edges; never remove mentions in messages.
+ if(last>=0&&/^\s{2,}(?:GPT-[\w.-]+|gpt-[\w.-]+|o\d[\w.-]*)\b.*(?: · .* · |context left.*(?:shortcuts|agents))/.test(lines[last]))lines.splice(last,1);
+ last=lines.findLastIndex(line=>line.trim());
+ if(last>=0&&/^\s*[›>]\s*Ask Codex to do anything[.!?]?\s*$/i.test(lines[last]))lines.splice(last,1);
+ for(let i=0;i<Math.min(12,lines.length);i++){
+  if(!/^\s*[╭┌].*[╮┐]\s*$/.test(lines[i])||!/^\s*[│┃]\s*>_ OpenAI Codex\b/.test(lines[i+1]||''))continue;
+  const end=lines.findIndex((line,index)=>index>i&&index<=i+12&&/^\s*[╰└].*[╯┘]\s*$/.test(line));
+  if(end>i&&lines.slice(i,end).some(line=>/^\s*[│┃]\s*(?:model|directory):/i.test(line)))lines.splice(i,end-i+1);
+  break;
+ }
+ while(lines.length&&!lines.at(-1).trim())lines.pop();
+ while(lines.length&&!lines[0].trim())lines.shift();
+ return lines.join('\n');
+}
+  async function imageData(file){
+    if(!file.type.startsWith('image/')||file.size>25*1024*1024)throw Error(OaclisSettings.text('Scegli un’immagine fino a 25 MB.'));
+    const bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});
+    let result;
+    try{
+     const ratio=Math.min(1,1600/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');
+     canvas.width=Math.max(1,Math.round(bitmap.width*ratio));canvas.height=Math.max(1,Math.round(bitmap.height*ratio));
+     const context=canvas.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(bitmap,0,0,canvas.width,canvas.height);
+     for(const quality of [.85,.7,.5]){result=canvas.toDataURL('image/jpeg',quality);if(result.length<=699075)break;}
+    }finally{bitmap.close();}
+    if(result.length>699075)throw Error();
+    return result;
+  }
+  function attachSendMenu(form,sendButton,{pickImage,submit,closed}){
+ const sendMenu=document.createElement('div');sendMenu.className='console-send-menu';sendMenu.setAttribute('popover','manual');sendMenu.setAttribute('role','menu');sendMenu.setAttribute('aria-label',OaclisSettings.text('Allega o invia'));
+ for(const [label,icon,action]of [['Scatta foto','image',()=>pickImage(true)],['Archivio','folder',()=>pickImage(false)],['Invia','arrowUp',()=>submit()]]){
+  const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.innerHTML=OaclisIcon(icon);button.append(document.createTextNode(OaclisSettings.text(label)));button.onclick=()=>{sendMenu.hidePopover();action();};sendMenu.append(button);
+ }
+ form.append(sendMenu);
+ const dismissSendMenu=event=>{
+  if(!sendMenu.matches(':popover-open'))return;
+  if(event.type==='keydown'?event.key==='Escape':!sendMenu.contains(event.target)&&!sendButton.contains(event.target)){
+   sendMenu.hidePopover();if(event.type==='keydown'){event.preventDefault();sendButton.focus({preventScroll:true});}
+  }
+ };
+ document.addEventListener('pointerdown',dismissSendMenu);document.addEventListener('keydown',dismissSendMenu);
+ function showSendMenu(choice=0){
+  if(sendButton.disabled||closed())return;
+  sendMenu.showPopover();sendButton.setAttribute('aria-expanded','true');
+  const rect=sendButton.getBoundingClientRect();sendMenu.style.left=Math.max(8,Math.min(innerWidth-sendMenu.offsetWidth-8,rect.right-sendMenu.offsetWidth))+'px';sendMenu.style.top=Math.max(8,rect.top-sendMenu.offsetHeight-8)+'px';
+  sendMenu.querySelectorAll('button')[choice].focus({preventScroll:true});
+ }
+ sendMenu.addEventListener('toggle',event=>sendButton.setAttribute('aria-expanded',String(event.newState==='open')));
+ let holdTimer=null,longPressed=false,holdStart;
+ const cancelHold=()=>{clearTimeout(holdTimer);holdTimer=null;};
+ sendButton.onpointerdown=event=>{if(event.button!==0||sendButton.disabled)return;cancelHold();longPressed=false;holdStart={x:event.clientX,y:event.clientY};holdTimer=setTimeout(()=>{holdTimer=null;longPressed=true;showSendMenu();},500);};
+ sendButton.onpointermove=event=>{if(holdStart&&Math.hypot(event.clientX-holdStart.x,event.clientY-holdStart.y)>10)cancelHold();};
+ sendButton.onpointerup=sendButton.onpointercancel=sendButton.onpointerleave=cancelHold;
+ sendButton.onclick=event=>{if(longPressed){event.preventDefault();event.stopPropagation();longPressed=false;}};
+ sendButton.oncontextmenu=event=>{event.preventDefault();cancelHold();longPressed=true;showSendMenu();};
+ sendButton.onkeydown=event=>{if(event.key==='ArrowDown'||event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();showSendMenu();}};
+ return Object.assign(()=>{document.removeEventListener('pointerdown',dismissSendMenu);document.removeEventListener('keydown',dismissSendMenu);cancelHold();sendMenu.remove();},{show:showSendMenu});
+  }
+  return {render,parse,consoleScreen,imageData,attachSendMenu};
 })();

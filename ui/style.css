@@ -1,4 +1,4 @@
-/* style.css v2.0.1479 */
+/* style.css v2.0.1492 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1346,3 +1346,16 @@ select {
 }
 
 .library-row > .library-console{right:calc(var(--space-3) + 2 * (var(--size-24) + var(--space-4)))}
+
+.terminal-input .console-draft { position: relative; flex: 1; min-width: 0; }
+.terminal-input .console-attachment[hidden] { display: none; }
+.terminal-input .console-attachment { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; }
+.terminal-input .console-attachment img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-control); }
+.terminal-input .console-attachment button { position: absolute; right: -7px; top: -7px; width: 22px; height: 22px; padding: 4px; border: var(--border-width) solid var(--line); border-radius: var(--radius-round); background: var(--panel); color: var(--ink); }
+.terminal-input .console-attachment button svg { width: 12px; height: 12px; }
+.terminal-input .console-draft:has(.console-attachment:not([hidden])) textarea { padding-left: 60px; }
+.terminal-input .console-send-menu { position: fixed; inset: auto; margin: 0; width: 190px; padding: 4px; border: var(--border-width) solid var(--line); border-radius: var(--radius-control); background: var(--panel); color: var(--ink); box-shadow: var(--shadow-surface); }
+.terminal-input .console-send-menu::backdrop { background: transparent; }
+.terminal-input .console-send-menu button { display: flex; gap: 12px; align-items: center; width: 100%; height: 44px; padding: 10px 12px; background: transparent; color: inherit; border: 0; border-radius: var(--radius-control); font: inherit; text-align: left; cursor: pointer; }
+.terminal-input .console-send-menu button:hover, .terminal-input .console-send-menu button:focus-visible { background: var(--soft); }
+.terminal-input .console-send-menu button svg { width: 20px; height: 20px; flex: none; }

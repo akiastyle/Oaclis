@@ -1,4 +1,4 @@
-// app.js v1.80.870
+// app.js v1.91.931
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -122,23 +122,6 @@ function chatButton(chat,index,select){
   const play=document.createElement('span');play.className='authorized-play';play.setAttribute('aria-hidden','true');play.innerHTML=OaclisIcon('play');
   button.append(number,icon,name,play);button.onclick=select;return button;
 }
-function consoleScreen(value){
- const lines=String(value??'').split('\n');
- let last=lines.findLastIndex(line=>line.trim());
- // Only terminal chrome at the screen edges; never remove mentions in messages.
- if(last>=0&&/^\s{2,}(?:GPT-[\w.-]+|gpt-[\w.-]+|o\d[\w.-]*)\b.*(?: · .* · |context left.*(?:shortcuts|agents))/.test(lines[last]))lines.splice(last,1);
- last=lines.findLastIndex(line=>line.trim());
- if(last>=0&&/^\s*[›>]\s*Ask Codex to do anything[.!?]?\s*$/i.test(lines[last]))lines.splice(last,1);
- for(let i=0;i<Math.min(12,lines.length);i++){
-  if(!/^\s*[╭┌].*[╮┐]\s*$/.test(lines[i])||!/^\s*[│┃]\s*>_ OpenAI Codex\b/.test(lines[i+1]||''))continue;
-  const end=lines.findIndex((line,index)=>index>i&&index<=i+12&&/^\s*[╰└].*[╯┘]\s*$/.test(line));
-  if(end>i&&lines.slice(i,end).some(line=>/^\s*[│┃]\s*(?:model|directory):/i.test(line)))lines.splice(i,end-i+1);
-  break;
- }
- while(lines.length&&!lines.at(-1).trim())lines.pop();
- while(lines.length&&!lines[0].trim())lines.shift();
- return lines.join('\n');
-}
 async function openConsole(chat,adjacent=false){
  if(!authorizedChats.some(item=>item.id===chat.id))return false;
  if(consoleWorkspace)return consoleWorkspace.open(chat,adjacent);
@@ -189,7 +172,7 @@ async function openConsole(chat,adjacent=false){
   if(request.operation==='open'||request.operation==='input')pane.follow=true;
   const top=pane.saved?.top??pane.screen.scrollTop,left=pane.saved?.left??pane.screen.scrollLeft;
   const savedFollow=pane.saved?.follow;if(request.operation==='open'&&savedFollow===false)pane.follow=false;
-  OaclisTerminal.render(pane.screen,consoleScreen(result.screen),result.screen_ansi);pane.saved=null;
+  OaclisTerminal.render(pane.screen,OaclisTerminal.consoleScreen(result.screen),result.screen_ansi);pane.saved=null;
   if(pane===active&&request.reader===reader){if(request.operation==='input'&&typeof request.text==='string')reader.defer(2000);reader.update(result.speech,request.speechGeneration);}
   if(pane.follow)pane.screen.scrollTop=pane.screen.scrollHeight;else{pane.screen.scrollTop=top;pane.screen.scrollLeft=left;}
   pane.ready=true;
@@ -237,55 +220,21 @@ async function openConsole(chat,adjacent=false){
  preview.querySelector('button').onclick=removeImage;
  async function pickImage(camera){
   const pane=active;if(!pane||inputBusy)return;
-  if(navigator.userActivation&&!navigator.userActivation.isActive){showSendMenu(camera?0:1);return;}
+  if(navigator.userActivation&&!navigator.userActivation.isActive){closeSendMenu.show(camera?0:1);return;}
   const input=document.createElement('input');input.type='file';input.accept='image/*';if(camera)input.setAttribute('capture','environment');
   input.onchange=async()=>{
    const file=input.files?.[0];if(!file||closed||pane.closed)return;
    if(!file.type.startsWith('image/')||file.size>25*1024*1024){message('Scegli un’immagine fino a 25 MB.',true);return;}
    pane.preparingImage=true;sendButton.disabled=true;
    try{
-    const bitmap=await createImageBitmap(file,{imageOrientation:'from-image'});
-    let result;
-    try{
-     const ratio=Math.min(1,1600/Math.max(bitmap.width,bitmap.height)),canvas=document.createElement('canvas');
-     canvas.width=Math.max(1,Math.round(bitmap.width*ratio));canvas.height=Math.max(1,Math.round(bitmap.height*ratio));
-     const context=canvas.getContext('2d');context.fillStyle='#fff';context.fillRect(0,0,canvas.width,canvas.height);context.drawImage(bitmap,0,0,canvas.width,canvas.height);
-     for(const quality of [.85,.7,.5]){result=canvas.toDataURL('image/jpeg',quality);if(result.length<=699075)break;}
-    }finally{bitmap.close();}
-    if(result.length>699075)throw Error();
+    const result=await OaclisTerminal.imageData(file);
     if(!closed&&!pane.closed){imageDrafts.set(pane.chat.id,result);if(pane===active)paintAttachment();}
    }catch{if(!closed)message('Impossibile caricare l’immagine. Prova un’altra foto.',true);}
    finally{pane.preparingImage=false;if(!closed)sendButton.disabled=!active?.ready||active.preparingImage===true;}
   };
   input.click();
  }
- const sendMenu=document.createElement('div');sendMenu.className='console-send-menu';sendMenu.setAttribute('popover','manual');sendMenu.setAttribute('role','menu');sendMenu.setAttribute('aria-label',OaclisSettings.text('Allega o invia'));
- for(const [label,icon,action]of [['Scatta foto','image',()=>pickImage(true)],['Archivio','folder',()=>pickImage(false)],['Invia','arrowUp',()=>submit()]]){
-  const button=document.createElement('button');button.type='button';button.setAttribute('role','menuitem');button.innerHTML=OaclisIcon(icon);button.append(document.createTextNode(OaclisSettings.text(label)));button.onclick=()=>{sendMenu.hidePopover();action();};sendMenu.append(button);
- }
- form.append(sendMenu);
- const dismissSendMenu=event=>{
-  if(!sendMenu.matches(':popover-open'))return;
-  if(event.type==='keydown'?event.key==='Escape':!sendMenu.contains(event.target)&&!sendButton.contains(event.target)){
-   sendMenu.hidePopover();if(event.type==='keydown'){event.preventDefault();sendButton.focus({preventScroll:true});}
-  }
- };
- document.addEventListener('pointerdown',dismissSendMenu);document.addEventListener('keydown',dismissSendMenu);
- function showSendMenu(choice=0){
-  if(sendButton.disabled||closed)return;
-  sendMenu.showPopover();sendButton.setAttribute('aria-expanded','true');
-  const rect=sendButton.getBoundingClientRect();sendMenu.style.left=Math.max(8,Math.min(innerWidth-sendMenu.offsetWidth-8,rect.right-sendMenu.offsetWidth))+'px';sendMenu.style.top=Math.max(8,rect.top-sendMenu.offsetHeight-8)+'px';
-  sendMenu.querySelectorAll('button')[choice].focus({preventScroll:true});
- }
- sendMenu.addEventListener('toggle',event=>sendButton.setAttribute('aria-expanded',String(event.newState==='open')));
- let holdTimer=null,longPressed=false,holdStart;
- const cancelHold=()=>{clearTimeout(holdTimer);holdTimer=null;};
- sendButton.onpointerdown=event=>{if(event.button!==0||sendButton.disabled)return;cancelHold();longPressed=false;holdStart={x:event.clientX,y:event.clientY};holdTimer=setTimeout(()=>{holdTimer=null;longPressed=true;showSendMenu();},500);};
- sendButton.onpointermove=event=>{if(holdStart&&Math.hypot(event.clientX-holdStart.x,event.clientY-holdStart.y)>10)cancelHold();};
- sendButton.onpointerup=sendButton.onpointercancel=sendButton.onpointerleave=cancelHold;
- sendButton.onclick=event=>{if(longPressed){event.preventDefault();event.stopPropagation();longPressed=false;}};
- sendButton.oncontextmenu=event=>{event.preventDefault();cancelHold();longPressed=true;showSendMenu();};
- sendButton.onkeydown=event=>{if(event.key==='ArrowDown'||event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();showSendMenu();}};
+ const closeSendMenu=OaclisTerminal.attachSendMenu(form,sendButton,{pickImage,submit,closed:()=>closed});
  async function open(selected,beside=false){
   if(!authorizedChats.some(chat=>chat.id===selected.id))return false;
   picker.close();
@@ -305,7 +254,7 @@ async function openConsole(chat,adjacent=false){
   try{return await send(active,'create',{text,icon,key:''});}
   finally{inputBusy=false;if(!closed&&!document.hidden){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
  },split:()=>panes.length===2,selectPane:position=>activate(panes[['sotto','bottom'].includes(OaclisVoice.normalize(position))?1:0]),list:()=>picker.open?authorizedChats:visibleChatList};
- closeConsole=()=>{if(closed)return;document.removeEventListener('pointerdown',dismissSendMenu);document.removeEventListener('keydown',dismissSendMenu);reading?.abort();cancelHold();if(sendMenu.matches(':popover-open'))sendMenu.hidePopover();if(active)saveDraft(active.chat.id,text.value);reader?.destroy();for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleActions=null;consoleWorkspace=null;closeConsole=null;};
+ closeConsole=()=>{if(closed)return;closeSendMenu();reading?.abort();if(active)saveDraft(active.chat.id,text.value);reader?.destroy();for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleActions=null;consoleWorkspace=null;closeConsole=null;};
  text.addEventListener('input',()=>{if(active)saveDraft(active.chat.id,text.value);});form.onsubmit=async event=>{event.preventDefault();await submit();};text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
  document.getElementById('back').onclick=()=>protectedView().catch(()=>location.replace('/auth'));
  for(const [key,label]of [['Escape','Esc'],['1','1'],['2','2'],['3','3'],['C-c','Ctrl+C']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.key=key;button.onclick=()=>submit(active,key);keys.append(button);}

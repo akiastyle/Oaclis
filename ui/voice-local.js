@@ -1,4 +1,4 @@
-// voice-local.js v1.15.41
+// voice-local.js v1.15.43
 'use strict';
 window.OaclisLocalVoice=(()=>{
  const toolbar=document.getElementById('toolbar-actions')||document.querySelector('.toolbar');
@@ -16,7 +16,7 @@ window.OaclisLocalVoice=(()=>{
   if(adapter)reader=OaclisReadAloud.create(readHost);
   voice.bind({chatId:adapter?.chatId,compose:adapter?.compose,fields:()=>[adapter?.compose||search].filter(Boolean),chats,list,
    selectChat:chat=>openChatTerminal({entry:chat},host,sourceId||'master'),
-   ...(adapter?{send:adapter.send,sending:adapter.sending,commandOnly:()=>reader?.commandOnly(),readOn:()=>reader?.enable(),readOff:()=>reader?.disable(),readStop:()=>reader?.skip()}:{}),
+   ...(adapter?{send:adapter.send,sending:adapter.sending,takePhoto:adapter.takePhoto,pickImage:adapter.pickImage,removeImage:adapter.removeImage,hasAttachment:adapter.hasAttachment,commandOnly:()=>reader?.commandOnly(),readOn:()=>reader?.enable(),readOff:()=>reader?.disable(),readStop:()=>reader?.skip()}:{}),
   },micHost);
   micHost.querySelector('button').classList.add('icon-button');readHost.querySelector('button')?.classList.add('icon-button');voice.ready();
  }
