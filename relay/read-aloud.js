@@ -1,4 +1,4 @@
-// read-aloud.js v1.21.270
+// read-aloud.js v1.21.276
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -24,6 +24,7 @@ window.OaclisReadAloud=(()=>{
  }
  function create(host){
   const engine=window.speechSynthesis,button=document.createElement('button');
+  engine?.getVoices?.();
   button.type='button';button.className='read-aloud secondary';
   button.innerHTML=OaclisIcon('volume');
   let enabled=false,cursor=null,queue=[],speaking=false,current=null,generation=0,disposed=false,currentItem=null,echoUntil=0,quietUntil=0,playTimer=null,speechTimer=null,recoverSpeech=null,lastSpeechProgress=0,lastActivity='',lastActivityId=null,lastActivityAt=0;
@@ -35,7 +36,10 @@ window.OaclisReadAloud=(()=>{
    if(wait>0){if(!playTimer)playTimer=setTimeout(()=>{playTimer=null;play();},wait);return;}
    const {text,id,activity,retried=false}=queue.shift(),version=generation,utterance=new SpeechSynthesisUtterance(text);currentItem=id;
    if(activity){lastActivity=text;lastActivityId=id;lastActivityAt=Date.now();}
-   utterance.lang=OaclisSettings.speechLanguage;speaking=true;current=utterance;lastSpeechProgress=Date.now();let started=false;
+   utterance.lang=OaclisSettings.speechLanguage;
+   const language=utterance.lang.toLowerCase(),voices=(engine.getVoices?.()||[]).filter(voice=>voice.lang.toLowerCase().split('-')[0]===language.split('-')[0]);
+   utterance.voice=voices.find(voice=>/^Google\b/i.test(voice.name)&&voice.lang.toLowerCase()===language)||voices.find(voice=>/^Google\b/i.test(voice.name))||voices.find(voice=>voice.lang.toLowerCase()===language)||voices[0]||null;
+   speaking=true;current=utterance;lastSpeechProgress=Date.now();let started=false;
    const done=()=>{if(version!==generation||disposed||current!==utterance)return;clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;if(queue.length)play();};
    const recover=()=>{
     speechTimer=null;
