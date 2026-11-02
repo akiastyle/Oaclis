@@ -22,6 +22,23 @@ quelli dei device abbinati tramite il collegamento Oaclis gia esistente.
 Questa API locale non richiede chiavi dei modelli AI, passkey o credenziali
 FTP: non leggerle e non inserirle nei report.
 
+## Primo collegamento: leggi il contratto
+
+All'inizio invia `{}` allo stesso endpoint:
+
+```sh
+curl --max-time 2 --fail --silent --show-error \
+  -X POST http://127.0.0.1:23232/api/jobs/status \
+  -H 'Content-Type: application/json' \
+  --data-binary '{}'
+```
+
+La risposta descrive protocollo, campi, limiti, esempio e frequenza degli
+aggiornamenti. Non registra un tool e non modifica gli stati esistenti.
+Leggi questo contratto una volta quando configuri il collegamento;
+le richieste successive inviano lo stato completo. Non servono nuove
+chiamate di configurazione per ogni aggiornamento.
+
 ## Cosa inviare
 
 Solo questi quattro campi; non aggiungerne altri:
@@ -42,9 +59,15 @@ Solo questi quattro campi; non aggiungerne altri:
 | `text` | Testo libero che il tool vuole mostrare nel dettaglio. |
 | `progress` | Percentuale numerica fra 0 e 100, oppure `null` se non e quantificabile. |
 
-Prima di implementare identifica la chat corretta dalle indicazioni del
-proprietario o dal catalogo Oaclis disponibile. Se manca l'ID, chiedilo;
-non inventarlo e non usare automaticamente quello di un'altra conversazione.
+La chat/AI che modifica il tool deve usare il proprio ID reale di sessione,
+lo stesso che identifica la chat e permette di riprenderla con `codex resume`.
+Verificalo dal contesto disponibile e scrivilo direttamente nella configurazione
+dell'invio del tool. Non richiedere al proprietario di passarlo manualmente
+quando e gia disponibile. Non sono necessarie nuove variabili d'ambiente
+fornite da Oaclis. Se l'ID non e verificabile, chiedilo senza inventarlo.
+
+Assegna un `id` stabile e diverso a ogni tool della stessa chat: per esempio
+`traduzioni-rumeno` e `calcolo-vesuvio`. I loro aggiornamenti restano separati.
 `CHAT_ID_REALE` negli esempi e un segnaposto da sostituire.
 
 Vincoli:

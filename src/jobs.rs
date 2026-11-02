@@ -1,4 +1,4 @@
-// jobs.rs v1.15.103
+// jobs.rs v1.16.134
 //! Volatile tool telemetry, independent of AI execution and persistent chat state.
 use crate::invalid;
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,21 @@ struct PeerJobs { name:String, jobs:Vec<(Update,u64,bool)>, received:Instant }
 struct Monitor { jobs:Mutex<BTreeMap<(String,String),Record>>, peers:Mutex<BTreeMap<String,PeerJobs>> }
 impl Monitor {
     fn update(&self,value:Value)->io::Result<Value> {
+        if value.as_object().is_some_and(|object|object.is_empty()) {
+            return Ok(json!({
+                "protocol":"oaclis-jobs-v1","method":"POST","endpoint":"/api/jobs/status","content_type":"application/json",
+                "identity":["device","chat_id","id"],"additional_fields":false,
+                "fields":{
+                    "chat_id":{"type":"string","required":true,"max_length":160,"pattern":"^[A-Za-z0-9_-]+$","description":"ID reale della chat che configura il tool, lo stesso usato per riprenderla. La chat lo verifica e lo inserisce direttamente nella configurazione del tool."},
+                    "id":{"type":"string","required":true,"max_length":160,"pattern":"^[A-Za-z0-9_-]+$","description":"Nome identificativo stabile del tool. Usa ID diversi per tool diversi nella stessa chat."},
+                    "text":{"type":"string","required":true,"max_length":2000,"description":"Testo libero, anche su piu righe. Il tool decide cosa scrivere; viene visualizzato senza interpretazione. Non includere credenziali."},
+                    "progress":{"type":["number","null"],"minimum":0,"maximum":100,"default":null,"description":"Percentuale reale; null se non quantificabile. Usa 100 soltanto a conclusione riuscita."}
+                },
+                "reporting":{"max_updates_per_second":1,"heartbeat_seconds":15,"timeout_seconds":2,"failure_must_not_stop_tool":true,"replace_previous":true,"device_is_implicit":true,"delivery":"Invia a Oaclis sullo stesso device. Non inviare al sito pubblico o al relay mobile."},
+                "example":{"chat_id":"ID_REALE_DELLA_PROPRIA_CHAT","id":"nome-tool","text":"Elaborazione in corso","progress":42},
+                "response":{"ok":true}
+            }));
+        }
         let update=Update::parse(value)?;let key=(update.chat_id.clone(),update.id.clone());
         let mut jobs=self.jobs.lock().unwrap();
         if jobs.len()>=256&&!jobs.contains_key(&key){return Err(invalid("Troppi lavori monitorati"));}
@@ -76,6 +91,22 @@ pub(crate) fn retain(approved:&std::collections::BTreeSet<String>){local().peers
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn empty_request_describes_protocol_without_registering_a_tool() {
+        let monitor=Monitor::default();
+        let contract=monitor.update(json!({})).unwrap();
+        assert_eq!(contract["endpoint"],"/api/jobs/status");
+        assert_eq!(contract["fields"]["id"]["max_length"],160);
+        assert!(monitor.snapshot()["jobs"].as_array().unwrap().is_empty());
+        let mut report=contract["example"].clone();report["chat_id"]=json!("chat-a");
+        assert_eq!(monitor.update(report.clone()).unwrap(),contract["response"]);
+        report["id"]=json!("other-tool");monitor.update(report).unwrap();
+        assert_eq!(monitor.for_chat("chat-a").as_array().unwrap().len(),2);
+        assert_eq!(monitor.update(json!({})).unwrap(),contract);
+        assert_eq!(monitor.snapshot()["jobs"].as_array().unwrap().len(),2);
+        assert!(monitor.update(json!(null)).is_err());
+        assert!(monitor.update(json!({"chat_id":"chat-a"})).is_err());
+    }
     #[test]
     fn replaces_status_and_keeps_same_tool_separate_for_each_chat() {
         let monitor=Monitor::default();

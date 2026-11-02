@@ -19,7 +19,13 @@ Entrambi accettano lettere, numeri, trattini e underscore, fino a 160 caratteri.
 scrivere: Oaclis lo mostra come testo semplice, senza interpretarlo.
 `progress` va da 0 a 100; `null` indica un avanzamento non quantificabile.
 
-Risposta: `{"ok":true}`. Ogni invio sostituisce lo stato precedente. I dati
+Per conoscere il contratto inviare `{}` allo stesso endpoint: restituisce
+campi, vincoli, esempio e frequenza, senza registrare un lavoro. La chat che
+configura il tool inserisce direttamente il proprio ID reale e un ID distinto
+per ogni tool. Non serve passare manualmente nuove variabili d'ambiente.
+Le istruzioni per le altre AI sono in [TOOL-INTEGRATION.md](TOOL-INTEGRATION.md).
+
+Risposta a uno stato accettato: `{"ok":true}`. Ogni invio sostituisce lo stato precedente. I dati
 restano in memoria, non su disco, e al riavvio vengono ripopolati dai tool.
 Gli aggiornamenti non avviano, arrestano o sincronizzano lavori.
 
