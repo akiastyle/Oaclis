@@ -1,4 +1,4 @@
-// map.js v4.122.3137
+// map.js v4.122.3149
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -61,7 +61,7 @@ function positionConnectionPorts() {
   let moving = false;
   for (const node of nodes) {
     const rect = node.getBoundingClientRect(), cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
-    const peers = nodes.filter(other => other !== node);
+    const peers = [...document.querySelectorAll('.map-node')].filter(other => other !== node);
     if (!peers.length) continue;
     const linked = new Set(chatLinks.filter(value => value.source === node.dataset.id || value.target === node.dataset.id)
       .map(value => value.source === node.dataset.id ? value.target : value.source));
@@ -127,9 +127,9 @@ function positionConnectionPorts() {
 
 function renderLink(force = false) {
   if (drawingMap) return;
+  positionConnectionPorts();
   renderMobileLinks();
   if (document.querySelector('.link-badge[data-dragging="true"]')) return;
-  positionConnectionPorts();
   if (!force && document.querySelector(".link-badge:hover, .link-badge:focus-within")) return;
   const layers = new Map([...document.querySelectorAll(".chat-link")].map(node => [node.dataset.renderKey, node]));
   const geometry = Object.fromEntries([...document.querySelectorAll(".map-node")].map(node => {
@@ -661,7 +661,7 @@ function renderMap(animate = false) {
         port.dataset.operation = operation;
         port.setAttribute("aria-label", label + " · " + device.name);
         port.title = label;
-        port.innerHTML = OaclisIcon(operation === 'sync' ? 'sync' : operation === 'send' ? 'send' : operation === 'console' ? 'terminal' : 'receive');
+        port.innerHTML = OaclisIcon(operation === 'sync' ? 'sync' : operation === 'send' ? 'send' : operation === 'console' ? 'square-stop' : 'receive');
         const local = device.id === "master";
   const objectId = device.id || "device-" + crypto.randomUUID();
         if (local) port.title = operation === "send" ? OaclisSettings.text("Invia a un dispositivo") : operation === "receive" ? OaclisSettings.text("Ricevi da un dispositivo") : label;
@@ -851,10 +851,12 @@ async function selectChat(entry, targetId, operation = "copy") {
 }
 
 
-function mobileLinkCurve(from, to, base, radius = 0) {
+function mobileLinkCurve(from, to, base, radius = 0, fromPort = null, toPort = null) {
   const overlapX = [Math.max(from.left + radius, to.left + radius), Math.min(from.right - radius, to.right - radius)];
   const overlapY = [Math.max(from.top + radius, to.top + radius), Math.min(from.bottom - radius, to.bottom - radius)];
   const sides = [from, to].map((rect, index) => {
+    const port=index?toPort:fromPort;
+    if(port){const r=port.getBoundingClientRect(),n=port.portNormal||{x:1,y:0};return [{x:r.left+r.width/2,y:r.top+r.height/2,nx:n.x,ny:n.y}];}
     const other = index ? from : to;
     const inset = Math.min(radius, rect.width / 2, rect.height / 2);
     const x = overlapX[0] <= overlapX[1] ? (overlapX[0] + overlapX[1]) / 2 : Math.max(rect.left + inset, Math.min(rect.right - inset, other.left + other.width / 2));
@@ -912,7 +914,7 @@ function renderMobileLinks() {
       path.setAttribute('marker-end','url(#' + marker.id + ')'); svg.append(path);arrows.set(device.id,marker);
     }
     path.dataset.source=device.source; path.dataset.target=device.target;
-    path.setAttribute('d', mobileLinkCurve(owner.getBoundingClientRect(), node.getBoundingClientRect(), base, radius));
+    path.setAttribute('d', mobileLinkCurve(owner.getBoundingClientRect(), node.getBoundingClientRect(), base, radius, owner.querySelector('.connection-port.console'), node.querySelector('.connection-port.console')));
     svg.querySelectorAll('.link-flow-trace[data-id="' + CSS.escape(device.id) + '"]').forEach(trace => trace.setAttribute('d', path.getAttribute('d')));
     renderAccessBadges(path, device, badges, markers);
     path.dataset.active = String(device.active === true);
