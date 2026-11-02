@@ -1,4 +1,4 @@
-// jobs.js v1.17.83
+// jobs.js v1.17.87
 'use strict';
 window.OaclisJobs=(()=>{
  const text=value=>OaclisSettings.text(value);
@@ -37,12 +37,10 @@ window.OaclisJobs=(()=>{
    const seen=new Set();
    for(const job of jobs){
     const key=JSON.stringify([job.device_id,job.chat_id,job.id]);seen.add(key);let entry=rows.get(key);
-    if(!entry){const item=document.createElement('span');item.className='job-row';const name=document.createElement('span');name.className='job-name';const progress=indicator();item.append(name,progress.button);root.insertBefore(item,message);entry={item,name,progress};rows.set(key,entry);}
+    if(!entry){const item=document.createElement('div');item.className='job-row';const name=document.createElement('span');name.className='job-name';const progress=indicator();item.append(name,progress.button);root.insertBefore(item,message);entry={item,name,progress};rows.set(key,entry);}
     if(entry.name.textContent!==job.id)entry.name.textContent=job.id;entry.progress.update(job);
    }
    for(const [key,entry]of rows)if(!seen.has(key)){entry.progress.destroy();entry.item.remove();rows.delete(key);}
-   const heading=root.closest('.jobs-panel')?.querySelector('h2'),first=rows.values().next().value;
-   if(heading){if(first&&heading.firstElementChild!==first.item)heading.replaceChildren(first.item);else if(!first)heading.textContent=text('Lavori');}
    message.textContent=jobs.length?'':text('Nessun lavoro collegato');
   }
   async function poll(){
