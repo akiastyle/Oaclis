@@ -1,4 +1,4 @@
-// web.rs v2.28.1836
+// web.rs v2.28.1843
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -214,6 +214,9 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 return;
             }
             let asset = match url.as_str() {
+                "/jobs" => Some((include_str!("../ui/jobs.html").into(), "text/html; charset=utf-8")),
+                "/jobs.js" => Some((include_str!("../ui/jobs.js").into(), "text/javascript; charset=utf-8")),
+                "/jobs.css" => Some((include_str!("../ui/jobs.css").into(), "text/css; charset=utf-8")),
                 "/assets/oaclis-crown.svg" => Some((include_str!("../ui/assets/oaclis-crown.svg").into(), "image/svg+xml")),
                 "/assets/oaclis-whale.svg" => Some((include_str!("../ui/assets/oaclis-whale.svg").into(), "image/svg+xml")),
                 "/" => Some((
@@ -257,9 +260,11 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
         let _configuration_edit = if request.method() == &Method::Post && matches!(url.as_str(), "/api/device" | "/api/device/delete" | "/api/rule") {
             Some(configuration_edits.lock().unwrap())
         } else { None };
-        if !matches!(url.as_str(),"/api/state"|"/api/status"|"/api/log"|"/api/links"|"/api/peers"|"/api/mobile/qr"|"/api/mobile/pending") { crate::state_transport::log(format!("HTTP POST {url}")); }
+        if !matches!(url.as_str(),"/api/state"|"/api/status"|"/api/log"|"/api/links"|"/api/peers"|"/api/mobile/qr"|"/api/mobile/pending"|"/api/jobs/status"|"/api/jobs/list") { crate::state_transport::log(format!("HTTP POST {url}")); }
         let result = (|| -> io::Result<Value> {
             match (request.method(), url.as_str()) {
+                (&Method::Post, "/api/jobs/status") => crate::jobs::update(body(&mut request)?),
+                (&Method::Post, "/api/jobs/list") => Ok(crate::jobs::all(&devices::load(config.join("devices.json"))?)),
                 (&Method::Post, "/api/engines") => crate::engines::settings(&home),
                 (&Method::Post, "/api/engines/save") => crate::engines::save(&home,&body(&mut request)?),
                 (&Method::Post, "/api/llama/models") => {

@@ -1,4 +1,4 @@
-// app.js v4.166.3147
+// app.js v4.166.3148
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -311,6 +311,7 @@ $("#check").onclick = guard(() => api("check", {}));
 $("#add-device").onclick = () => openDiscovery();
 $('#new-chat').onclick=()=>openNewChat($('#new-chat'));
 $('#engine-settings').onclick=()=>openEngineSettings($('#engine-settings'));
+$('#jobs-monitor').onclick=()=>OaclisJobs.open($('#jobs-monitor'));
 $("#edit-device").onclick = () => editDevice(data.devices.find(d => d.id === sourceId), $("#edit-device"));
 const lastConnection = {};
 let statusRevisions = {};

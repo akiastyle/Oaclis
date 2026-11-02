@@ -1,4 +1,4 @@
-// shared_settings.rs v1.12.532
+// shared_settings.rs v1.12.534
 //! Native settings replication over existing, mutually approved SSH connections.
 use crate::{
     invalid, shared_records as records,
@@ -31,6 +31,7 @@ pub fn start(home: PathBuf) {
             let ready = (|| -> io::Result<_> {
                 let devices = crate::devices::load(config.join("devices.json"))?;
                 let pairing = read_json(&config.join("pairing.json"), json!({}))?;
+                crate::jobs::retain(&pairing["approved"].as_object().into_iter().flat_map(|peers|peers.values()).filter_map(|peer|peer["device_id"].as_str().map(String::from)).collect());
                 let mut ready = Vec::new();
                 let mut retained = active.clone();
                 for (peer, approval) in pairing["approved"].as_object().into_iter().flatten() {
@@ -283,6 +284,7 @@ fn sync_peer(config: &Path, peer: &str, device: &crate::devices::Device) -> io::
         return Err(invalid("Stato Oaclis non valido"));
     }
     exchange(config, Some(&response))?;
+    let _=crate::jobs::receive(device,&response["jobs"]);
     Ok(response["runtime"].clone())
 }
 

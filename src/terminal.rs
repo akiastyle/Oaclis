@@ -1,4 +1,4 @@
-// terminal.rs v1.21.383
+// terminal.rs v1.21.385
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -188,7 +188,7 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let access=if value["action"]=="open" {
         tmux(&["show-options","-v","-t",&session,"@oaclis-access"]).ok().and_then(|v|String::from_utf8(v).ok()).map(|v|v.trim().to_owned()).filter(|v|access_flags(v).is_ok()).unwrap_or_else(||"existing".into())
     } else { String::new() };
-    let mut result=json!({"screen":sgr().replace_all(&ansi,""),"screen_ansi":ansi,"active_access":access});
+    let mut result=json!({"screen":sgr().replace_all(&ansi,""),"screen_ansi":ansi,"active_access":access,"jobs":crate::jobs::for_chat(chat)});
     if value["speech"]==true {result["speech"]=crate::assistant_stream::snapshot(chat,value["speech_cursor"].as_u64());}
     Ok(result)
 }

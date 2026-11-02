@@ -1,4 +1,4 @@
-// app.js v1.92.965
+// app.js v1.92.974
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -140,7 +140,7 @@ async function openConsole(chat,adjacent=false){
   fitConsole();container.dataset.split=String(panes.length===2);panes[0]?.title.append(createButton,split);
   split.setAttribute('aria-pressed',String(panes.length===2));split.title=OaclisSettings.text(panes.length===2?'Chat singola':'Affianca chat');split.setAttribute('aria-label',split.title);
  }
- function remove(pane){saveDraft(pane.chat.id,pane===active?text.value:drafts.get(pane.chat.id)||'');consolePositions.set(pane.chat.id,pane.saved||{top:pane.screen.scrollTop,left:pane.screen.scrollLeft,follow:pane.follow});pane.closed=true;pane.element.remove();panes.splice(panes.indexOf(pane),1);}
+ function remove(pane){saveDraft(pane.chat.id,pane===active?text.value:drafts.get(pane.chat.id)||'');consolePositions.set(pane.chat.id,pane.saved||{top:pane.screen.scrollTop,left:pane.screen.scrollLeft,follow:pane.follow});pane.closed=true;pane.jobsStatus.destroy();pane.element.remove();panes.splice(panes.indexOf(pane),1);}
  function activate(pane){
   if(!pane||pane.closed||closed)return false;
   if(pane===active)return true;
@@ -154,7 +154,8 @@ async function openConsole(chat,adjacent=false){
  function add(selected,index=panes.length){
   const element=document.createElement('article');element.className='console-pane';element.setAttribute('aria-label',selected.name);element.innerHTML=OaclisSettings.html('<h1 class="console-title"></h1><pre class="console-screen" tabindex="0" aria-label="Console">Connessione…</pre>');
   const title=element.querySelector('h1'),name=document.createElement('span');name.className='console-name';name.textContent=selected.name;title.append(chatIcon(selected),name);
-  const saved=consolePositions.get(selected.id),pane={chat:selected,element,title,name,screen:element.querySelector('pre'),ready:false,closed:false,follow:saved?.follow??true,saved};
+  const jobs=document.createElement("span");title.append(jobs);const jobsStatus=OaclisJobs.inline(jobs);
+  const saved=consolePositions.get(selected.id),pane={chat:selected,element,title,name,jobsStatus,screen:element.querySelector('pre'),ready:false,closed:false,follow:saved?.follow??true,saved};
   panes.splice(index,0,pane);container.insertBefore(element,container.children[index]||null);
   pane.screen.addEventListener('scroll',()=>{pane.follow=pane.screen.scrollHeight-pane.screen.clientHeight-pane.screen.scrollTop<=24;},{passive:true});
   element.addEventListener('click',event=>{if(!event.target.closest('button'))activate(pane);});element.addEventListener('focusin',event=>{if(!event.target.closest('button'))activate(pane);});
@@ -171,7 +172,7 @@ async function openConsole(chat,adjacent=false){
   const pane=request.pane;if(pane.closed)return true;
   if(request.operation==='input'&&typeof request.text==='string'&&(drafts.get(pane.chat.id)||'')===request.text){saveDraft(pane.chat.id,'');if(pane===active&&text.value===request.text)text.value='';}
   if(request.image&&imageDrafts.get(pane.chat.id)===request.image){imageDrafts.delete(pane.chat.id);if(pane===active)paintAttachment();}
-  pane.reconnecting=false;pane.name.textContent=pane.chat.name;
+  pane.reconnecting=false;pane.name.textContent=pane.chat.name;pane.jobsStatus.update(result.jobs);
   if(request.operation==='open'||request.operation==='input')pane.follow=true;
   const top=pane.saved?.top??pane.screen.scrollTop,left=pane.saved?.left??pane.screen.scrollLeft;
   const savedFollow=pane.saved?.follow;if(request.operation==='open'&&savedFollow===false)pane.follow=false;
@@ -199,7 +200,7 @@ async function openConsole(chat,adjacent=false){
      if(inputBusy||document.hidden)controller.abort();
     }
     return await complete(pending,controller?.signal);
-   }catch(error){if(controller?.signal.aborted){if(pending?.operation==='read')pending=null;return false;}if(error.status===403){voice.stop();show('');location.replace('/auth');}else if(operation==='engines'||operation==='models')throw error;else if(!closed&&!pane.closed){pane.reconnecting=true;pane.name.textContent=pane.chat.name+OaclisSettings.text(operation==='input'?' · Invio non confermato':' · Riconnessione…');}return false;}
+   }catch(error){if(controller?.signal.aborted){if(pending?.operation==='read')pending=null;return false;}if(error.status===403){voice.stop();show('');location.replace('/auth');}else if(operation==='engines'||operation==='models')throw error;else if(!closed&&!pane.closed){pane.jobsStatus.stale();pane.reconnecting=true;pane.name.textContent=pane.chat.name+OaclisSettings.text(operation==='input'?' · Invio non confermato':' · Riconnessione…');}return false;}
    finally{if(reading===controller)reading=null;}
   });queue=task.catch(()=>false);return task;
  }

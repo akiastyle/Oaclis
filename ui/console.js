@@ -1,4 +1,4 @@
-// console.js v3.123.2190
+// console.js v3.123.2195
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet();
@@ -13,6 +13,7 @@ function closeChatTerminal(panel) {
   panel.saveGeometry?.();
   clearTimeout(panel.terminalTimer);
   panel.closeSendMenu?.();
+  panel.jobsStatus?.destroy();
   document.removeEventListener('visibilitychange',panel.terminalVisibility);
   if(panel.windowMessage)window.removeEventListener('message',panel.windowMessage);
   const anchor = panel.opener;
@@ -205,6 +206,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   const payload = { device_id: deviceId, chat_id: connection.entry.id };
   const status = document.createElement("small"); status.className = "terminal-state"; status.setAttribute("role", "status"); panel.querySelector("h2").append(status);
   status.addEventListener("mouseenter",()=>{status.title=status.textContent;});
+  const jobs=document.createElement("span");panel.querySelector("h2").append(jobs);panel.jobsStatus=OaclisJobs.inline(jobs);
   let followOutput = true;
   screen.addEventListener("scroll", () => { followOutput = screen.scrollHeight-screen.clientHeight-screen.scrollTop <= 24; }, {passive:true});
   let busy = false, ready = false, submitting = false, preparingImage = false, image = null, waitingInputs = 0, idle = Promise.resolve();
@@ -220,6 +222,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
       const stamp = window.OaclisLocalVoice?.stamp(panel);
       const result = await api("terminal", { ...payload, ...value, ...window.OaclisLocalVoice?.request(panel) });
       if (!panel.isConnected) return false;
+      panel.jobsStatus.update(result.jobs);
       const top=screen.scrollTop,left=screen.scrollLeft;
       OaclisTerminal.render(screen,OaclisTerminal.consoleScreen(result.screen),result.screen_ansi);
       if (value.action === "input" || value.action === "open") followOutput = true;
@@ -231,7 +234,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
       ready = true;
       form.querySelectorAll("textarea,button").forEach(e => e.disabled = false);
       return true;
-    } catch (error) { if (panel.isConnected) {status.textContent=OaclisSettings.text(value.action === "input" ? "Invio non confermato" : "Collegamento temporaneamente non disponibile. Riprova.");status.dataset.error="true";} if (value.action === "open") ready = false; return false; }
+    } catch (error) { if (panel.isConnected) {panel.jobsStatus.stale();status.textContent=OaclisSettings.text(value.action === "input" ? "Invio non confermato" : "Collegamento temporaneamente non disponibile. Riprova.");status.dataset.error="true";} if (value.action === "open") ready = false; return false; }
     finally { busy = false; done(); }
   };
   let terminalPolling=false;

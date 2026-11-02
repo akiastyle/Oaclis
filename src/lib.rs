@@ -1,4 +1,4 @@
-// lib.rs v1.3.99
+// lib.rs v1.3.100
 pub mod state_store;
 mod chat_deletion;
 mod state_migration;
@@ -10,6 +10,7 @@ mod link_flow;
 mod catalog;
 mod llama;
 mod engines;
+mod jobs;
 mod assistant_stream;
 mod initial_inventory;
 mod transfer_job;

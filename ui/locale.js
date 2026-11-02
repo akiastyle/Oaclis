@@ -1,4 +1,4 @@
-// locale.js v1.3.515
+// locale.js v1.3.520
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -8,6 +8,11 @@ window.OaclisSettings=(()=>{
  const speechLanguage=language==='it'?'it-IT':'en-US';
  document.documentElement.lang=language;
  const en={
+  "Avanzamento non disponibile":"Progress unavailable",
+  "Lavori":"Jobs",
+  "Nessun lavoro collegato":"No connected jobs",
+  "Monitor temporaneamente non disponibile":"Monitor temporarily unavailable",
+
   "Modello":"Model",
   "Motori AI":"AI engines",
   "Motore":"Engine",
