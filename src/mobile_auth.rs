@@ -1,4 +1,4 @@
-// mobile_auth.rs v1.48.662
+// mobile_auth.rs v1.48.673
 //! Local mobile authority: QR-bound keys, chat grants and signed, non-replayable requests.
 use crate::invalid;
 use ring::{hmac, rand::{SecureRandom, SystemRandom}, signature};
@@ -24,7 +24,7 @@ pub(crate) struct Phone { pub name:String, public_key:String, pub chats:BTreeSet
 struct Settings { admin_key:String, #[serde(default)] authorization:Authority }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct SignedRequest { purpose:String, epoch:String, device:String, id:String, issued:u64, chat_id:String, action:String, text:String, key:String, #[serde(default)] speech:bool, #[serde(default)] speech_cursor:Option<u64>, #[serde(default)] image:Option<String>, #[serde(default)] icon:String }
+struct SignedRequest { purpose:String, epoch:String, device:String, id:String, issued:u64, chat_id:String, action:String, text:String, key:String, #[serde(default)] speech:bool, #[serde(default)] speech_cursor:Option<u64>, #[serde(default)] image:Option<String>, #[serde(default)] icon:String, #[serde(default)] model:String }
 
 pub(crate) struct Store {
     config:PathBuf,
@@ -121,16 +121,17 @@ impl Store {
             || !matches!(command.key.as_str(),""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c"|"1"|"2"|"3")
             || (!matches!(command.action.as_str(),"input"|"create") && (!command.text.is_empty() || !command.key.is_empty() || command.image.is_some()))
             || (command.action=="create" && (!command.key.is_empty() || command.image.is_some() || command.text.trim().is_empty() || command.text.chars().count()>160))
-            || (command.action!="create"&&!command.icon.is_empty()) {
+            || (command.action!="create"&&(!command.icon.is_empty()||!command.model.is_empty())) {
             return Err(invalid("Richiesta mobile non autorizzata dal master"));
         }
+        crate::terminal::validate_model(&command.model)?;
         if command.action=="create"{crate::appearance::Appearance{label:command.text.clone(),icon:command.icon.clone(),..Default::default()}.validate()?;}
         if let Some(image)=&command.image {crate::terminal::image_bytes(image)?;if command.key!="Enter" {return Err(invalid("Invio immagine non valido"));}}
         let mut seen=self.seen.lock().unwrap();seen.retain(|_,until|*until>=now());
         let id=format!("{device}:{}",command.id);
         if seen.contains_key(&id) || seen.len()>=8192{return Err(invalid("Richiesta mobile gia' utilizzata"));}
         seen.insert(id,command.issued+30);
-        Ok(json!({"chat_id":command.chat_id,"action":command.action,"text":command.text,"key":command.key,"speech":command.speech,"speech_cursor":command.speech_cursor,"image":command.image,"icon":command.icon}))
+        Ok(json!({"chat_id":command.chat_id,"action":command.action,"text":command.text,"key":command.key,"speech":command.speech,"speech_cursor":command.speech_cursor,"image":command.image,"icon":command.icon,"model":command.model}))
     }
 }
 
@@ -157,11 +158,11 @@ mod tests {
         let (root,store,key,binding)=fixture();let device="b".repeat(64);
         store.approve(&device,"Phone",&binding).unwrap();store.grants(&device,BTreeSet::from(["allowed".into()])).unwrap();
         let packet=command(&store,&key,&"5".repeat(32),"allowed",now());
-        let mut payload:Value=serde_json::from_str(packet["signed"]["payload"].as_str().unwrap()).unwrap();payload["action"]=json!("create");payload["key"]=json!("");payload["text"]=json!("Nuova chat");payload["icon"]=json!("code");
+        let mut payload:Value=serde_json::from_str(packet["signed"]["payload"].as_str().unwrap()).unwrap();payload["action"]=json!("create");payload["key"]=json!("");payload["text"]=json!("Nuova chat");payload["icon"]=json!("code");payload["model"]=json!("gpt-6.1-sol");
         let signed=|payload:&Value|{let payload=payload.to_string();json!({"device":device,"id":"5".repeat(32),"signed":{"signature":hex(key.sign(&SystemRandom::new(),payload.as_bytes()).unwrap().as_ref()),"payload":payload}})};
         let mut forged=payload.clone();forged["chat_id"]=json!("not-allowed");assert!(store.command(&signed(&forged)).is_err());
         forged=payload.clone();forged["cwd"]=json!("/root");assert!(store.command(&signed(&forged)).is_err());
-        assert_eq!(store.command(&signed(&payload)).unwrap()["icon"],"code");
+        let checked=store.command(&signed(&payload)).unwrap();assert_eq!(checked["icon"],"code");assert_eq!(checked["model"],"gpt-6.1-sol");
         assert!(store.allow_created(&device,"not-allowed","new-chat").is_err());
         store.allow_created(&device,"allowed","new-chat").unwrap();assert_eq!(store.authority().phones[&device].chats,BTreeSet::from(["allowed".into(),"new-chat".into()]));
         assert!(store.command(&signed(&payload)).is_err());std::fs::remove_dir_all(root).unwrap();

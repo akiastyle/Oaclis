@@ -1,4 +1,4 @@
-// state_store.rs v2.38.1369
+// state_store.rs v2.38.1373
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -375,6 +375,7 @@ fn preferences(state: &State) -> Value {
             key.strip_prefix("chat:").map(|id| {
                 let mut value=json!({"hidden":record.hidden,"scopes":scopes(record)});
                 if let Some(access)=record.sync.get("console_access") { value["console_access"]=access.clone(); }
+                if let Some(model)=record.sync.get("console_model") { value["console_model"]=model.clone(); }
                 (id.to_owned(),value)
             })
         })
@@ -596,7 +597,10 @@ fn write_operation(
             if !crate::devices::identifier(key){return Err(invalid("Chat non valida"));}
             let appearance:crate::appearance::Appearance=serde_json::from_value(value["value"].clone()).map_err(io::Error::other)?;appearance.validate()?;
             let access=value["console_access"].as_str().ok_or_else(||invalid("Autorizzazione console non valida"))?;crate::terminal::access_flags(access)?;
+            let model=value.get("console_model").map(|v|v.as_str().ok_or_else(||invalid("Modello non valido"))).transpose()?;
+            if let Some(model)=model{crate::terminal::validate_model(model)?;}
             let record=chat_record(state,key);record.value=serde_json::to_value(appearance)?;record.sync["console_access"]=json!(access);
+            if let Some(model)=model{record.sync["console_model"]=json!(model);}
             Ok(json!({"ok":true}))
         }
         "console-access" => {

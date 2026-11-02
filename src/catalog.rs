@@ -1,4 +1,4 @@
-// catalog.rs v2.35.1604
+// catalog.rs v2.35.1616
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -241,14 +241,20 @@ fn native<T>(home:&Path,root:&Path,release:bool,work:impl FnOnce(&mut NativeClie
     if release{*saved=None;}
     result
 }
-pub(crate) fn create(home:&Path,root:&Path,cwd:&Path,name:&str)->io::Result<Value> {
+pub(crate) fn create(home:&Path,root:&Path,cwd:&Path,name:&str,model:&str)->io::Result<Value> {
     if name.trim().is_empty()||name!=name.trim()||!cwd.is_absolute()||!cwd.is_dir(){return Err(crate::invalid("Nome o cartella chat non validi"));}
     crate::appearance::Appearance{label:name.into(),..Default::default()}.validate()?;
+    crate::terminal::validate_model(model)?;
     native(home,root,true,|client|{
-        let result=client.request("thread/start",json!({"cwd":cwd,"ephemeral":false,"persistExtendedHistory":true}))?;
+        let config=client.request("config/read",json!({"includeLayers":false}))?;
+        let available=client.request("model/list",json!({"includeHidden":false,"limit":100}))?;
+        let models=available["data"].as_array().ok_or_else(||crate::invalid("Elenco modelli non disponibile"))?;
+        let selected=if model.is_empty(){config["config"]["model"].as_str().or_else(||models.iter().find(|m|m["isDefault"]==true).and_then(|m|m["model"].as_str())).ok_or_else(||crate::invalid("Scegli il modello per la nuova chat"))?}else{model};
+        if !models.iter().any(|m|m["model"]==selected){return Err(crate::invalid("Modello non disponibile in Codex"));}
+        let result=client.request("thread/start",json!({"cwd":cwd,"model":selected,"ephemeral":false,"persistExtendedHistory":true}))?;
         let thread=&result["thread"];let id=thread["id"].as_str().filter(|id|id.len()==36&&crate::devices::identifier(id)).ok_or_else(||crate::invalid("Identificativo nuova chat non valido"))?;
         client.request("thread/name/set",json!({"threadId":id,"name":name}))?;
-        Ok(json!({"id":id,"name":name,"path":thread["path"],"cwd":cwd}))
+        Ok(json!({"id":id,"name":name,"path":thread["path"],"cwd":cwd,"model":selected}))
     })
 }
 

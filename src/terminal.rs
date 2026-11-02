@@ -1,4 +1,4 @@
-// terminal.rs v1.20.352
+// terminal.rs v1.21.371
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -13,7 +13,11 @@ pub(crate) fn access_flags(access: &str) -> io::Result<&'static str> {
         _ => Err(invalid("Autorizzazione console non valida")),
     }
 }
+pub(crate) fn validate_model(model:&str)->io::Result<()> {
+    if model.len()>160||!model.bytes().all(|c|c.is_ascii_alphanumeric()||b"._-:/".contains(&c)){return Err(invalid("Modello non valido"));}Ok(())
+}
 fn validate(value: &Value) -> io::Result<&str> {
+    if let Some(model)=value.get("model"){validate_model(model.as_str().ok_or_else(||invalid("Modello non valido"))?)?;}
     if let Some(access)=value.get("access") { access_flags(access.as_str().ok_or_else(||invalid("Autorizzazione console non valida"))?)?; }
     if let Some(speech)=value.get("speech") { if !speech.is_boolean() {return Err(invalid("Lettura non valida"));} }
     if value.get("speech_cursor").is_some_and(|cursor|!cursor.is_null() && cursor.as_u64().is_none()) {return Err(invalid("Cursore lettura non valido"));}
@@ -104,11 +108,13 @@ fn working_directory(home:&Path,root:&Path,chat:&str)->io::Result<PathBuf> {
     Ok(meta["payload"]["cwd"].as_str().map(Path::new).filter(|p|p.is_dir()).unwrap_or(home).to_path_buf())
 
 }
-fn open(home: &Path, root: &Path, chat: &str, session: &str, access: &str) -> io::Result<()> {
+fn open(home: &Path, root: &Path, chat: &str, session: &str, access: &str, model:&str) -> io::Result<()> {
     if tmux(&["has-session","-t",session]).is_ok() { return Ok(()); }
     let cwd=working_directory(home,root,chat)?;
     let executable=codex(home)?;
-    let command=format!("{} resume {} --no-alt-screen {}",crate::ssh::quote(executable.to_str().ok_or_else(||invalid("Percorso Codex non UTF-8"))?),crate::ssh::quote(chat),access_flags(access)?);
+    validate_model(model)?;
+    let model=if model.is_empty(){String::new()}else{format!("--model {}",crate::ssh::quote(model))};
+    let command=format!("{} resume {} --no-alt-screen {} {}",crate::ssh::quote(executable.to_str().ok_or_else(||invalid("Percorso Codex non UTF-8"))?),crate::ssh::quote(chat),access_flags(access)?,model);
     tmux(&["new-session","-d","-s",session,"-c",cwd.to_str().ok_or_else(||invalid("Cartella chat non UTF-8"))?,"-x","120","-y","36",&command])?;
     tmux(&["set-option","-t",session,"@oaclis-access",access])?;
     Ok(())
@@ -132,14 +138,13 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         let root=env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(||home.join(".codex"));
         let cwd=value["cwd"].as_str().filter(|v|!v.is_empty()).map(PathBuf::from).map(Ok).unwrap_or_else(||working_directory(&home,&root,chat))?;
         let name=value["text"].as_str().unwrap_or("").trim();
-        let entry=crate::catalog::create(&home,&root,&cwd,name)?;let id=entry["id"].as_str().unwrap();
+        let entry=crate::catalog::create(&home,&root,&cwd,name,value["model"].as_str().unwrap_or(""))?;let id=entry["id"].as_str().unwrap();
         let config=home.join(".config/oaclis");
         let appearance=crate::appearance::Appearance{label:name.into(),icon:value["icon"].as_str().unwrap_or("").into(),color:value["color"].as_str().unwrap_or("").into(),..Default::default()};
-        crate::appearance::save(config.join("appearance.json"),&std::collections::BTreeMap::from([(format!("chat:{id}"),appearance)]))?;
         let preferences=crate::state_store::database(&config,"","preferences-get",None)?;
         let access=value["access"].as_str().or_else(||preferences["preferences"][chat]["console_access"].as_str()).unwrap_or("default");
-        crate::state_store::database(&config,id,"console-access",Some(&json!(access)))?;
-        return Ok(json!({"new_chat":{"id":id,"name":name,"icon":value["icon"].as_str().unwrap_or(""),"color":value["color"].as_str().unwrap_or(""),"console_access":access}}));
+        crate::state_store::database(&config,id,"chat-settings",Some(&json!({"value":appearance,"console_access":access,"console_model":entry["model"]})))?;
+        return Ok(json!({"new_chat":{"id":id,"name":name,"icon":value["icon"].as_str().unwrap_or(""),"color":value["color"].as_str().unwrap_or(""),"console_access":access,"model":entry["model"]}}));
     }
     let session_lock = if value["action"] == "read" { None } else { Some(session_lock(chat)?) };
     let _guard = session_lock.as_ref().map(|lock|lock.lock().map_err(|_|io::Error::other("Console non disponibile"))).transpose()?;
@@ -152,7 +157,7 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
             let preferences=crate::state_store::database(&home.join(".config/oaclis"),"","preferences-get",None)?;
             let access=value["access"].as_str().or_else(||preferences["preferences"][chat]["console_access"].as_str()).unwrap_or("default");
             access_flags(access)?;
-            open(&home,&root,chat,&session,access)?;
+            open(&home,&root,chat,&session,access,preferences["preferences"][chat]["console_model"].as_str().unwrap_or(""))?;
         },
         "input" => {
             let text=value.get("text").and_then(Value::as_str).unwrap_or("");let key=value.get("key").and_then(Value::as_str).unwrap_or("");
