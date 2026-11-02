@@ -1,9 +1,12 @@
-/* jobs.css v1.0.32 */
-.jobs-panel { width: min(340px, calc(100vw - 16px)); padding: var(--space-12); }
+/* jobs.css v1.0.47 */
+.jobs-panel { width: min(420px, calc(100vw - 16px)); padding: var(--space-12); }
 .jobs-header { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-4); }
 .jobs-header h2 { flex: 1; margin: 0; padding: 0; font-size: var(--font-label); }
 .jobs-header .icon-button { width: 28px; height: 28px; padding: 5px; }
-.job-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; font-size: 12px; }
+.job-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 10px; min-width: 0; padding: 7px 0; font-size: 13px; line-height: 1.4; border-top: 1px solid color-mix(in srgb, var(--ink, var(--text)) 12%, transparent); }
+.job-row:first-child { border-top: 0; }
+.job-icon, .job-icon img, .job-icon svg { display: block; width: 24px; height: 24px; }
+.job-icon img { object-fit: contain; border-radius: var(--radius-control, 5px); }
 .job-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .jobs-inline { display: inline-flex; align-items: center; flex-shrink: 0; gap: 4px; margin-left: auto; }
 .jobs-inline:empty { display: none; }
@@ -19,3 +22,11 @@
 .jobs-message:empty { display: none; }
 .jobs-page { height: auto; min-height: 100dvh; padding: var(--space-12); background: var(--panel); color: var(--ink); }
 .jobs-page main { width: 100%; }
+
+.jobs-inline[hidden], .job-row[hidden], .job-progress[hidden] { display: none; }
+.job-complete { animation: job-completed .5s steps(2, end) 10; }
+@keyframes job-completed { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .job-complete { animation: none; } }
+
+.jobs-endpoint { display: grid; gap: 6px; margin-top: 10px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--ink, var(--text)) 12%, transparent); color: var(--muted); }
+.jobs-endpoint code { font-size: 10px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; user-select: all; }

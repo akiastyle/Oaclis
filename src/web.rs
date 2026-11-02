@@ -1,4 +1,4 @@
-// web.rs v2.28.1843
+// web.rs v2.28.1854
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -264,7 +264,16 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
         let result = (|| -> io::Result<Value> {
             match (request.method(), url.as_str()) {
                 (&Method::Post, "/api/jobs/status") => crate::jobs::update(body(&mut request)?),
-                (&Method::Post, "/api/jobs/list") => Ok(crate::jobs::all(&devices::load(config.join("devices.json"))?)),
+                (&Method::Post, "/api/jobs/list") => {
+                    let mut result=crate::jobs::all(&devices::load(config.join("devices.json"))?);
+                    let state=crate::state_store::snapshot(&config)?;
+                    for row in result["jobs"].as_array_mut().unwrap() {
+                        if let Some(chat)=row["chat_id"].as_str().and_then(|id|state.appearance.get(&format!("chat:{id}"))) {
+                            row["icon"]=chat.value["icon"].clone();row["color"]=chat.value["color"].clone();
+                        }
+                    }
+                    Ok(result)
+                },
                 (&Method::Post, "/api/engines") => crate::engines::settings(&home),
                 (&Method::Post, "/api/engines/save") => crate::engines::save(&home,&body(&mut request)?),
                 (&Method::Post, "/api/llama/models") => {

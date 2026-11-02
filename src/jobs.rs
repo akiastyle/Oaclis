@@ -1,4 +1,4 @@
-// jobs.rs v1.16.134
+// jobs.rs v1.17.148
 //! Volatile tool telemetry, independent of AI execution and persistent chat state.
 use crate::invalid;
 use serde::{Deserialize, Serialize};
@@ -33,7 +33,7 @@ impl Monitor {
                     "text":{"type":"string","required":true,"max_length":2000,"description":"Testo libero, anche su piu righe. Il tool decide cosa scrivere; viene visualizzato senza interpretazione. Non includere credenziali."},
                     "progress":{"type":["number","null"],"minimum":0,"maximum":100,"default":null,"description":"Percentuale reale; null se non quantificabile. Usa 100 soltanto a conclusione riuscita."}
                 },
-                "reporting":{"max_updates_per_second":1,"heartbeat_seconds":15,"timeout_seconds":2,"failure_must_not_stop_tool":true,"replace_previous":true,"device_is_implicit":true,"delivery":"Invia a Oaclis sullo stesso device. Non inviare al sito pubblico o al relay mobile."},
+                "reporting":{"max_updates_per_second":1,"heartbeat_seconds":15,"timeout_seconds":2,"failure_must_not_stop_tool":true,"replace_previous":true,"device_is_implicit":true,"stop_after_progress_100":true,"completion_response":{"ok":true,"stop":true},"delivery":"Invia a Oaclis sullo stesso device. Non inviare al sito pubblico o al relay mobile."},
                 "example":{"chat_id":"ID_REALE_DELLA_PROPRIA_CHAT","id":"nome-tool","text":"Elaborazione in corso","progress":42},
                 "response":{"ok":true}
             }));
@@ -41,8 +41,10 @@ impl Monitor {
         let update=Update::parse(value)?;let key=(update.chat_id.clone(),update.id.clone());
         let mut jobs=self.jobs.lock().unwrap();
         if jobs.len()>=256&&!jobs.contains_key(&key){return Err(invalid("Troppi lavori monitorati"));}
+        let finished=update.progress==Some(100.0);
+        if finished&&jobs.get(&key).is_some_and(|record|record.update.progress==Some(100.0)){return Ok(json!({"ok":true,"stop":true}));}
         let record=Record{update,received:Instant::now(),updated_at:SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64};
-        jobs.insert(key,record);Ok(json!({"ok":true}))
+        jobs.insert(key,record);Ok(if finished{json!({"ok":true,"stop":true})}else{json!({"ok":true})})
     }
     fn receive(&self,device:&crate::devices::Device,value:&Value)->io::Result<()> {
         if value.is_null(){self.peers.lock().unwrap().remove(&device.id);return Ok(());}
@@ -106,6 +108,14 @@ mod tests {
         assert_eq!(monitor.snapshot()["jobs"].as_array().unwrap().len(),2);
         assert!(monitor.update(json!(null)).is_err());
         assert!(monitor.update(json!({"chat_id":"chat-a"})).is_err());
+    }
+    #[test]
+    fn completion_requests_stop_and_duplicate_reports_do_not_restart_the_event() {
+        let monitor=Monitor::default();let mut report=json!({"chat_id":"chat","id":"tool","text":"Done","progress":100});
+        assert_eq!(monitor.update(report.clone()).unwrap(),json!({"ok":true,"stop":true}));
+        let snapshot=monitor.snapshot();report["text"]=json!("Repeated");monitor.update(report.clone()).unwrap();assert_eq!(monitor.snapshot(),snapshot);
+        report["progress"]=json!(0);assert_eq!(monitor.update(report).unwrap(),json!({"ok":true}));
+        assert_eq!(monitor.snapshot()["jobs"][0]["progress"].as_f64(),Some(0.0));
     }
     #[test]
     fn replaces_status_and_keeps_same_tool_separate_for_each_chat() {

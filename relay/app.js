@@ -1,4 +1,4 @@
-// app.js v1.92.974
+// app.js v1.93.999
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -222,22 +222,23 @@ async function openConsole(chat,adjacent=false){
  }
  function removeImage(){imageDrafts.delete(active?.chat.id);paintAttachment();}
  preview.querySelector('button').onclick=removeImage;
+ async function attachImage(file,pane=active){
+  if(!file||!pane||closed||pane.closed||inputBusy||pane.preparingImage)return;
+  if(!file.type.startsWith('image/')||file.size>25*1024*1024){message('Scegli un’immagine fino a 25 MB.',true);return;}
+  pane.preparingImage=true;sendButton.disabled=true;
+  try{
+   const result=await OaclisTerminal.imageData(file);
+   if(!closed&&!pane.closed){imageDrafts.set(pane.chat.id,result);if(pane===active)paintAttachment();}
+  }catch{if(!closed)message('Impossibile caricare l’immagine. Prova un’altra foto.',true);}
+  finally{pane.preparingImage=false;if(!closed)sendButton.disabled=!active?.ready||active.preparingImage===true;}
+ }
  async function pickImage(camera){
   const pane=active;if(!pane||inputBusy)return;
   if(navigator.userActivation&&!navigator.userActivation.isActive){closeSendMenu.show(camera?0:1);return;}
   const input=document.createElement('input');input.type='file';input.accept='image/*';if(camera)input.setAttribute('capture','environment');
-  input.onchange=async()=>{
-   const file=input.files?.[0];if(!file||closed||pane.closed)return;
-   if(!file.type.startsWith('image/')||file.size>25*1024*1024){message('Scegli un’immagine fino a 25 MB.',true);return;}
-   pane.preparingImage=true;sendButton.disabled=true;
-   try{
-    const result=await OaclisTerminal.imageData(file);
-    if(!closed&&!pane.closed){imageDrafts.set(pane.chat.id,result);if(pane===active)paintAttachment();}
-   }catch{if(!closed)message('Impossibile caricare l’immagine. Prova un’altra foto.',true);}
-   finally{pane.preparingImage=false;if(!closed)sendButton.disabled=!active?.ready||active.preparingImage===true;}
-  };
-  input.click();
+  input.onchange=()=>attachImage(input.files?.[0],pane);input.click();
  }
+ const closeImageInput=OaclisTerminal.attachImages(app,(file,target)=>{const pane=panes.find(item=>item.element.contains(target))||active;if(pane&&pane!==active)activate(pane);return attachImage(file,pane);});
  const closeSendMenu=OaclisTerminal.attachSendMenu(form,sendButton,{pickImage,submit,closed:()=>closed});
  async function open(selected,beside=false){
   if(!authorizedChats.some(chat=>chat.id===selected.id))return false;
@@ -263,7 +264,7 @@ async function openConsole(chat,adjacent=false){
   try{return await send(active,'create',{text,icon,model,engine,key:''});}
   finally{inputBusy=false;if(!closed&&!document.hidden){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
  },split:()=>panes.length===2,selectPane:position=>activate(panes[['sotto','bottom'].includes(OaclisVoice.normalize(position))?1:0]),list:()=>picker.open?authorizedChats:visibleChatList};
- closeConsole=()=>{if(closed)return;closeSendMenu();reading?.abort();if(active)saveDraft(active.chat.id,text.value);reader?.destroy();for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleActions=null;consoleWorkspace=null;closeConsole=null;};
+ closeConsole=()=>{if(closed)return;closeSendMenu();closeImageInput();reading?.abort();if(active)saveDraft(active.chat.id,text.value);reader?.destroy();for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleActions=null;consoleWorkspace=null;closeConsole=null;};
  text.addEventListener('input',()=>{if(active)saveDraft(active.chat.id,text.value);});form.onsubmit=async event=>{event.preventDefault();await submit();};text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
  document.getElementById('back').onclick=()=>protectedView().catch(()=>location.replace('/auth'));
  for(const [key,label]of [['Escape','Esc'],['1','1'],['2','2'],['3','3'],['C-c','Ctrl+C']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.key=key;button.onclick=()=>submit(active,key);keys.append(button);}

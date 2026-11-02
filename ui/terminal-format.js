@@ -1,4 +1,4 @@
-// terminal-format.js v1.16.146
+// terminal-format.js v1.20.161
 "use strict";
 const OaclisTerminal = (() => {
   const palette=['#000000','#cd3131','#0dbc79','#e5e510','#2472c8','#bc3fbc','#11a8cd','#e5e5e5','#666666','#f14c4c','#23d18b','#f5f543','#3b8eea','#d670d6','#29b8db','#ffffff'];
@@ -111,6 +111,19 @@ function consoleScreen(value){
     if(result.length>699075)throw Error();
     return result;
   }
+  function attachImages(root,receive){
+   const accept=event=>{
+    const data=event.clipboardData||event.dataTransfer;
+    const files=[...(data?.files||[])];
+    if(!files.length)for(const item of data?.items||[]){if(item.kind==='file'){const file=item.getAsFile();if(file)files.push(file);}}
+    const image=files.find(file=>file.type.startsWith('image/'));if(!image)return;
+    event.preventDefault();event.stopPropagation();receive(image,event.target);
+   };
+   const drag=event=>{if([...event.dataTransfer?.types||[]].includes('Files')){event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect='copy';}};
+   const drop=event=>{drag(event);accept(event);};
+   root.addEventListener('paste',accept);root.addEventListener('dragover',drag);root.addEventListener('drop',drop);
+   return ()=>{root.removeEventListener('paste',accept);root.removeEventListener('dragover',drag);root.removeEventListener('drop',drop);};
+  }
   function attachSendMenu(form,sendButton,{pickImage,submit,closed}){
  const sendMenu=document.createElement('div');sendMenu.className='console-send-menu';sendMenu.setAttribute('popover','manual');sendMenu.setAttribute('role','menu');sendMenu.setAttribute('aria-label',OaclisSettings.text('Allega o invia'));
  for(const [label,icon,action]of [['Scatta foto','image',()=>pickImage(true)],['Archivio','folder',()=>pickImage(false)],['Invia','arrowUp',()=>submit()]]){
@@ -141,5 +154,5 @@ function consoleScreen(value){
  sendButton.onkeydown=event=>{if(event.key==='ArrowDown'||event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();showSendMenu();}};
  return Object.assign(()=>{document.removeEventListener('pointerdown',dismissSendMenu);document.removeEventListener('keydown',dismissSendMenu);cancelHold();sendMenu.remove();},{show:showSendMenu});
   }
-  return {render,parse,consoleScreen,imageData,attachSendMenu};
+  return {render,parse,consoleScreen,imageData,attachImages,attachSendMenu};
 })();

@@ -40,7 +40,7 @@ Dopo 90 secondi senza aggiornamenti un lavoro locale incompleto diventa grigio;
 - La barra del titolo delle console desktop/mobile mostra le percentuali dei
   tool associati alla chat. Click o tap mostra soltanto `text` e richiude il
   dettaglio dopo 5 secondi. Gli aggiornamenti non riavviano questo timer.
-- La nav del master apre Lavori: una riga piccola per tool, con ID e percentuale.
+- La nav del master apre Statistiche: una riga per tool, con icona della chat, testo e percentuale.
   Raccoglie anche i tool dei device abbinati. Si puo staccare tutto il pannello
   in una finestra separata, che alla chiusura riapre il pannello nel master.
 - Il pannello resta sopra gli altri pannelli Oaclis; una finestra browser
@@ -62,3 +62,16 @@ L'endpoint di invio e locale, come le altre API Oaclis: non va esposto su
 Internet. Ogni script comunica con Oaclis sul proprio device; il master
 raccoglie i report dei peer aggiornati attraverso il collegamento esistente.
 Questa implementazione non modifica gli script dei progetti.
+
+## Completamento
+
+Quando `progress` arriva a 100, Oaclis fa lampeggiare la percentuale per
+5 secondi, emette una sola notifica sonora e poi nasconde l'indicatore e
+la riga dal monitor. Una nuova esecuzione riparte inviando un valore
+inferiore a 100, anche `null` se non quantificabile.
+
+La risposta al report finale e `{"ok":true,"stop":true}`. Il tool deve
+interrompere il proprio invio periodico dopo questa conferma: niente
+altri heartbeat o report dello stesso completamento. Oaclis ignora i
+report duplicati al 100%, senza riattivare l'avviso. Gli script gia
+collegati devono essere adeguati a questa regola.

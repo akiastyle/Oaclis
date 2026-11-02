@@ -1,4 +1,4 @@
-// console.js v3.123.2195
+// console.js v3.124.2214
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet();
@@ -13,6 +13,7 @@ function closeChatTerminal(panel) {
   panel.saveGeometry?.();
   clearTimeout(panel.terminalTimer);
   panel.closeSendMenu?.();
+  panel.closeImageInput?.();
   panel.jobsStatus?.destroy();
   document.removeEventListener('visibilitychange',panel.terminalVisibility);
   if(panel.windowMessage)window.removeEventListener('message',panel.windowMessage);
@@ -222,7 +223,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
       const stamp = window.OaclisLocalVoice?.stamp(panel);
       const result = await api("terminal", { ...payload, ...value, ...window.OaclisLocalVoice?.request(panel) });
       if (!panel.isConnected) return false;
-      panel.jobsStatus.update(result.jobs);
+      panel.jobsStatus.update(result.jobs?.map(job=>job.device_id==='master'&&deviceId!=='master'?{...job,device_id:deviceId}:job));
       const top=screen.scrollTop,left=screen.scrollLeft;
       OaclisTerminal.render(screen,OaclisTerminal.consoleScreen(result.screen),result.screen_ansi);
       if (value.action === "input" || value.action === "open") followOutput = true;
@@ -274,18 +275,20 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     window.addEventListener('message',receive);panel.windowMessage=receive;form.elements.text.addEventListener('input',panel.sendWindowDraft);
     window.opener?.postMessage({kind:'oaclis-console-ready',chat_id:connection.entry.id,device_id:deviceId},location.origin);
   }
+  const attachImage=async file=>{
+    if(!file||!panel.isConnected||submitting||preparingImage)return;
+    preparingImage=true;sendButton.disabled=true;
+    try{const result=await OaclisTerminal.imageData(file);if(panel.isConnected){image=result;preview.querySelector('img').src=image;preview.hidden=false;panel.sendWindowDraft?.();}}
+    catch{if(panel.isConnected)notice(OaclisSettings.text('Impossibile caricare l’immagine. Prova un’altra foto.'));}
+    finally{preparingImage=false;if(panel.isConnected)sendButton.disabled=!ready;}
+  };
   const pickImage=camera=>{
     if(submitting||preparingImage)return;
     if(navigator.userActivation&&!navigator.userActivation.isActive){panel.closeSendMenu.show(camera?0:1);return;}
     const input=document.createElement('input');input.type='file';input.accept='image/*';if(camera)input.setAttribute('capture','environment');
-    input.onchange=async()=>{
-      const file=input.files?.[0];if(!file||!panel.isConnected)return;
-      preparingImage=true;sendButton.disabled=true;
-      try{const result=await OaclisTerminal.imageData(file);if(panel.isConnected){image=result;preview.querySelector('img').src=image;preview.hidden=false;panel.sendWindowDraft?.();}}
-      catch{if(panel.isConnected)notice(OaclisSettings.text('Impossibile caricare l’immagine. Prova un’altra foto.'));}
-      finally{preparingImage=false;if(panel.isConnected)sendButton.disabled=!ready;}
-    };input.click();
+    input.onchange=()=>attachImage(input.files?.[0]);input.click();
   };
+  panel.closeImageInput=OaclisTerminal.attachImages(panel,attachImage);
   panel.closeSendMenu=OaclisTerminal.attachSendMenu(form,sendButton,{pickImage,submit,closed:()=>!panel.isConnected});
   panel.voiceAdapter={chatId:connection.entry.id,compose:form.elements.text,send:submit,sending:()=>submitting||preparingImage,takePhoto:()=>pickImage(true),pickImage:()=>pickImage(false),removeImage,hasAttachment:()=>!!image};
   form.elements.text.onkeydown = event => {
