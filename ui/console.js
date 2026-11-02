@@ -1,4 +1,4 @@
-// console.js v3.122.2140
+// console.js v3.122.2150
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map();
@@ -104,7 +104,7 @@ function activateConsoleWindow(panel,entry,deviceId){
   history.replaceState(null,'',location.pathname+'#console='+encodeURIComponent(JSON.stringify({id:entry.id,name:chatLabel(entry),device:deviceId})));
 }
 
-function openChatTerminal(connection, anchor, deviceId) {
+function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   const windowKey=JSON.stringify([deviceId,connection.entry.id]),detached=detachedConsoles.get(windowKey);
   if(detached&&!detached.closed){detached.focus();return;}
   const existing = [...document.querySelectorAll(".chat-terminal")].find(p =>
@@ -183,11 +183,12 @@ function openChatTerminal(connection, anchor, deviceId) {
         if(event.data.kind==='oaclis-console-ready'&&event.data.chat_id===returnConnection.entry.id)child.postMessage({kind:'oaclis-console-draft',chat_id:returnConnection.entry.id,device_id:deviceId,draft},location.origin);
         if(event.data.kind==='oaclis-console-draft'&&event.data.active&&typeof event.data.entry?.id==='string'&&/^[\w-]{1,160}$/.test(event.data.entry.id)){draft=event.data.draft;returnConnection={entry:event.data.entry};}
       };
+      try{localStorage.setItem('oaclis-console-mode:'+windowKey,'window');}catch{}
       window.addEventListener('message',receive);detachedConsoles.set(windowKey,child);child.focus();closeChatTerminal(panel);
       const watch=setInterval(()=>{
         if(!child.closed)return;
         clearInterval(watch);window.removeEventListener('message',receive);detachedConsoles.delete(windowKey);
-        openChatTerminal(returnConnection,anchor?.isConnected?anchor:document.querySelector('#add-device'),deviceId);
+        openChatTerminal(returnConnection,anchor?.isConnected?anchor:document.querySelector('#add-device'),deviceId,true);
         [...document.querySelectorAll('.chat-terminal')].find(p=>p.dataset.chatId===returnConnection.entry.id&&p.dataset.deviceId===deviceId)?.restoreDraft(draft);
       },500);
     };
@@ -299,7 +300,8 @@ function openChatTerminal(connection, anchor, deviceId) {
     }
   };
   window.OaclisLocalVoice?.activate(panel);
-  panel.openTerminal();
+  try{if(!embedded&&!document.documentElement.dataset.consoleWindow&&localStorage.getItem('oaclis-console-mode:'+windowKey)==='window')panel.querySelector('.console-detach').click();}catch{}
+  if(panel.isConnected)panel.openTerminal();
 }
 
 window.addEventListener('pagehide',()=>document.querySelectorAll('.chat-terminal').forEach(panel=>{panel.sendWindowDraft?.(true);panel.saveGeometry?.();}));
@@ -307,5 +309,5 @@ window.addEventListener('pagehide',()=>document.querySelectorAll('.chat-terminal
 window.addEventListener('message',event=>{
   const value=event.data;
   if(document.documentElement.dataset.consoleWindow||event.origin!==location.origin||!event.source||event.source===window||[...detachedConsoles.values()].includes(event.source)||value?.kind!=='oaclis-console-draft'||!value.returning||!value.active||typeof value.entry?.id!=='string'||!/^[\w-]{1,160}$/.test(value.entry.id)||typeof value.device_id!=='string'||!/^[\w-]{1,160}$/.test(value.device_id))return;
-  setTimeout(()=>{if(!event.source.closed)return;const entry={id:value.entry.id,name:typeof value.entry.name==='string'?value.entry.name.slice(0,160):'Chat'};openChatTerminal({entry},document.querySelector('#add-device'),value.device_id);[...document.querySelectorAll('.chat-terminal')].find(panel=>panel.dataset.chatId===entry.id&&panel.dataset.deviceId===value.device_id)?.restoreDraft(value.draft);},500);
+  setTimeout(()=>{if(!event.source.closed)return;const entry={id:value.entry.id,name:typeof value.entry.name==='string'?value.entry.name.slice(0,160):'Chat'};openChatTerminal({entry},document.querySelector('#add-device'),value.device_id,true);[...document.querySelectorAll('.chat-terminal')].find(panel=>panel.dataset.chatId===entry.id&&panel.dataset.deviceId===value.device_id)?.restoreDraft(value.draft);},500);
 });
