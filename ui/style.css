@@ -1,4 +1,4 @@
-/* style.css v2.0.1477 */
+/* style.css v2.0.1479 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1025,7 +1025,7 @@ select {
 
 .terminal-destinations { display: flex; flex-direction: column; gap: var(--space-8); }
 
-.chat-terminal h2 { cursor: move; touch-action: none; }
+.chat-terminal h2 { display: flex; align-items: center; gap: var(--space-8); cursor: move; touch-action: none; }
 
 
 .device-symbol { position: relative; display: inline-flex; flex-shrink: 0; }

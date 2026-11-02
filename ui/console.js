@@ -1,4 +1,4 @@
-// console.js v2.99.1934
+// console.js v2.99.1936
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -56,6 +56,8 @@ function openChatTerminal(connection, anchor, deviceId) {
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", OaclisSettings.text("Console Codex · ") + deviceName(deviceId));
   panel.innerHTML = OaclisSettings.html(('<button class="icon-button popover-close" aria-label="Chiudi chat">' + OaclisIcon('close') + '</button><h2>')) + esc(chatLabel(connection.entry)) + ' · ' + esc(deviceName(deviceId)) + OaclisSettings.html('</h2><pre class="terminal-screen" tabindex="0" aria-label="Schermo Codex">Connessione…</pre><form class="terminal-input"><textarea name="text" maxlength="8000" aria-label="Messaggio a Codex" rows="2" placeholder="Scrivi a Codex" disabled></textarea><button type="submit" class="icon-button" aria-label="Invia messaggio" disabled>' + OaclisIcon('arrowUp') + '</button></form><div class="terminal-keys"></div>');
+  panel.querySelector("h2").insertAdjacentHTML("afterbegin",badge(connection.entry));
+  panel.querySelector("h2 .chat-badge").style.color=appearance(connection.entry).color||"var(--ink)";
   document.body.append(panel);
   panel.showPopover();
   positionContext(panel, anchor);
