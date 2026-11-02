@@ -1,9 +1,10 @@
-// console.js v2.106.1981
+// console.js v3.107.2004
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
 function closeChatTerminal(panel) {
   if (!panel) return;
+  panel.saveGeometry?.();
   clearTimeout(panel.terminalTimer);
   panel.closeSendMenu?.();
   document.removeEventListener('visibilitychange',panel.terminalVisibility);
@@ -66,6 +67,26 @@ function openChatTerminal(connection, anchor, deviceId) {
   const count = document.querySelectorAll(".chat-terminal").length - 1;
   panel.style.left = Math.max(8, Math.min(parseFloat(panel.style.left) + count * 24, innerWidth - panel.offsetWidth - 8)) + "px";
   panel.style.top = Math.max(8, Math.min(parseFloat(panel.style.top) + count * 24, innerHeight - panel.offsetHeight - 8)) + "px";
+  const geometryKey='oaclis-console:'+JSON.stringify([deviceId,connection.entry.id]);
+  try{
+    const saved=JSON.parse(localStorage.getItem(geometryKey)||'null');
+    if(saved&&['left','top','width','height'].every(key=>Number.isFinite(saved[key]))&&saved.width>0&&saved.height>0){
+      panel.style.maxWidth='calc(100vw - 16px)';panel.style.maxHeight='calc(100dvh - 16px)';
+      panel.style.width=Math.min(innerWidth-16,Math.max(280,saved.width))+'px';
+      panel.style.height=Math.min(innerHeight-16,Math.max(320,saved.height))+'px';
+      panel.style.left=Math.max(8,Math.min(saved.left,innerWidth-panel.offsetWidth-8))+'px';
+      panel.style.top=Math.max(8,Math.min(saved.top,innerHeight-panel.offsetHeight-8))+'px';panel.dataset.moved='true';
+    }
+  }catch{}
+  let savedGeometry='';
+  panel.saveGeometry=()=>{
+    if(!panel.isConnected||!panel.matches(':popover-open'))return;
+    const value=JSON.stringify({left:panel.offsetLeft,top:panel.offsetTop,width:panel.offsetWidth,height:panel.offsetHeight});
+    if(value===savedGeometry)return;
+    try{localStorage.setItem(geometryKey,value);savedGeometry=value;}catch{}
+  };
+  panel.addEventListener('pointerup',panel.saveGeometry);
+  panel.addEventListener('keyup',event=>{if(event.target.matches('h2'))panel.saveGeometry();});
   panel.addEventListener("click",event=>{
     if(!panel.isConnected||event.target.closest(".console-send-menu")||panel.querySelector(".console-send-menu:popover-open"))return;
     const focus=event.target.closest("textarea,input,button,select,pre,h2")||panel.querySelector("textarea");
@@ -168,3 +189,5 @@ function openChatTerminal(connection, anchor, deviceId) {
   window.OaclisLocalVoice?.activate(panel);
   panel.openTerminal();
 }
+
+window.addEventListener('pagehide',()=>document.querySelectorAll('.chat-terminal').forEach(panel=>panel.saveGeometry?.()));
