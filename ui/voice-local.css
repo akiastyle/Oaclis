@@ -1,5 +1,6 @@
-/* voice-local.css v1.0.20 */
+/* voice-local.css v1.0.21 */
 #local-voice-controls,#local-voice-controls>span{display:inline-flex;align-items:center;gap:4px}
+.terminal-keys>#local-voice-controls{margin-left:auto}
 #local-voice-controls .voice-mic[data-mode="listening"]{background:#22c55e;color:#08231f}
 #local-voice-controls .voice-mic[data-mode="paused"]{background:#facc15;color:#262005}
 #local-voice-controls .voice-mic[data-mode="busy"]{background:#fb923c;color:#291506;animation:local-voice-pulse .8s ease-in-out infinite alternate}
