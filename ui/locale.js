@@ -1,4 +1,4 @@
-// locale.js v1.3.482
+// locale.js v1.3.488
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -19,6 +19,12 @@ window.OaclisSettings=(()=>{
   "Aggiungi mobile": "Add mobile",
   "Dispositivi": "Devices",
   "Versione Oaclis": "Oaclis version",
+  "Creazione non confermata. Controlla la lista prima di riprovare.": "Creation not confirmed. Check the list before trying again.",
+  "Telefono": "Phone",
+  "Nuova chat": "New chat",
+  "Crea chat": "Create chat",
+  "Predefinita": "Default",
+  "Cartella di lavoro": "Working folder",
   "Allega o invia": "Attach or send",
   "Scatta foto": "Take photo",
   "Archivio": "Photo library",

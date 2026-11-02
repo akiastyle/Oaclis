@@ -1,4 +1,4 @@
-// console.js v2.98.1886
+// console.js v2.98.1889
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -37,7 +37,7 @@ function chooseChatTerminal(connection, anchor) {
   menu.querySelector(".terminal-destinations button").focus();
 }
 
-function openChatTerminal(connection, anchor, deviceId) {
+function openChatTerminal(connection, anchor, deviceId, startImmediately=false) {
   const existing = [...document.querySelectorAll(".chat-terminal")].find(p =>
     p.dataset.chatId === connection.entry.id && p.dataset.deviceId === deviceId);
   if (existing) {
@@ -160,4 +160,5 @@ function openChatTerminal(connection, anchor, deviceId) {
   access.onchange=()=>{start.hidden=false;start.disabled=false;start.textContent=OaclisSettings.text(ready?"Salva autorizzazione":"Apri console");};
   screen.textContent=OaclisSettings.text("Scegli l’autorizzazione e apri la console.");
   window.OaclisLocalVoice?.activate(panel);
+  if(startImmediately)start.click();
 }

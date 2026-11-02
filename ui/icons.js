@@ -1,4 +1,4 @@
-// icons.js v4.162.3106
+// icons.js v4.162.3108
 "use strict";
 /* Lucide 1.66.0 - https://lucide.dev ; vendored SVG subset, no runtime dependency.
 ISC License
@@ -105,3 +105,5 @@ const icons=Object.fromEntries(["mobile", "chat", "code", "folder", "desktop", "
 window.OaclisIcons=lucideIcons;
 function OaclisIcon(name){return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+lucideIcons[name]+'</svg>';}
 document.querySelectorAll('svg[data-icon]').forEach(svg=>{svg.innerHTML=lucideIcons[svg.dataset.icon];});
+
+window.OaclisIconNames = { mobile:OaclisSettings.text("Telefono"), chat: "Chat", code: OaclisSettings.text("Codice"), folder: OaclisSettings.text("Cartella"), desktop: "Desktop", laptop: OaclisSettings.text("Portatile"), server: "Server", terminal: OaclisSettings.text("Terminale"), globe: OaclisSettings.text("Globo"), cloud: "Cloud", box: "App", database: "Database", git: OaclisSettings.text("Rami"), book: OaclisSettings.text("Libro"), star: OaclisSettings.text("Stella"), bolt: OaclisSettings.text("Fulmine"), shield: OaclisSettings.text("Scudo"), bug: "Bug", settings: OaclisSettings.text("Impostazioni"), cpu: OaclisSettings.text("Processore"), rocket: OaclisSettings.text("Razzo"), link: OaclisSettings.text("Collegamento"), image: OaclisSettings.text("Immagine"), wrench: OaclisSettings.text("Strumenti"), layers: OaclisSettings.text("Livelli") };

@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.544
+// index.php v1.8.556
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -238,12 +238,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
             }
             $operation=$input['operation']??''; $text=$input['text']??''; $key=$input['key']??'';
-            if (!in_array($operation,['open','read','input'],true) || !is_string($text) || mb_strlen($text)>8000 || str_contains($text,"\0") || !in_array($key,['','Enter','Escape','Tab','Up','Down','Left','Right','BSpace','C-c','1','2','3'],true)) throw new RuntimeException();
+            if (!in_array($operation,['open','read','input','create'],true) || !is_string($text) || mb_strlen($text)>8000 || str_contains($text,"\0") || !in_array($key,['','Enter','Escape','Tab','Up','Down','Left','Right','BSpace','C-c','1','2','3'],true)) throw new RuntimeException();
             $signed=$input['signed']??null;
             if (!is_array($signed) || !is_string($signed['payload']??null) || strlen($signed['payload'])>786432 || !is_string($signed['signature']??null) || !preg_match('/^[a-f0-9]{128}$/D',$signed['signature'])) respond([],403);
             $packet=json_decode($signed['payload'],true,16,JSON_THROW_ON_ERROR);
             if (!is_array($packet) || ($packet['purpose']??'')!=='oaclis-console-v1' || ($packet['device']??'')!==$deviceId || ($packet['chat_id']??'')!==$chat || ($packet['action']??'')!==$operation || ($packet['text']??null)!==$text || ($packet['key']??null)!==$key || !is_string($packet['id']??null) || !preg_match('/^[a-f0-9]{32}$/D',$packet['id'])) respond([],403);
             if (!is_bool($packet['speech']??false) || (($packet['speech_cursor']??null)!==null && (!is_int($packet['speech_cursor']) || $packet['speech_cursor']<0))) respond([],403);
+            if ($operation==='create' && (trim($text)==='' || mb_strlen($text)>160 || $key!=='' || isset($packet['image']) || !is_string($packet['icon']??'') || !preg_match('/^[a-z]*$/D',$packet['icon']??''))) respond([],400);
             if (isset($packet['image'])) {
                 $image=$packet['image'];
                 if ($operation!=='input' || $key!=='Enter' || !is_string($image) || strlen($image)>699075 || !str_starts_with($image,'data:image/jpeg;base64,')) respond([],400);
@@ -252,7 +253,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $previous=$record['console']??[];
             // Only observations can be superseded; pending inputs remain exclusive.
-            if (($previous['until']??0)>time() && !isset($previous['result']) && !($operation==='input' && ($previous['operation']??'')==='read')) respond(['error'=>'Attendi il completamento della richiesta.'],409);
+            if (($previous['until']??0)>time() && !isset($previous['result']) && !(in_array($operation,['input','create'],true) && ($previous['operation']??'')==='read')) respond(['error'=>'Attendi il completamento della richiesta.'],409);
             $id=$packet['id'];
             $state['devices'][$deviceId]['console']=['id'=>$id,'chat_id'=>$chat,'operation'=>$operation,'until'=>min(time()+20,$session['auth']['until']),'signed'=>$signed];
             $result=['request_id'=>$id];
@@ -266,6 +267,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $target=$answer['device']??''; $job=$state['devices'][$target]['console']??[];
                 if (($job['id']??'')!==($answer['id']??null) || ($job['until']??0)<time() || ($state['devices'][$target]['status']??'')!=='approved' || !in_array($job['chat_id'],array_column($state['devices'][$target]['chats']??[],'id'),true)) continue;
                 unset($state['devices'][$target]['console']['signed']);
+                if (($job['operation']??'')==='create' && is_array($answer['new_chat']??null)) {
+                    $chat=$answer['new_chat'];
+                    if (!is_string($chat['id']??null)||!preg_match('/^[a-f0-9-]{36}$/D',$chat['id'])||!is_string($chat['name']??null)||mb_strlen($chat['name'])>160||!is_string($chat['icon']??null)||!preg_match('/^[a-z]*$/D',$chat['icon'])) throw new RuntimeException('Invalid new chat');
+                    if (!in_array($chat['id'],array_column($state['devices'][$target]['chats']??[],'id'),true)) $state['devices'][$target]['chats'][]=$chat;
+                    $state['devices'][$target]['console']['result']=['new_chat'=>$chat];
+                    continue;
+                }
                 $screen=$answer['screen']??null;
                 $state['devices'][$target]['console']['result']=is_string($screen)&&strlen($screen)<=60000?['screen'=>$screen]:['error'=>'Console non disponibile. Riprova.'];
                 if (is_string($screen)&&strlen($screen)<=60000&&is_string($answer['screen_ansi']??null)&&strlen($answer['screen_ansi'])<=24000) $state['devices'][$target]['console']['result']['screen_ansi']=$answer['screen_ansi'];

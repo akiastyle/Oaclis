@@ -1,4 +1,4 @@
-// web.rs v2.28.1805
+// web.rs v2.28.1813
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -287,6 +287,14 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Post, "/api/peers/approve") => crate::peers::approve(&peers, &home, &body(&mut request)?),
                 (&Method::Post, "/api/peers/network") => crate::peers::network(&peers),
                 (&Method::Post, "/api/peers/restore") => crate::peers::restore(&peers, &home),
+                (&Method::Post, "/api/chat/create") => {
+                    let mut value=body(&mut request)?;
+                    let id=value["device_id"].as_str().unwrap_or("master");
+                    let device=if id=="master"{None}else{Some(devices::load(config.join("devices.json"))?.into_iter().find(|d|d.id==id).ok_or_else(||invalid("Dispositivo non trovato"))?)};
+                    value["action"]=json!("create");
+                    if value["chat_id"].is_null(){value["chat_id"]=json!("new-chat");}
+                    crate::terminal::request(device.as_ref(),&value)
+                }
                 (&Method::Post, "/api/terminal") => {
                     let v = body(&mut request)?;
                     let id = v["device_id"].as_str().ok_or_else(|| invalid("Dispositivo richiesto"))?;

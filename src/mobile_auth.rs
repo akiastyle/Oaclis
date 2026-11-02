@@ -1,4 +1,4 @@
-// mobile_auth.rs v1.46.634
+// mobile_auth.rs v1.48.662
 //! Local mobile authority: QR-bound keys, chat grants and signed, non-replayable requests.
 use crate::invalid;
 use ring::{hmac, rand::{SecureRandom, SystemRandom}, signature};
@@ -24,7 +24,7 @@ pub(crate) struct Phone { pub name:String, public_key:String, pub chats:BTreeSet
 struct Settings { admin_key:String, #[serde(default)] authorization:Authority }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct SignedRequest { purpose:String, epoch:String, device:String, id:String, issued:u64, chat_id:String, action:String, text:String, key:String, #[serde(default)] speech:bool, #[serde(default)] speech_cursor:Option<u64>, #[serde(default)] image:Option<String> }
+struct SignedRequest { purpose:String, epoch:String, device:String, id:String, issued:u64, chat_id:String, action:String, text:String, key:String, #[serde(default)] speech:bool, #[serde(default)] speech_cursor:Option<u64>, #[serde(default)] image:Option<String>, #[serde(default)] icon:String }
 
 pub(crate) struct Store {
     config:PathBuf,
@@ -100,6 +100,9 @@ impl Store {
     pub(crate) fn grants(&self,id:&str,chats:BTreeSet<String>)->io::Result<()> {
         self.change(|auth|{auth.phones.get_mut(id).ok_or_else(||invalid("Nuovo abbinamento mobile richiesto"))?.chats=chats;Ok(())})
     }
+    pub(crate) fn allow_created(&self,device:&str,parent:&str,chat:&str)->io::Result<()> {
+        self.change(|auth|{let phone=auth.phones.get_mut(device).filter(|phone|phone.chats.contains(parent)).ok_or_else(||invalid("Telefono non autorizzato dal master"))?;phone.chats.insert(chat.into());Ok(())})
+    }
     pub(crate) fn forget_chat(&self,id:&str)->io::Result<()> {self.change(|auth|{for phone in auth.phones.values_mut(){phone.chats.remove(id);}Ok(())})}
     pub(crate) fn command(&self,envelope:&Value)->io::Result<Value> {
         let device=envelope["device"].as_str().unwrap_or("");
@@ -114,17 +117,20 @@ impl Store {
             || Some(command.id.as_str())!=envelope["id"].as_str() || unhex(&command.id,16).is_err()
             || command.issued>current+5 || current.saturating_sub(command.issued)>30
             || !phone.chats.contains(&command.chat_id) || command.text.chars().count()>8000 || command.text.contains('\0')
-            || !matches!(command.action.as_str(),"open"|"read"|"input")
+            || !matches!(command.action.as_str(),"open"|"read"|"input"|"create")
             || !matches!(command.key.as_str(),""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c"|"1"|"2"|"3")
-            || (command.action!="input" && (!command.text.is_empty() || !command.key.is_empty() || command.image.is_some())) {
+            || (!matches!(command.action.as_str(),"input"|"create") && (!command.text.is_empty() || !command.key.is_empty() || command.image.is_some()))
+            || (command.action=="create" && (!command.key.is_empty() || command.image.is_some() || command.text.trim().is_empty() || command.text.chars().count()>160))
+            || (command.action!="create"&&!command.icon.is_empty()) {
             return Err(invalid("Richiesta mobile non autorizzata dal master"));
         }
+        if command.action=="create"{crate::appearance::Appearance{label:command.text.clone(),icon:command.icon.clone(),..Default::default()}.validate()?;}
         if let Some(image)=&command.image {crate::terminal::image_bytes(image)?;if command.key!="Enter" {return Err(invalid("Invio immagine non valido"));}}
         let mut seen=self.seen.lock().unwrap();seen.retain(|_,until|*until>=now());
         let id=format!("{device}:{}",command.id);
         if seen.contains_key(&id) || seen.len()>=8192{return Err(invalid("Richiesta mobile gia' utilizzata"));}
         seen.insert(id,command.issued+30);
-        Ok(json!({"chat_id":command.chat_id,"action":command.action,"text":command.text,"key":command.key,"speech":command.speech,"speech_cursor":command.speech_cursor,"image":command.image}))
+        Ok(json!({"chat_id":command.chat_id,"action":command.action,"text":command.text,"key":command.key,"speech":command.speech,"speech_cursor":command.speech_cursor,"image":command.image,"icon":command.icon}))
     }
 }
 
@@ -145,6 +151,20 @@ mod tests {
     fn command(store:&Store,key:&EcdsaKeyPair,id:&str,chat:&str,issued:u64)->Value {
         let payload=json!({"purpose":"oaclis-console-v1","epoch":store.epoch,"device":"b".repeat(64),"id":id,"issued":issued,"chat_id":chat,"action":"input","text":"hello","key":"Enter"}).to_string();
         json!({"device":"b".repeat(64),"id":id,"signed":{"signature":hex(key.sign(&SystemRandom::new(),payload.as_bytes()).unwrap().as_ref()),"payload":payload}})
+    }
+    #[test]
+    fn creation_is_bound_to_an_authorized_parent_and_keeps_other_grants() {
+        let (root,store,key,binding)=fixture();let device="b".repeat(64);
+        store.approve(&device,"Phone",&binding).unwrap();store.grants(&device,BTreeSet::from(["allowed".into()])).unwrap();
+        let packet=command(&store,&key,&"5".repeat(32),"allowed",now());
+        let mut payload:Value=serde_json::from_str(packet["signed"]["payload"].as_str().unwrap()).unwrap();payload["action"]=json!("create");payload["key"]=json!("");payload["text"]=json!("Nuova chat");payload["icon"]=json!("code");
+        let signed=|payload:&Value|{let payload=payload.to_string();json!({"device":device,"id":"5".repeat(32),"signed":{"signature":hex(key.sign(&SystemRandom::new(),payload.as_bytes()).unwrap().as_ref()),"payload":payload}})};
+        let mut forged=payload.clone();forged["chat_id"]=json!("not-allowed");assert!(store.command(&signed(&forged)).is_err());
+        forged=payload.clone();forged["cwd"]=json!("/root");assert!(store.command(&signed(&forged)).is_err());
+        assert_eq!(store.command(&signed(&payload)).unwrap()["icon"],"code");
+        assert!(store.allow_created(&device,"not-allowed","new-chat").is_err());
+        store.allow_created(&device,"allowed","new-chat").unwrap();assert_eq!(store.authority().phones[&device].chats,BTreeSet::from(["allowed".into(),"new-chat".into()]));
+        assert!(store.command(&signed(&payload)).is_err());std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn pairing_requires_the_local_qr_secret_and_phone_key_possession() {

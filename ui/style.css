@@ -1,4 +1,4 @@
-/* style.css v2.0.1465 */
+/* style.css v2.0.1467 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1346,3 +1346,5 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .toolbar-reveal, #toolbar-toggle, #toolbar-actions > .icon-button, #local-voice-controls .icon-button { transition: none; }
 }
+
+.library-row > .library-console{right:calc(var(--space-3) + 2 * (var(--size-24) + var(--space-4)))}

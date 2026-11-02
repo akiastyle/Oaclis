@@ -1,4 +1,4 @@
-// app.js v1.77.820
+// app.js v1.80.870
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -60,6 +60,37 @@ async function registerView(){
  show(OaclisSettings.html('<h1>Abbina questo telefono</h1><p>Creerai una passkey e un codice casuale per questa installazione. Poi la richiesta dovrà essere approvata dal PC.</p><label for="name">Nome del telefono</label><input id="name" maxlength="60" value="Il mio telefono" autocomplete="off"><button id="register">Crea passkey e richiedi accesso</button>'));
  document.getElementById('register').onclick=e=>run(e.target,async()=>{const name=document.getElementById('name').value.trim();const pairing=await OaclisMobileSecurity.pairing(invite,code,name);const data=await api('register-options',{invite:pairing.invite_hash,name,pairing});const c=await navigator.credentials.create(options(data));await api('register',credential(c));invite='';sessionStorage.removeItem('oaclis-test-invite');await deviceView();});
 }
+async function consoleResult(chat,request,signal,deadline=Date.now()+23000){
+ let result;
+ do{result=await api('console-result',{chat_id:chat,request_id:request},signal);}while(result.pending&&Date.now()<deadline);
+ return result;
+}
+function newMobileChat(){
+ const base=authorizedChats.find(chat=>chat.id===consoleActions?.chatId)||authorizedChats[0];if(!base)return;
+ const existing=document.getElementById('new-chat-dialog');if(existing){existing.querySelector('input').focus();return;}
+ const dialog=document.createElement('dialog');dialog.id='new-chat-dialog';dialog.className='voice-dialog new-chat-dialog';dialog.setAttribute('aria-label',OaclisSettings.text('Nuova chat'));
+ dialog.innerHTML=OaclisSettings.html('<button type="button" class="voice-close secondary" aria-label="Chiudi">'+OaclisIcon('close')+'</button><h1>Nuova chat</h1><form><label>Nome<input name="name" maxlength="160" value="Nuova chat" required></label><details><summary>Icone</summary><input type="hidden" name="icon" value="chat"><div class="new-chat-icons" role="group" aria-label="Icone"></div></details><button>Crea chat</button><small role="status"></small></form>');
+ const grid=dialog.querySelector('.new-chat-icons');
+ for(const id of Object.keys(icons)){
+  const button=document.createElement('button');button.type='button';button.className='secondary';button.innerHTML=OaclisIcon(id);button.title=OaclisIconNames[id];button.setAttribute('aria-label',button.title);button.setAttribute('aria-pressed',String(id==='chat'));
+  button.onclick=()=>{dialog.querySelector('[name="icon"]').value=id;for(const item of grid.children)item.setAttribute('aria-pressed',String(item===button));};grid.append(button);
+ }
+ dialog.querySelector('.voice-close').onclick=()=>dialog.remove();dialog.addEventListener('cancel',event=>{event.preventDefault();dialog.remove();});
+ dialog.querySelector('form').onsubmit=async event=>{
+  event.preventDefault();const form=event.target,button=form.querySelector('button:not([type="button"])');if(button.disabled)return;button.disabled=true;
+  try{
+   const values=new FormData(form),text=String(values.get('name')).trim(),icon=String(values.get('icon'));
+   let created;
+   if(consoleWorkspace)created=await consoleWorkspace.create(text,icon);
+   else{const request=await api('console',{chat_id:base.id,operation:'create',text,key:'',icon});const result=await consoleResult(base.id,request.request_id);created=result.new_chat;}
+   if(!created?.id)throw Error(OaclisSettings.text('Creazione non confermata. Controlla la lista prima di riprovare.'));
+   if(!authorizedChats.some(chat=>chat.id===created.id))authorizedChats.push(created);
+   dialog.remove();await openConsole(created);
+  }catch(error){form.querySelector('[role="status"]').textContent=error.message;}
+  finally{button.disabled=false;}
+ };
+ app.append(dialog);dialog.showModal();dialog.querySelector('[name="name"]').value=OaclisSettings.text('Nuova chat');dialog.querySelector('[name="name"]').select();
+}
 function chatIcon(chat){
  const icon=document.createElement('span');icon.className='authorized-icon';icon.setAttribute('aria-hidden','true');
  if(typeof chat.icon==='string'&&/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/=]*$/.test(chat.icon)&&chat.icon.length<=48000){const image=document.createElement('img');image.src=chat.icon;image.alt='';icon.append(image);}
@@ -69,6 +100,7 @@ function chatIcon(chat){
  return icon;
 }
 function renderAuthorizedChats(chats){
+ const create=document.getElementById('new-chat');if(create)create.disabled=!authorizedChats.length;
  const list=document.getElementById('authorized-chats');
  if(!list)return;
  const signature=JSON.stringify(chats);
@@ -116,10 +148,11 @@ async function openConsole(chat,adjacent=false){
  const sendButton=form.querySelector('#console-send'),preview=form.querySelector('.console-attachment');
  let active=null,reader=null,closed=false,pollTimer=null,queue=Promise.resolve(),pending=null,reading=null,inputBusy=false,polling=false;
  const split=document.createElement('button');split.type='button';split.className='console-split secondary';split.innerHTML=OaclisIcon('split');
+ const createButton=document.createElement('button');createButton.type='button';createButton.className='console-new secondary';createButton.innerHTML=OaclisIcon('plus');createButton.title=OaclisSettings.text('Nuova chat');createButton.setAttribute('aria-label',createButton.title);createButton.onclick=newMobileChat;
  const fitConsole=()=>{const following=panes.filter(pane=>pane.follow);document.documentElement.style.setProperty('--console-height',(window.visualViewport?.height??innerHeight)+'px');requestAnimationFrame(()=>{if(!closed)for(const pane of following)if(!pane.closed){pane.follow=true;pane.screen.scrollTop=pane.screen.scrollHeight;}});};
  fitConsole();window.visualViewport?.addEventListener('resize',fitConsole);window.addEventListener('resize',fitConsole);
  function layout(){
-  fitConsole();container.dataset.split=String(panes.length===2);panes[0]?.title.append(split);
+  fitConsole();container.dataset.split=String(panes.length===2);panes[0]?.title.append(createButton,split);
   split.setAttribute('aria-pressed',String(panes.length===2));split.title=OaclisSettings.text(panes.length===2?'Chat singola':'Affianca chat');split.setAttribute('aria-label',split.title);
  }
  function remove(pane){saveDraft(pane.chat.id,pane===active?text.value:drafts.get(pane.chat.id)||'');consolePositions.set(pane.chat.id,pane.saved||{top:pane.screen.scrollTop,left:pane.screen.scrollLeft,follow:pane.follow});pane.closed=true;pane.element.remove();panes.splice(panes.indexOf(pane),1);}
@@ -143,11 +176,12 @@ async function openConsole(chat,adjacent=false){
   return pane;
  }
  async function complete(request,signal){
-  const deadline=request.deadline;let result;
-  do{if(closed)return false;result=await api('console-result',{chat_id:request.pane.chat.id,request_id:request.request_id},signal);}while(result.pending&&Date.now()<deadline);
+  if(closed)return false;
+  const result=await consoleResult(request.pane.chat.id,request.request_id,signal,request.deadline);
   if(closed)return false;
   if(result.pending){pending=null;throw Error(OaclisSettings.text('Collegamento temporaneamente non disponibile. Riprova.'));}
   pending=null;if(result.error)throw Error(result.error);
+  if(request.operation==='create')return result.new_chat;
   const pane=request.pane;if(pane.closed)return true;
   if(request.operation==='input'&&typeof request.text==='string'&&(drafts.get(pane.chat.id)||'')===request.text){saveDraft(pane.chat.id,'');if(pane===active&&text.value===request.text)text.value='';}
   if(request.image&&imageDrafts.get(pane.chat.id)===request.image){imageDrafts.delete(pane.chat.id);if(pane===active)paintAttachment();}
@@ -265,7 +299,12 @@ async function openConsole(chat,adjacent=false){
   picker.replaceChildren();const heading=document.createElement('h1');heading.textContent=OaclisSettings.text('Affianca chat');const close=document.createElement('button');close.type='button';close.className='voice-close secondary';close.setAttribute('aria-label',OaclisSettings.text('Annulla'));close.innerHTML=OaclisIcon('close');close.onclick=()=>picker.close();picker.append(heading,close);
   for(const [index,selected]of authorizedChats.entries()){const button=chatButton(selected,index,()=>openConsole(selected,true));button.disabled=panes.some(pane=>pane.chat.id===selected.id);picker.append(button);}picker.showModal();
  }
- consoleWorkspace={open,split:()=>panes.length===2,selectPane:position=>activate(panes[['sotto','bottom'].includes(OaclisVoice.normalize(position))?1:0]),list:()=>picker.open?authorizedChats:visibleChatList};
+ consoleWorkspace={open,create:async(text,icon)=>{
+  if(inputBusy||!active?.ready)return false;
+  inputBusy=true;clearTimeout(pollTimer);reading?.abort();
+  try{return await send(active,'create',{text,icon,key:''});}
+  finally{inputBusy=false;if(!closed&&!document.hidden){clearTimeout(pollTimer);pollTimer=setTimeout(poll,200);}}
+ },split:()=>panes.length===2,selectPane:position=>activate(panes[['sotto','bottom'].includes(OaclisVoice.normalize(position))?1:0]),list:()=>picker.open?authorizedChats:visibleChatList};
  closeConsole=()=>{if(closed)return;document.removeEventListener('pointerdown',dismissSendMenu);document.removeEventListener('keydown',dismissSendMenu);reading?.abort();cancelHold();if(sendMenu.matches(':popover-open'))sendMenu.hidePopover();if(active)saveDraft(active.chat.id,text.value);reader?.destroy();for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleActions=null;consoleWorkspace=null;closeConsole=null;};
  text.addEventListener('input',()=>{if(active)saveDraft(active.chat.id,text.value);});form.onsubmit=async event=>{event.preventDefault();await submit();};text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
  document.getElementById('back').onclick=()=>protectedView().catch(()=>location.replace('/auth'));
@@ -280,7 +319,8 @@ async function protectedView(){
  voice.pause();
  let x;try{x=await api('protected');}catch(error){voice.resume();throw error;}
  authorizedChats=x.chats||[];
- show(OaclisSettings.html('<header class="online-brand" aria-label="Oaclis"><img src="/icon-192.png" alt="" width="32" height="32"><span>aclis</span></header><div id="chat-tools"><input id="chat-search" type="search" maxlength="160" aria-label="Cerca chat" placeholder="Cerca chat"></div><div id="authorized-chats" aria-live="polite"></div><button id="lock" class="secondary">Blocca accesso</button><small id="online-version" aria-label="Versione Oaclis"></small>'));
+ show(OaclisSettings.html('<header class="online-brand" aria-label="Oaclis"><img src="/icon-192.png" alt="" width="32" height="32"><span>aclis</span></header><div id="chat-tools"><button id="new-chat" class="secondary" type="button" aria-label="Nuova chat" title="Nuova chat">'+OaclisIcon('plus')+'</button><input id="chat-search" type="search" maxlength="160" aria-label="Cerca chat" placeholder="Cerca chat"></div><div id="authorized-chats" aria-live="polite"></div><button id="lock" class="secondary">Blocca accesso</button><small id="online-version" aria-label="Versione Oaclis"></small>'));
+ document.getElementById('new-chat').onclick=newMobileChat;document.getElementById('new-chat').disabled=!authorizedChats.length;
  document.getElementById('chat-search').oninput=()=>renderAuthorizedChats(authorizedChats.filter(chat=>OaclisVoice.normalize(chat.name).includes(OaclisVoice.normalize(document.getElementById('chat-search').value))));
  document.getElementById('online-version').textContent='PWA '+app.dataset.pwaVersion;
  renderAuthorizedChats(authorizedChats);bindVoice();

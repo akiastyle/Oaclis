@@ -1,4 +1,4 @@
-// mobile.rs v1.21.504
+// mobile.rs v1.21.512
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -150,9 +150,13 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
                         let Some(id)=command["id"].as_str().filter(|id|id.len()==32 && id.bytes().all(|b|b.is_ascii_hexdigit())) else {continue;};
                         let checked=authority.command(command);
                         if let Err(error)=&checked {crate::state_transport::log(format!("REJECT mobile-relay {error}"));}
-                        let result = checked.and_then(|value|crate::terminal::request(None, &value));
+                        let result=checked.and_then(|value|{
+                            let result=crate::terminal::request(None,&value)?;
+                            if value["action"]=="create"{authority.allow_created(device,value["chat_id"].as_str().unwrap(),result["new_chat"]["id"].as_str().ok_or_else(||invalid("Nuova chat non disponibile"))?)?;}
+                            Ok(result)
+                        });
                         let mut answer = json!({"device":device,"id":id});
-                        match result { Ok(value) => { if let Some(speech)=value.get("speech") {answer["speech"]=speech.clone();} let screen=crate::terminal::mobile_screen(&value); answer["screen"]=screen["screen"].clone(); if let Some(ansi)=screen.get("screen_ansi") {answer["screen_ansi"]=ansi.clone();} }, Err(_) => answer["error"] = json!(true) }
+                        match result { Ok(value) if value["new_chat"].is_object()=>{answer["new_chat"]=value["new_chat"].clone();}, Ok(value) => { if let Some(speech)=value.get("speech") {answer["speech"]=speech.clone();} let screen=crate::terminal::mobile_screen(&value); answer["screen"]=screen["screen"].clone(); if let Some(ansi)=screen.get("screen_ansi") {answer["screen_ansi"]=ansi.clone();} }, Err(_) => answer["error"] = json!(true) }
                         results.push(answer);
                     }
                     if !results.is_empty() { continue; }

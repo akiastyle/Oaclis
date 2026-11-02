@@ -1,4 +1,4 @@
-// catalog.rs v2.33.1538
+// catalog.rs v2.35.1595
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -161,21 +161,21 @@ fn walk(
     }
     Ok(())
 }
-// Keep one native Codex connection for explicit title edits, outside the state locks.
-struct NameClient {
+// One native Codex connection for chat creation and title edits, outside state locks.
+struct NativeClient {
     child: std::process::Child,
     input: std::process::ChildStdin,
     replies: std::sync::mpsc::Receiver<Value>,
     next: u64,
 }
-impl Drop for NameClient {
+impl Drop for NativeClient {
     fn drop(&mut self) {
         let _ = std::process::Command::new("kill").args(["-KILL", "--", &format!("-{}", self.child.id())]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
 }
-impl NameClient {
+impl NativeClient {
     fn start(root: &Path, executable: &Path) -> io::Result<Self> {
         use std::{os::unix::process::CommandExt, process::{Command, Stdio}};
         let mut child = Command::new(executable).args(["app-server", "--listen", "stdio://"])
@@ -206,10 +206,10 @@ impl NameClient {
         let until = std::time::Instant::now() + std::time::Duration::from_secs(15);
         loop {
             let value = self.replies.recv_timeout(until.saturating_duration_since(std::time::Instant::now()))
-                .map_err(|_|io::Error::new(io::ErrorKind::TimedOut,"Codex non risponde alla rinomina"))?;
+                .map_err(|_|io::Error::new(io::ErrorKind::TimedOut,"Codex non risponde"))?;
             if value["id"] != id { continue; }
-            if let Some(error) = value.get("error") { return Err(io::Error::other(error["message"].as_str().unwrap_or("Rinomina Codex non riuscita"))); }
-            return value.get("result").cloned().ok_or_else(||crate::invalid("Risposta rinomina Codex non valida"));
+            if let Some(error) = value.get("error") { return Err(io::Error::other(error["message"].as_str().unwrap_or("Operazione Codex non riuscita"))); }
+            return value.get("result").cloned().ok_or_else(||crate::invalid("Risposta Codex non valida"));
         }
     }
 }
@@ -221,23 +221,34 @@ pub(crate) fn rename(home: &Path, root: &Path, id: &str, name: &str) -> io::Resu
         return Err(crate::invalid("Nome chat non valido"));
     }
     crate::appearance::Appearance { label: name.into(), ..Default::default() }.validate()?;
-    static CLIENT: std::sync::OnceLock<std::sync::Mutex<Option<(std::path::PathBuf, NameClient)>>> = std::sync::OnceLock::new();
-    let mut saved = CLIENT.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Rinomina Codex non disponibile"))?;
-    if saved.as_ref().is_some_and(|(path, _)|path != root) { *saved = None; }
-    let result = (|| {
-        if saved.is_none() {
-            let native = root.join("packages/app-server-daemon/current/bin/codex");
-            let executable = if native.is_file() { native } else { crate::terminal::codex(home)? };
-            *saved = Some((root.into(), NameClient::start(root, &executable)?));
+    native(home,root,|client|client.request("thread/name/set",json!({"threadId":id,"name":name})).map(|_|()))
+        .map_err(|_|io::Error::other("Impossibile rinominare la chat in Codex. Riprova."))
+}
+fn native<T>(home:&Path,root:&Path,work:impl FnOnce(&mut NativeClient)->io::Result<T>)->io::Result<T> {
+    static CLIENT:std::sync::OnceLock<std::sync::Mutex<Option<(std::path::PathBuf,NativeClient)>>>=std::sync::OnceLock::new();
+    let mut saved=CLIENT.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Codex non disponibile"))?;
+    if saved.as_ref().is_some_and(|(path,_)|path!=root){*saved=None;}
+    let result=(||{
+        if saved.is_none(){
+            let native=root.join("packages/app-server-daemon/current/bin/codex");
+            let executable=if native.is_file(){native}else{crate::terminal::codex(home)?};
+            *saved=Some((root.into(),NativeClient::start(root,&executable)?));
         }
-        saved.as_mut().unwrap().1.request("thread/name/set", json!({"threadId":id,"name":name})).map(|_|())
+        work(&mut saved.as_mut().unwrap().1)
     })();
-    if let Err(error) = result {
-        *saved = None;
-        crate::state_transport::log(format!("Codex rename {id}: {error}"));
-        return Err(io::Error::other("Impossibile rinominare la chat in Codex. Riprova."));
-    }
-    Ok(())
+    if let Err(error)=&result{*saved=None;crate::state_transport::log(format!("Codex: {error}"));}
+    result
+}
+pub(crate) fn create(home:&Path,root:&Path,cwd:&Path,name:&str)->io::Result<Value> {
+    if name.trim().is_empty()||name!=name.trim()||!cwd.is_absolute()||!cwd.is_dir(){return Err(crate::invalid("Nome o cartella chat non validi"));}
+    crate::appearance::Appearance{label:name.into(),..Default::default()}.validate()?;
+    native(home,root,|client|{
+        let result=client.request("thread/start",json!({"cwd":cwd,"ephemeral":false,"persistExtendedHistory":true}))?;
+        let thread=&result["thread"];let id=thread["id"].as_str().filter(|id|id.len()==36&&crate::devices::identifier(id)).ok_or_else(||crate::invalid("Identificativo nuova chat non valido"))?;
+        client.request("thread/name/set",json!({"threadId":id,"name":name}))?;
+        let _=client.request("thread/unsubscribe",json!({"threadId":id}));
+        Ok(json!({"id":id,"name":name,"path":thread["path"],"cwd":cwd}))
+    })
 }
 
 pub(crate) fn remote(device: &Device) -> io::Result<Value> {
@@ -354,7 +365,7 @@ while IFS= read -r line; do
 done
 "#).unwrap();
         fs::set_permissions(&program,fs::Permissions::from_mode(0o700)).unwrap();
-        let mut client = NameClient::start(&root,&program).unwrap();
+        let mut client = NativeClient::start(&root,&program).unwrap();
         let pid = client.child.id();
         for name in ["First", "Second"] {
             assert_eq!(client.request("thread/name/set",json!({"threadId":"id","name":name})).unwrap(),json!({}));

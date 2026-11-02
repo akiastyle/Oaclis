@@ -1,4 +1,4 @@
-// map.js v4.122.3132
+// map.js v4.122.3137
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -441,7 +441,10 @@ function renderLibrary() {
     remove.setAttribute("aria-label",OaclisSettings.text("Elimina definitivamente ")+chatLabel(entry));
     remove.innerHTML=OaclisIcon('trash');
     remove.onclick=guard(()=>deleteChat(entry));
-    row.append(button, edit, remove);
+    const run=document.createElement('button');run.type='button';run.className='icon-button library-console';run.title=OaclisSettings.text('Apri console');
+    run.setAttribute('aria-label',run.title+' · '+chatLabel(entry));run.innerHTML=OaclisIcon('terminal');
+    run.onclick=()=>openChatTerminal({entry},run,row.dataset.sourceDevice);
+    row.append(button,run,edit,remove);
     $("#library-list").append(row);
     if (focused === entry.id) button.focus({ preventScroll: true });
   }

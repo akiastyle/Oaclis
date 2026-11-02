@@ -1,4 +1,4 @@
-// app.js v4.166.3122
+// app.js v4.166.3125
 "use strict";
 OaclisSettings.translate(document.body);
 const $ = (s) => document.querySelector(s);
@@ -288,7 +288,7 @@ const appearance = (entry) => {
   return { ...saved, color: saved.color || automaticColor(entry.id) };
 };
 const chatLabel = (entry) => appearance(entry).label || entry.name;
-const iconNames = { chat: "Chat", code: OaclisSettings.text("Codice"), folder: OaclisSettings.text("Cartella"), desktop: "Desktop", laptop: OaclisSettings.text("Portatile"), server: "Server", terminal: OaclisSettings.text("Terminale"), globe: OaclisSettings.text("Globo"), cloud: "Cloud", box: "App", database: "Database", git: OaclisSettings.text("Rami"), book: OaclisSettings.text("Libro"), star: OaclisSettings.text("Stella"), bolt: OaclisSettings.text("Fulmine"), shield: OaclisSettings.text("Scudo"), bug: "Bug", settings: OaclisSettings.text("Impostazioni"), cpu: OaclisSettings.text("Processore"), rocket: OaclisSettings.text("Razzo"), link: OaclisSettings.text("Collegamento"), image: OaclisSettings.text("Immagine"), wrench: OaclisSettings.text("Strumenti"), layers: OaclisSettings.text("Livelli") };
+const iconNames=OaclisIconNames;
 function iconBody(icon, name) {
   if (icon?.startsWith("data:image/png;base64,")) return '<img src="' + esc(icon) + '" alt="">';
   if (icons[icon]) return OaclisIcon(icon);
@@ -306,6 +306,7 @@ $("#reset-map").onclick = () => {
 };
 $("#check").onclick = guard(() => api("check", {}));
 $("#add-device").onclick = () => openDiscovery();
+$('#new-chat').onclick=()=>openNewChat($('#new-chat'));
 $("#edit-device").onclick = () => editDevice(data.devices.find(d => d.id === sourceId), $("#edit-device"));
 const lastConnection = {};
 let statusRevisions = {};

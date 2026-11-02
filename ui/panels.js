@@ -1,4 +1,4 @@
-// panels.js v3.140.2765
+// panels.js v3.141.2788
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -837,4 +837,27 @@ async function openMobileAccess(anchor) {
     const result = await api('mobile/qr');
     if (panel.isConnected) { panel.querySelector('.mobile-access-content').innerHTML = OaclisSettings.html('<div class="mobile-qr" role="img" aria-label="QR accesso Oaclis">') + result.qr_svg + '</div>'; positionContext(panel,anchor); }
   } catch (_) { if (panel.isConnected) panel.querySelector('.mobile-access-content').textContent = OaclisSettings.text('QR non disponibile. Chiudi e riprova.'); }
+}
+
+function openNewChat(anchor){
+  const device=sourceId||'master',parent=selected?.id||'new-chat';
+  const existing=document.querySelector('.new-chat-editor');if(existing){existing.querySelector('[name="label"]').focus();return;}
+  const panel=document.createElement('div');panel.className='chat-editor new-chat-editor';panel.id='new-chat-editor';panel.opener=anchor;panel.dataset.objectId=crypto.randomUUID();
+  panel.setAttribute('popover','manual');panel.setAttribute('role','dialog');panel.setAttribute('aria-label',OaclisSettings.text('Nuova chat'));
+  panel.innerHTML=OaclisSettings.html('<button type="button" class="icon-button popover-close" aria-label="Chiudi">'+OaclisIcon('close')+'</button><h2>Nuova chat</h2><form><label class="field">Nome<input name="label" maxlength="160" value="Nuova chat" required></label>')+appearanceFields({icon:'chat'})+OaclisSettings.html('<details><summary>Avanzato</summary><label class="field">Cartella di lavoro<input name="cwd" maxlength="2048" placeholder="Predefinita"></label></details><button class="primary">Crea chat</button><small role="status"></small></form>');
+  document.body.append(panel);panel.showPopover();positionContext(panel,anchor);bindAppearanceFields(panel);
+  panel.querySelector('.popover-close').onclick=()=>closeChatEditor(panel);
+  panel.querySelector('form').onsubmit=guard(async event=>{
+    event.preventDefault();const form=event.target,button=form.querySelector('.primary');if(button.disabled)return;button.disabled=true;
+    try{
+      const value=Object.fromEntries(new FormData(form));
+      const result=await api('chat/create',{device_id:device,chat_id:parent,text:value.label.trim(),icon:value.icon,color:value.color,cwd:value.cwd.trim()});
+      const entry=result.new_chat;data.appearance??={};data.appearance['chat:'+entry.id]={label:entry.name,icon:value.icon,color:value.color};
+      data.chat_settings??={};data.chat_settings[entry.id]={console_access:entry.console_access||'default'};
+      if(device==='master'&&!data.chats.some(chat=>chat.id===entry.id))data.chats.unshift(entry);if(sourceId===device){if(!visibleChats.some(chat=>chat.id===entry.id))visibleChats.unshift(entry);renderLibrary();}
+      closeChatEditor(panel);openChatTerminal({entry},anchor,device,true);
+    }catch(error){form.querySelector('[role="status"]').textContent=error.message;}
+    finally{button.disabled=false;}
+  });
+  panel.querySelector('[name="label"]').value=OaclisSettings.text('Nuova chat');panel.querySelector('[name="label"]').select();
 }

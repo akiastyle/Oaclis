@@ -1,4 +1,4 @@
-// terminal.rs v1.19.322
+// terminal.rs v1.20.350
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -21,6 +21,7 @@ fn validate(value: &Value) -> io::Result<&str> {
         .ok_or_else(||invalid("Chat non valida"))?;
     match value["action"].as_str() {
         Some("open"|"read") => {},
+        Some("create") => {crate::appearance::Appearance{label:value["text"].as_str().unwrap_or("").into(),icon:value["icon"].as_str().unwrap_or("").into(),color:value["color"].as_str().unwrap_or("").into(),..Default::default()}.validate()?;},
         Some("input") => {
             let text = value.get("text").map_or(Some(""),Value::as_str).ok_or_else(||invalid("Messaggio non valido"))?;
             if text.chars().count()>8000 || text.contains('\0') { return Err(invalid("Messaggio non valido")); }
@@ -92,16 +93,21 @@ fn archive(root: &Path, chat: &str) -> io::Result<PathBuf> {
     }
     Err(invalid("Chat non presente su questo dispositivo: trasferiscila prima"))
 }
-fn open(home: &Path, root: &Path, chat: &str, session: &str, access: &str) -> io::Result<()> {
-    if tmux(&["has-session","-t",session]).is_ok() { return Ok(()); }
+fn working_directory(home:&Path,root:&Path,chat:&str)->io::Result<PathBuf> {
+    if chat=="new-chat" {return Ok(home.into());}
     let path=archive(root,chat)?;
-    let executable=codex(home)?;
     let (file,_)=crate::open_regular(&path)?;
     let mut line=String::new();
     BufReader::new(file.take(1024*1024+1)).read_line(&mut line)?;
     if line.len()>1024*1024 { return Err(invalid("Metadati chat troppo grandi")); }
     let meta:Value=serde_json::from_str(&line)?;
-    let cwd=meta["payload"]["cwd"].as_str().map(Path::new).filter(|p|p.is_dir()).unwrap_or(home);
+    Ok(meta["payload"]["cwd"].as_str().map(Path::new).filter(|p|p.is_dir()).unwrap_or(home).to_path_buf())
+
+}
+fn open(home: &Path, root: &Path, chat: &str, session: &str, access: &str) -> io::Result<()> {
+    if tmux(&["has-session","-t",session]).is_ok() { return Ok(()); }
+    let cwd=working_directory(home,root,chat)?;
+    let executable=codex(home)?;
     let command=format!("{} resume {} --no-alt-screen {}",crate::ssh::quote(executable.to_str().ok_or_else(||invalid("Percorso Codex non UTF-8"))?),crate::ssh::quote(chat),access_flags(access)?);
     tmux(&["new-session","-d","-s",session,"-c",cwd.to_str().ok_or_else(||invalid("Cartella chat non UTF-8"))?,"-x","120","-y","36",&command])?;
     tmux(&["set-option","-t",session,"@oaclis-access",access])?;
@@ -120,6 +126,20 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let chat=validate(value)?;
     if let Some(home)=env::var_os("HOME") {
         if crate::chat_deletion::blocked(&PathBuf::from(home).join(".config/oaclis"),chat)? { return Err(invalid("Chat eliminata definitivamente")); }
+    }
+    if value["action"]=="create" {
+        let home=env::var_os("HOME").map(PathBuf::from).ok_or_else(||invalid("HOME non definita"))?;
+        let root=env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(||home.join(".codex"));
+        let cwd=value["cwd"].as_str().filter(|v|!v.is_empty()).map(PathBuf::from).map(Ok).unwrap_or_else(||working_directory(&home,&root,chat))?;
+        let name=value["text"].as_str().unwrap_or("").trim();
+        let entry=crate::catalog::create(&home,&root,&cwd,name)?;let id=entry["id"].as_str().unwrap();
+        let config=home.join(".config/oaclis");
+        let appearance=crate::appearance::Appearance{label:name.into(),icon:value["icon"].as_str().unwrap_or("").into(),color:value["color"].as_str().unwrap_or("").into(),..Default::default()};
+        crate::appearance::save(config.join("appearance.json"),&std::collections::BTreeMap::from([(format!("chat:{id}"),appearance)]))?;
+        let preferences=crate::state_store::database(&config,"","preferences-get",None)?;
+        let access=preferences["preferences"][chat]["console_access"].as_str().unwrap_or("default");
+        crate::state_store::database(&config,id,"console-access",Some(&json!(access)))?;
+        return Ok(json!({"new_chat":{"id":id,"name":name,"icon":value["icon"].as_str().unwrap_or(""),"color":value["color"].as_str().unwrap_or(""),"console_access":access}}));
     }
     let session_lock = if value["action"] == "read" { None } else { Some(session_lock(chat)?) };
     let _guard = session_lock.as_ref().map(|lock|lock.lock().map_err(|_|io::Error::other("Console non disponibile"))).transpose()?;
