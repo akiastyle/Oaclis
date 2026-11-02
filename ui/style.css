@@ -1,4 +1,4 @@
-/* style.css v2.0.1497 */
+/* style.css v2.0.1501 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1016,8 +1016,8 @@ select {
   pointer-events: none;
 }
 
-.chat-terminal.context-popover { width: min(960px, calc(100vw - 16px)); }
-.terminal-screen { height: min(55dvh, 560px); overflow: auto; font: var(--font-caption)/1.4 monospace; white-space: pre; background: color-mix(in srgb, var(--soft) var(--glass-opacity), transparent); padding: var(--space-12); border-radius: var(--radius-control); }
+.chat-terminal.context-popover { width: min(800px, calc(100vw - 16px)); }
+.terminal-screen { height: min(55dvh, 560px); overflow: auto; font: var(--font-caption)/1.4 monospace; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; background: color-mix(in srgb, var(--soft) var(--glass-opacity), transparent); padding: var(--space-12); border-radius: var(--radius-control); }
 .terminal-input { display: flex; gap: var(--space-8); }
 .terminal-input textarea { width: 100%; box-sizing: border-box; }
 .terminal-input textarea { flex: 1; min-width: 0; background: color-mix(in srgb, var(--panel) var(--glass-opacity), transparent); color: var(--ink); border: var(--border-width) solid var(--line); border-radius: var(--radius-control); padding: var(--space-8); font: inherit; }
