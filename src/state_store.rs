@@ -1,4 +1,4 @@
-// state_store.rs v2.38.1383
+// state_store.rs v2.39.1407
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -457,6 +457,13 @@ fn read_operation(config: &Path, state: &State, key: &str, operation: &str) -> i
         _ => Err(invalid("Operazione di lettura non valida")),
     }
 }
+// Omit acknowledged sections before cloning the cached JSON, not after allocating it.
+fn status_response(status: &Value, known: Option<&Value>) -> Value {
+    status.as_object().unwrap().iter().filter(|(field, _)| {
+        !["analyses", "app_checks", "transfers", "preparations"].contains(&field.as_str())
+            || !known.is_some_and(|known|known[*field].is_string() && known[*field] == status["revisions"][*field])
+    }).map(|(field, value)|(field.clone(), value.clone())).collect()
+}
 pub(crate) fn strip_entries(value: &mut Value) {
     match value {
         Value::Object(map) => {
@@ -678,15 +685,17 @@ pub fn database(
             ).collect::<Vec<_>>();
             let mut cache = store.status.lock().map_err(|_|io::Error::other("Stato non disponibile"))?;
             if let Some(saved) = cache.as_ref().filter(|saved|Arc::ptr_eq(&saved.state,&state) && saved.mapping == mapping) {
-                return Ok(saved.value.clone());
+                return Ok(status_response(&saved.value, value));
             }
+            let value_known = value;
             let mut value = read_operation(config, &state, key, operation)?;
             use sha2::{Digest,Sha256};
             for field in ["analyses","app_checks","transfers","preparations"] {
                 value["revisions"][field]=json!(Sha256::digest(serde_json::to_vec(&value[field])?).iter().map(|byte|format!("{byte:02x}")).collect::<String>());
             }
-            *cache = Some(StatusCache { state, mapping, value: value.clone() });
-            return Ok(value);
+            let response = status_response(&value, value_known);
+            *cache = Some(StatusCache { state, mapping, value });
+            return Ok(response);
         }
         read_operation(config, &state, key, operation)
     } else {
@@ -731,6 +740,9 @@ mod optimization_tests {
         change(&root,|_|Ok(())).unwrap();
         assert!(Arc::ptr_eq(&first,&snapshot(&root).unwrap()));
         assert_eq!(before,database(&root,"","status-read",None).unwrap());
+        let compact=database(&root,"","status-read",Some(&before["revisions"])).unwrap();
+        for field in ["analyses","app_checks","transfers","preparations"] {assert!(compact.get(field).is_none());}
+        assert_eq!(compact["revisions"],before["revisions"]);
         assert!(Arc::ptr_eq(&store(&root).unwrap().status.lock().unwrap().as_ref().unwrap().state,&first));
         database(&root,"chat","console-access",Some(&json!("full"))).unwrap();
         let after=database(&root,"","status-read",None).unwrap();
@@ -738,6 +750,10 @@ mod optimization_tests {
         assert!(!Arc::ptr_eq(&store(&root).unwrap().status.lock().unwrap().as_ref().unwrap().state,&first));
         change(&root,|state|{Arc::make_mut(&mut state.analysis).insert("fixture".into(),json!({"status":"ready"}));Ok(())}).unwrap();
         let changed=database(&root,"","status-read",None).unwrap();
+        let delta=database(&root,"","status-read",Some(&before["revisions"])).unwrap();
+        assert_eq!(delta["analyses"],changed["analyses"]);
+        assert!(delta.get("transfers").is_none());
+        assert_eq!(database(&root,"","status-read",None).unwrap(),changed);
         assert_ne!(changed["revisions"]["analyses"],before["revisions"]["analyses"]);
         assert_eq!(changed["revisions"]["transfers"],before["revisions"]["transfers"]);
         std::fs::write(root.join("pairing.json"),"invalid mapping").unwrap();

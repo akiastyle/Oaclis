@@ -1,4 +1,4 @@
-// lib.rs v1.3.100
+// lib.rs v1.3.101
 pub mod state_store;
 mod chat_deletion;
 mod state_migration;
@@ -6,6 +6,7 @@ mod shared_records;
 pub mod state_transport;
 mod app_inventory;
 mod automation;
+mod memory;
 mod link_flow;
 mod catalog;
 mod llama;

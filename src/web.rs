@@ -1,4 +1,4 @@
-// web.rs v2.28.1871
+// web.rs v2.28.1874
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -127,6 +127,7 @@ fn serve_requests(server: &Server, handler: impl Fn(Request) + Sync) {
 }
 
 pub fn serve(home: PathBuf) -> io::Result<()> {
+    crate::memory::configure();
     let legacy_pause = std::env::var("OACLIS_PAUSED").as_deref() == Ok("1");
     let paused = std::env::var("OACLIS_PAUSE_TRANSFERS").map_or(legacy_pause, |value| value == "1");
     let checks_paused = std::env::var("OACLIS_PAUSE_CHECKS").map_or(legacy_pause, |value| value == "1");
@@ -349,7 +350,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Post, "/api/log") => Ok(crate::state_transport::logs()),
                 (&Method::Post, "/api/status") => {
                     let known=body(&mut request)?;
-                    let snapshot = environment::database(&config,"","status-read",None)?;
+                    let snapshot = environment::database(&config,"","status-read",Some(&known["revisions"]))?;
                     compact_status(json!({"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"job":*job.lock().unwrap(),"analyses":snapshot["analyses"],"app_checks":snapshot["app_checks"],"transfers":snapshot["transfers"],"preparations":snapshot["preparations"],"connections":*connections.lock().unwrap(),"discovery":crate::peers::snapshot(&peers),
                         "shared":{"devices":devices::load(config.join("devices.json"))?,"appearance":crate::appearance::load(config.join("appearance.json"))?,"links":snapshot["links"],"chat_settings":snapshot["preferences"],"deleted_chats":crate::chat_deletion::ids(crate::state_store::snapshot(&config)?.as_ref()),"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?}}),&known["revisions"],&snapshot["revisions"])
                 }

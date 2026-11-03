@@ -1,4 +1,4 @@
-// automation.rs v1.16.536
+// automation.rs v1.16.553
 //! Compare links periodically; transfers always require explicit Play.
 use crate::{devices, environment, link_flow, peers, transfer_job};
 use serde_json::{Value, json};
@@ -39,12 +39,19 @@ pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, con
     let monitor_config = config.clone();
     let monitor_connections = connections.clone();
     let monitor_discovery = discovery.clone();
-    thread::spawn(move || loop {
-        match connection_states(&monitor_config, &peers::snapshot(&monitor_discovery)) {
-            Ok(states) => *monitor_connections.lock().unwrap() = states,
-            Err(error) => eprintln!("Oaclis: disponibilita' device: {error}"),
+    thread::spawn(move || {
+        let mut reclaimed = Instant::now();
+        loop {
+            if reclaimed.elapsed() >= Duration::from_secs(60) {
+                crate::memory::release();
+                reclaimed = Instant::now();
+            }
+            match connection_states(&monitor_config, &peers::snapshot(&monitor_discovery)) {
+                Ok(states) => *monitor_connections.lock().unwrap() = states,
+                Err(error) => eprintln!("Oaclis: disponibilita' device: {error}"),
+            }
+            thread::sleep(Duration::from_secs(1));
         }
-        thread::sleep(Duration::from_secs(1));
     });
     thread::spawn(move || {
         let mut checked: HashMap<String, Instant> = HashMap::new();
