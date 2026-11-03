@@ -1,4 +1,4 @@
-/* style.css v2.0.1558 */
+/* style.css v2.0.1564 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1371,3 +1371,9 @@ html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: va
 .map-hidden #nodes *, .map-hidden #nodes *::before, .map-hidden #nodes *::after {
   animation-play-state: paused !important;
 }
+
+.access-chat-list h2 { margin-bottom: var(--space-12); }
+.access-chat-row { display: flex; align-items: center; gap: var(--space-12); padding-block: var(--space-8); border-bottom: var(--border-width) solid var(--line); }
+.access-chat-row:last-child { border-bottom: 0; }
+.access-chat-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--font-small); }
+.access-chat-row .icon-button { flex-shrink: 0; }
