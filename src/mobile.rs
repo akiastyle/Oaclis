@@ -1,4 +1,4 @@
-// mobile.rs v1.21.551
+// mobile.rs v1.21.558
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -143,10 +143,15 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
             let mut results = Vec::<Value>::new();
             let mut pending_log:Option<(String,bool)>=None;
             let mut last_read=String::new();
+            let mut sent_jobs:Option<Vec<Value>>=None;
             let authority = match crate::mobile_auth::at(&console_config) { Ok(authority)=>authority,Err(_)=>return };
             loop {
                 let mut active = false;
-                if let Ok(reply) = request(&console_config, json!({"action":"console-exchange","results":results,"security":authority.security()})) {
+                let jobs=authority.visible_jobs();
+                let mut packet=json!({"action":"console-exchange","results":results,"security":authority.security()});
+                if sent_jobs.as_ref()!=Some(&jobs){packet["jobs"]=json!(jobs);}
+                if let Ok(reply) = request(&console_config, packet) {
+                    sent_jobs=Some(jobs);
                     active = reply["console_active"] == true;
                     if let Some((message,read))=pending_log.take() {
                         if !read || message!=last_read {crate::state_transport::log(message.clone());}

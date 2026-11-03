@@ -1,4 +1,4 @@
-// jobs.rs v1.20.175
+// jobs.rs v1.21.176
 //! Volatile tool telemetry, independent of AI execution and persistent chat state.
 use crate::invalid;
 use serde::{Deserialize, Serialize};
@@ -93,6 +93,7 @@ impl Monitor {
 fn local()->&'static Monitor {static LOCAL:OnceLock<Monitor>=OnceLock::new();LOCAL.get_or_init(Default::default)}
 pub(crate) fn update(value:Value)->io::Result<Value>{local().update(value)}
 pub(crate) fn snapshot()->Value{local().snapshot()}
+pub(crate) fn reports()->Vec<Value>{local().collected(None)}
 pub(crate) fn expire(){local().expire()}
 pub(crate) fn receive(device:&crate::devices::Device,value:&Value)->io::Result<()>{local().receive(device,value)}
 pub(crate) fn all(devices:&[crate::devices::Device])->Value{json!({"jobs":local().collected(Some(devices))})}

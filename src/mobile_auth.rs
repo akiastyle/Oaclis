@@ -1,4 +1,4 @@
-// mobile_auth.rs v1.49.711
+// mobile_auth.rs v1.51.731
 //! Local mobile authority: QR-bound keys, chat grants and signed, non-replayable requests.
 use crate::invalid;
 use ring::{hmac, rand::{SecureRandom, SystemRandom}, signature};
@@ -59,6 +59,15 @@ pub(crate) fn at(config:&Path)->io::Result<Arc<Store>> {
 impl Store {
     pub(crate) fn phone_name(&self,device:&str)->String {self.settings.read().unwrap().authorization.phones.get(device).map(|phone|phone.name.clone()).unwrap_or_else(||"Telefono".into())}
     pub(crate) fn admin_key(&self)->String {self.settings.read().unwrap().admin_key.clone()}
+    pub(crate) fn visible_jobs(&self)->Vec<Value> {
+        let settings=self.settings.read().unwrap();
+        let mut jobs=crate::jobs::reports();
+        jobs.retain(|job|job["chat_id"].as_str().is_some_and(|chat|settings.authorization.phones.values().any(|phone|phone.chats.contains(chat))));
+        jobs.sort_by_key(|job|std::cmp::Reverse(job["updated_at"].as_u64().unwrap_or(0)));
+        let mut bytes=2;
+        jobs.retain(|job|{let size=serde_json::to_vec(job).map(|v|v.len()+1).unwrap_or(32769);if bytes+size>32768{false}else{bytes+=size;true}});
+        jobs.truncate(256);jobs
+    }
     pub(crate) fn authority(&self)->Authority {self.settings.read().unwrap().authorization.clone()}
     fn change<T>(&self,edit:impl FnOnce(&mut Authority)->io::Result<T>)->io::Result<T> {
         let _writer=self.writer.lock().unwrap();
@@ -155,6 +164,17 @@ mod tests {
     fn command(store:&Store,key:&EcdsaKeyPair,id:&str,chat:&str,issued:u64)->Value {
         let payload=json!({"purpose":"oaclis-console-v1","epoch":store.epoch,"device":"b".repeat(64),"id":id,"issued":issued,"chat_id":chat,"action":"input","text":"hello","key":"Enter"}).to_string();
         json!({"device":"b".repeat(64),"id":id,"signed":{"signature":hex(key.sign(&SystemRandom::new(),payload.as_bytes()).unwrap().as_ref()),"payload":payload}})
+    }
+    #[test]
+    fn mobile_list_telemetry_contains_only_granted_chats() {
+        let (root,store,_key,binding)=fixture();let device="b".repeat(64);
+        store.approve(&device,"Phone",&binding).unwrap();store.grants(&device,BTreeSet::from(["allowed-list-job".into()])).unwrap();
+        for chat in ["allowed-list-job","private-list-job"] {
+            crate::jobs::update(json!({"chat_id":chat,"id":"list-job-fixture","text":"Working","progress":42})).unwrap();
+        }
+        let reports=store.visible_jobs();assert!(reports.iter().any(|job|job["chat_id"]=="allowed-list-job"));assert!(!reports.iter().any(|job|job["chat_id"]=="private-list-job"));
+        assert!(serde_json::to_vec(&reports).unwrap().len()<=32768);
+        std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn creation_is_bound_to_an_authorized_parent_and_keeps_other_grants() {

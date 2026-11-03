@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.590
+// index.php v1.8.607
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -104,6 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $raw=readState();
         $originalState=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
         $state=$originalState;
+        if (($state['jobs_received']??0)<time()-3600) unset($state['jobs'],$state['jobs_received']);
         $record=$state['devices'][$deviceId]??null;
         $authenticated=$authenticated && ($record['status']??'')==='approved' && is_string($session['auth']['nonce']??null) && hash_equals($record['auth_token']??'',hash('sha256',$session['auth']['nonce']));
         if (!$authenticated) unset($session['auth']);
@@ -263,7 +264,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$isAdmin) respond([],403);
             $security=$input['security']??null;
             if (!is_array($security) || !is_string($security['epoch']??null) || !preg_match('/^[a-f0-9]{64}$/D',$security['epoch']) || !is_int($security['time']??null)) throw new RuntimeException();
-            $state['console_security']=['epoch'=>$security['epoch']];
+            $state['console_security']=['epoch'=>$security['epoch'],'received_at'=>time()];
+            if (array_key_exists('jobs',$input)) {
+                $jobs=$input['jobs'];
+                if (!is_array($jobs)||!array_is_list($jobs)||count($jobs)>256||strlen(json_encode($jobs,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES))>65536) throw new RuntimeException('Invalid tool status');
+                foreach ($jobs as $row) {
+                    if (!is_array($row)||!is_string($row['chat_id']??null)||!is_string($row['id']??null)||!is_string($row['device_id']??null)||!preg_match('/^[A-Za-z0-9_-]{1,160}$/D',$row['chat_id'])||!preg_match('/^[A-Za-z0-9_-]{1,160}$/D',$row['id'])||!is_string($row['text']??null)||mb_strlen($row['text'])>2000||!is_int($row['updated_at']??null)||!is_bool($row['stale']??null)||(($row['progress']??null)!==null&&((!is_int($row['progress'])&&!is_float($row['progress']))||$row['progress']<0||$row['progress']>100))) throw new RuntimeException('Invalid tool status');
+                }
+                $state['jobs']=$jobs;$state['jobs_received']=time();
+            }
             foreach (($input['results']??[]) as $answer) {
                 $target=$answer['device']??''; $job=$state['devices'][$target]['console']??[];
                 if (($job['id']??'')!==($answer['id']??null) || ($job['until']??0)<time() || ($state['devices'][$target]['status']??'')!=='approved' || !in_array($job['chat_id'],array_column($state['devices'][$target]['chats']??[],'id'),true)) continue;
@@ -310,7 +319,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'protected':
             if (!$authenticated) respond([],403);
             if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
-            $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c'),'chats'=>$record['chats']??[]];
+            $allowed=array_column($record['chats']??[],'id');
+            $jobs=array_values(array_filter($state['jobs']??[],fn($job)=>in_array($job['chat_id']??null,$allowed,true)));
+            foreach ($jobs as &$job) if (($state['console_security']['received_at']??0)<time()-30) $job['stale']=true;
+            unset($job);
+            $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c'),'chats'=>$record['chats']??[],'jobs'=>$jobs];
             break;
         case 'logout':
             if ($authenticated) {$state['devices'][$deviceId]['lastSeen']=0;unset($state['devices'][$deviceId]['auth_token'],$state['devices'][$deviceId]['console']);}
