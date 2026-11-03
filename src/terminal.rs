@@ -1,4 +1,4 @@
-// terminal.rs v1.25.472
+// terminal.rs v1.26.481
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -139,9 +139,14 @@ impl ConsoleCapture {
         Ok((plain, ansi))
     }
 }
+static SESSIONS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<std::sync::Mutex<ConsoleCapture>>>>> = std::sync::OnceLock::new();
+pub(crate) fn expire() {
+    if let Some(sessions)=SESSIONS.get() {
+        sessions.lock().unwrap().retain(|_,session|std::sync::Arc::strong_count(session)>1 || session.try_lock().map(|capture|capture.screen.as_ref().is_some_and(|(at,_,_)|at.elapsed()<Duration::from_secs(60))).unwrap_or(true));
+    }
+}
 fn session_lock(chat: &str) -> io::Result<std::sync::Arc<std::sync::Mutex<ConsoleCapture>>> {
-    use std::sync::{Arc, Mutex, OnceLock};
-    static SESSIONS: OnceLock<Mutex<std::collections::HashMap<String, Arc<Mutex<ConsoleCapture>>>>> = OnceLock::new();
+    use std::sync::Arc;
     let mut sessions = SESSIONS.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Console non disponibile"))?;
     sessions.retain(|_, session| Arc::strong_count(session) > 1 || session.try_lock().map(|s|s.screen.as_ref().is_some_and(|(at,_,_)|at.elapsed()<Duration::from_secs(60))).unwrap_or(true));
     Ok(sessions.entry(chat.into()).or_default().clone())

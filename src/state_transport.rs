@@ -1,4 +1,4 @@
-// state_transport.rs v1.17.312
+// state_transport.rs v1.18.332
 //! A local Unix socket forwards approved SSH requests into the running Rust app.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -20,13 +20,21 @@ static LOG: std::sync::OnceLock<Mutex<std::collections::VecDeque<Value>>> = std:
 
 pub(crate) fn log(message: String) {
     let mut rows = LOG.get_or_init(Default::default).lock().unwrap();
-    let id = rows.back().and_then(|row|row["id"].as_u64()).unwrap_or(0) + 1;
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let id = NEXT.fetch_add(1,std::sync::atomic::Ordering::Relaxed);
     if rows.len() == 500 { rows.pop_front(); }
     rows.push_back(json!({"id":id,"time":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),"text":message}));
 }
 
 pub(crate) fn logs() -> Value {
     json!(*LOG.get_or_init(Default::default).lock().unwrap())
+}
+
+pub(crate) fn expire() {
+    let now=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis();
+    if let Some(log)=LOG.get() {
+        log.lock().unwrap().retain(|row|row["time"].as_u64().is_some_and(|time|now.saturating_sub(time as u128)<3_600_000));
+    }
 }
 
 fn log_request(direction: &str, peer: &str, value: &Value) {
@@ -216,5 +224,11 @@ mod log_tests {
         assert!(!row.to_string().contains("never-log"));
         for _ in 0..510 {super::log("fixture".into());}
         assert!(super::logs().as_array().unwrap().len() <= 500);
+        let previous=super::logs().as_array().unwrap().last().unwrap()["id"].as_u64().unwrap();
+        {let mut rows=super::LOG.get().unwrap().lock().unwrap();rows.front_mut().unwrap()["time"]=serde_json::json!(0);}
+        super::expire();
+        assert!(super::logs().as_array().unwrap().iter().all(|row|row["time"]!=0));
+        super::log("after-expiry".into());
+        assert!(super::logs().as_array().unwrap().last().unwrap()["id"].as_u64().unwrap()>previous);
     }
 }

@@ -51,6 +51,7 @@
 - Standing user authorization: update file version headers for every source change, but keep changes local until the entire agreed work block is complete and verified. Then make one commit and push for that block; do not commit at intermediate steps. Updating remote devices requires an explicit user request; publication is not deployment authorization. Preserve user data and do not interrupt active transfers.
 
 ## Background Services
+- Expire volatile tool reports (including peer reports) and unused catalog caches after one hour of inactivity, and logs after one hour (also bounded to 500 rows). Console capture/speech caches retain their shorter 60-second inactivity policy. Run cleanup from the existing memory reclamation cycle, preserving active readers, persistent state, chat archives and transfer history.
 - Peer runtime telemetry is volatile and owned in memory by `shared_settings`; preserve per-peer 30-second freshness. The legacy `shared-status.json` is not a live source and must not be reintroduced as a periodic reader/writer.
 - The master UI has one adaptive status/catalog timer; mobile console polling stays at 200 ms through its existing queue. Cache immutable status revisions and unchanged console/tool rendering instead of adding polling loops.
 - Background workers perform network probes and subprocess waits outside shared state locks. HTTP reads use the last committed immutable memory snapshot; JSON persistence serializes writers without blocking readers.

@@ -1,4 +1,4 @@
-// jobs.rs v1.17.148
+// jobs.rs v1.20.175
 //! Volatile tool telemetry, independent of AI execution and persistent chat state.
 use crate::invalid;
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,14 @@ struct PeerJobs { name:String, jobs:Vec<(Update,u64,bool)>, received:Instant }
 #[derive(Default)]
 struct Monitor { jobs:Mutex<BTreeMap<(String,String),Record>>, peers:Mutex<BTreeMap<String,PeerJobs>> }
 impl Monitor {
+    fn expire(&self) {
+        self.jobs.lock().unwrap().retain(|_,record|record.received.elapsed().as_secs()<3600);
+        let now=SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        self.peers.lock().unwrap().retain(|_,peer| {
+            peer.jobs.retain(|(_,updated_at,_)|now.saturating_sub(*updated_at)<3_600_000);
+            peer.received.elapsed().as_secs()<3600
+        });
+    }
     fn update(&self,value:Value)->io::Result<Value> {
         if value.as_object().is_some_and(|object|object.is_empty()) {
             return Ok(json!({
@@ -38,7 +46,7 @@ impl Monitor {
                 "response":{"ok":true}
             }));
         }
-        let update=Update::parse(value)?;let key=(update.chat_id.clone(),update.id.clone());
+        let update=Update::parse(value)?;self.expire();let key=(update.chat_id.clone(),update.id.clone());
         let mut jobs=self.jobs.lock().unwrap();
         if jobs.len()>=256&&!jobs.contains_key(&key){return Err(invalid("Troppi lavori monitorati"));}
         let finished=update.progress==Some(100.0);
@@ -85,6 +93,7 @@ impl Monitor {
 fn local()->&'static Monitor {static LOCAL:OnceLock<Monitor>=OnceLock::new();LOCAL.get_or_init(Default::default)}
 pub(crate) fn update(value:Value)->io::Result<Value>{local().update(value)}
 pub(crate) fn snapshot()->Value{local().snapshot()}
+pub(crate) fn expire(){local().expire()}
 pub(crate) fn receive(device:&crate::devices::Device,value:&Value)->io::Result<()>{local().receive(device,value)}
 pub(crate) fn all(devices:&[crate::devices::Device])->Value{json!({"jobs":local().collected(Some(devices))})}
 pub(crate) fn for_chat(chat:&str)->Value{local().for_chat(chat)}
@@ -93,6 +102,22 @@ pub(crate) fn retain(approved:&std::collections::BTreeSet<String>){local().peers
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn expiry_discards_silent_tools_and_peers_but_keeps_heartbeats() {
+        let monitor=Monitor::default();
+        for id in ["old","active"] {monitor.update(json!({"chat_id":"chat","id":id,"text":"Running","progress":42})).unwrap();}
+        monitor.jobs.lock().unwrap().get_mut(&("chat".into(),"old".into())).unwrap().received=Instant::now()-std::time::Duration::from_secs(3601);
+        monitor.peers.lock().unwrap().insert("old".into(),PeerJobs{name:"Old".into(),jobs:vec![],received:Instant::now()-std::time::Duration::from_secs(3601)});
+        let now=SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as u64;
+        monitor.peers.lock().unwrap().insert("connected".into(),PeerJobs{name:"Connected".into(),jobs:vec![(Update{chat_id:"chat".into(),id:"silent-peer-tool".into(),text:"Old".into(),progress:Some(100.0)},now-3_600_001,false)],received:Instant::now()});
+        monitor.expire();
+        assert!(monitor.peers.lock().unwrap()["connected"].jobs.is_empty());
+        assert_eq!(monitor.snapshot()["jobs"].as_array().unwrap().len(),1);
+        assert_eq!(monitor.snapshot()["jobs"][0]["id"],"active");
+        assert!(!monitor.peers.lock().unwrap().contains_key("old"));
+        monitor.update(json!({"chat_id":"chat","id":"old","text":"Resumed","progress":43})).unwrap();
+        assert_eq!(monitor.snapshot()["jobs"].as_array().unwrap().len(),2);
+    }
     #[test]
     fn empty_request_describes_protocol_without_registering_a_tool() {
         let monitor=Monitor::default();

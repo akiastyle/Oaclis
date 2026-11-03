@@ -1,4 +1,4 @@
-// assistant_stream.rs v1.11.271
+// assistant_stream.rs v1.12.278
 //! Bounded, on-demand observation of already loaded Codex threads; never starts a turn.
 use serde_json::{Value,json};
 use std::{collections::{BTreeMap,VecDeque},io,os::unix::net::UnixStream,path::Path,sync::{Arc,Mutex,OnceLock,atomic::{AtomicBool,Ordering}},thread,time::{Duration,Instant}};
@@ -141,8 +141,13 @@ fn follow(root:&Path,chat:&str,reader:&Reader)->io::Result<()> {
     }
     let _=socket.close(None);Ok(())
 }
+static READERS:OnceLock<Mutex<BTreeMap<String,Arc<Reader>>>>=OnceLock::new();
+pub(crate) fn expire() {
+    if let Some(readers)=READERS.get() {
+        readers.lock().unwrap().retain(|_,reader|reader.running.load(Ordering::Relaxed)||reader.touched.lock().unwrap().elapsed()<Duration::from_secs(60));
+    }
+}
 pub(crate) fn snapshot(chat:&str,after:Option<u64>)->Value {
-    static READERS:OnceLock<Mutex<BTreeMap<String,Arc<Reader>>>>=OnceLock::new();
     let mut readers=READERS.get_or_init(Default::default).lock().unwrap();
     readers.retain(|_,r|r.running.load(Ordering::Relaxed)||r.touched.lock().unwrap().elapsed()<Duration::from_secs(60));
     if !readers.contains_key(chat) {

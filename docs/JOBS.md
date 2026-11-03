@@ -34,6 +34,9 @@ Inviare al massimo un aggiornamento al secondo e ripetere lo stato ogni
 nel monitoraggio non deve fermare il calcolo, si riprova al successivo invio.
 Dopo 90 secondi senza aggiornamenti un lavoro locale incompleto diventa grigio;
 100% resta concluso. La percentuale non viene stimata da Oaclis.
+Dopo un'ora senza nuovi aggiornamenti, lo stato temporaneo viene rimosso
+dalla memoria. Un nuovo report lo rende nuovamente disponibile; il tool
+non viene interrotto.
 
 ## Visualizzazione
 

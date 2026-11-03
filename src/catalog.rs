@@ -1,4 +1,4 @@
-// catalog.rs v2.36.1794
+// catalog.rs v2.38.1814
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -27,10 +27,17 @@ fn stamp(metadata: &fs::Metadata) -> Stamp {
 }
 #[derive(Default)]
 struct ArchiveIndex {
+    touched: Option<std::time::Instant>,
     titles: Vec<Option<Stamp>>,
     names: BTreeMap<String, String>,
     hidden: BTreeSet<String>,
     directories: HashMap<PathBuf, (Stamp, Vec<(PathBuf, bool)>)>,
+}
+static INDEXES: std::sync::OnceLock<std::sync::Mutex<HashMap<PathBuf,std::sync::Arc<std::sync::Mutex<ArchiveIndex>>>>> = std::sync::OnceLock::new();
+pub(crate) fn expire() {
+    if let Some(indexes)=INDEXES.get() {
+        indexes.lock().unwrap().retain(|_,index|std::sync::Arc::strong_count(index)>1 || index.try_lock().map(|index|index.touched.is_some_and(|time|time.elapsed().as_secs()<3600)).unwrap_or(true));
+    }
 }
 pub(crate) fn local(root: &Path) -> io::Result<Vec<Value>> {
     let home = std::env::var_os("HOME").ok_or_else(|| crate::invalid("HOME non definita"))?;
@@ -42,10 +49,9 @@ pub(crate) fn local_at(root: &Path, config: &Path) -> io::Result<Vec<Value>> {
     } else {
         std::env::current_dir()?.join(root)
     };
-    use std::sync::{Arc, Mutex, OnceLock};
-    static INDEXES: OnceLock<Mutex<HashMap<PathBuf, Arc<Mutex<ArchiveIndex>>>>> = OnceLock::new();
     let index = INDEXES.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Catalogo non disponibile"))?.entry(root.clone()).or_default().clone();
     let mut index = index.lock().map_err(|_|io::Error::other("Catalogo non disponibile"))?;
+    index.touched=Some(std::time::Instant::now());
     let mut names = BTreeMap::new();
     let mut hidden = BTreeSet::new();
     let database = if root.join("state_5.sqlite").exists() {
@@ -307,6 +313,16 @@ pub(crate) fn remote(device: &Device) -> io::Result<Value> {
 mod tests {
     use super::*;
     use std::fs;
+    #[test]
+    fn expiry_releases_idle_catalog_but_never_an_in_use_index() {
+        use std::sync::{Arc,Mutex};
+        let root=std::env::temp_dir().join(format!("oaclis-expiry-{}",std::process::id()));
+        let index=Arc::new(Mutex::new(ArchiveIndex{touched:Some(std::time::Instant::now()-std::time::Duration::from_secs(3601)),..Default::default()}));
+        let weak=Arc::downgrade(&index);
+        INDEXES.get_or_init(Default::default).lock().unwrap().insert(root,index.clone());
+        expire();assert!(weak.upgrade().is_some());
+        drop(index);expire();assert!(weak.upgrade().is_none());
+    }
     #[test]
     fn catalog_skips_links_and_uses_latest_title() {
         let root = std::env::temp_dir().join(format!("oaclis-catalog-{}", std::process::id()));
