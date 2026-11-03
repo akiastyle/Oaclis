@@ -1,10 +1,10 @@
-// app_update.rs v1.8.153
+// app_update.rs v1.8.155
 //! Explicit fast-forward update; never discard local changes.
 use crate::{invalid, staging::StagedFile};
 use std::{io::{self, Read, Seek, SeekFrom}, path::Path, process::{Command, Stdio}, thread, time::{Duration, Instant}};
 
 pub(crate) fn run(command: &mut Command, timeout: Duration) -> io::Result<String> {
-    let step=match command.get_program().to_str().unwrap_or("") {"git"=>match command.get_args().next().and_then(|a|a.to_str()).unwrap_or("") {"fetch"=>"Download aggiornamento Oaclis","merge"=>"Applicazione aggiornamento Oaclis",_=>"Verifica versione Oaclis"},"cargo"=>"Compilazione Oaclis",_=>"Preparazione aggiornamento Oaclis"};
+    let step=match command.get_program().to_str().unwrap_or("") {"git"=>match command.get_args().next().and_then(|a|a.to_str()).unwrap_or("") {"fetch"=>"Download aggiornamento Oaclis","merge"=>"Applicazione aggiornamento Oaclis",_=>"Verifica versione Oaclis"},"cargo"=>"Compilazione Oaclis",_=>"Operazione di sistema"};
     crate::state_transport::log(format!("{step}: avviato"));
     let mut log = StagedFile::new(&std::env::temp_dir())?;
     command.stdin(Stdio::null()).stdout(log.file.try_clone()?).stderr(log.file.try_clone()?);
