@@ -1,4 +1,4 @@
-// terminal.rs v1.26.481
+// terminal.rs v1.28.502
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -24,6 +24,7 @@ fn validate(value: &Value) -> io::Result<&str> {
     if let Some(access)=value.get("access") { access_flags(access.as_str().ok_or_else(||invalid("Autorizzazione console non valida"))?)?; }
     if let Some(speech)=value.get("speech") { if !speech.is_boolean() {return Err(invalid("Lettura non valida"));} }
     if value.get("speech_cursor").is_some_and(|cursor|!cursor.is_null() && cursor.as_u64().is_none()) {return Err(invalid("Cursore lettura non valido"));}
+    if value.get("screen_revision").is_some_and(|v|!v.is_null() && !v.as_str().is_some_and(|s|s.is_empty() || s.len()==64 && s.bytes().all(|b|b.is_ascii_hexdigit()))) {return Err(invalid("Revisione console non valida"));}
     let chat = value["chat_id"].as_str().filter(|s| !s.is_empty() && s.len()<=160 && s.bytes().all(|b|b.is_ascii_alphanumeric() || b"_-".contains(&b)))
         .ok_or_else(||invalid("Chat non valida"))?;
     match value["action"].as_str() {
@@ -212,9 +213,16 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let access=if value["action"]=="open" {
         tmux(&["show-options","-v","-t",&session,"@oaclis-access"]).ok().and_then(|v|String::from_utf8(v).ok()).map(|v|v.trim().to_owned()).filter(|v|access_flags(v).is_ok()).unwrap_or_else(||"existing".into())
     } else { String::new() };
-    let mut result=json!({"screen":plain,"screen_ansi":ansi,"active_access":access,"jobs":crate::jobs::for_chat(chat)});
+    let mut result=screen_response(&plain,&ansi,&value["screen_revision"],value["action"]=="read");
+    result["active_access"]=json!(access);result["jobs"]=crate::jobs::for_chat(chat);
     if value["speech"]==true {result["speech"]=crate::assistant_stream::snapshot(chat,value["speech_cursor"].as_u64());}
     Ok(result)
+}
+fn screen_response(plain: &str, ansi: &str, known: &Value, read: bool) -> Value {
+    use sha2::{Digest,Sha256};
+    let revision=Sha256::digest(ansi.as_bytes()).iter().map(|byte|format!("{byte:02x}")).collect::<String>();
+    if read && known.as_str()==Some(revision.as_str()) {json!({"screen_revision":revision,"unchanged":true})}
+    else {json!({"screen":plain,"screen_ansi":ansi,"screen_revision":revision})}
 }
 fn sgr() -> &'static regex::Regex {
     static SGR: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
@@ -244,8 +252,10 @@ fn bounded_screen(plain: &str, ansi: Option<&str>) -> (String, Option<String>) {
     (tail, styling)
 }
 pub(crate) fn mobile_screen(value: &Value) -> Value {
+    if value["unchanged"]==true {return json!({"unchanged":true,"screen_revision":value["screen_revision"]});}
     let (plain, ansi)=bounded_screen(value["screen"].as_str().unwrap_or(""),value["screen_ansi"].as_str());
     let mut result=json!({"screen":plain});
+    if value["screen_revision"].is_string() {result["screen_revision"]=value["screen_revision"].clone();}
     if let Some(ansi)=ansi {result["screen_ansi"]=json!(ansi);}
     result
 }
@@ -258,6 +268,15 @@ pub fn request(device: Option<&Device>, value: &Value) -> io::Result<Value> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn unchanged_screen_omits_text_but_input_and_style_changes_send_it() {
+        let first=screen_response("Hello","\x1b[31mHello",&Value::Null,true);
+        let unchanged=screen_response("Hello","\x1b[31mHello",&first["screen_revision"],true);
+        assert_eq!(unchanged["unchanged"],true);assert!(unchanged.get("screen").is_none());
+        assert!(mobile_screen(&unchanged).get("screen").is_none());
+        assert!(screen_response("Hello","\x1b[32mHello",&first["screen_revision"],true).get("screen").is_some());
+        assert!(screen_response("Hello","\x1b[31mHello",&first["screen_revision"],false).get("screen").is_some());
+    }
     #[test]
     fn capture_reuses_recent_screen_and_invalidation_reads_again() {
         let mut capture = super::ConsoleCapture::default();

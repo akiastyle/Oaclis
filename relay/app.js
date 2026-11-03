@@ -1,4 +1,4 @@
-// app.js v2.94.1020
+// app.js v2.94.1025
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -176,7 +176,8 @@ async function openConsole(chat,adjacent=false){
   if(request.operation==='open'||request.operation==='input')pane.follow=true;
   const top=pane.saved?.top??pane.screen.scrollTop,left=pane.saved?.left??pane.screen.scrollLeft;
   const savedFollow=pane.saved?.follow;if(request.operation==='open'&&savedFollow===false)pane.follow=false;
-  const restore=!!pane.saved,changed=OaclisTerminal.renderConsole(pane.screen,result.screen,result.screen_ansi);pane.saved=null;
+  const restore=!!pane.saved,changed=result.unchanged===true?false:OaclisTerminal.renderConsole(pane.screen,result.screen,result.screen_ansi);pane.saved=null;
+  if(typeof result.screen_revision==='string')pane.screenRevision=result.screen_revision;
   if(pane===active&&request.reader===reader){if(request.operation==='input'&&typeof request.text==='string')reader.defer(2000);reader.update(result.speech,request.speechGeneration);}
   if(changed||restore||request.operation!=='read'){if(pane.follow)pane.screen.scrollTop=pane.screen.scrollHeight;else{pane.screen.scrollTop=top;pane.screen.scrollLeft=left;}}
   pane.ready=true;
@@ -193,7 +194,7 @@ async function openConsole(chat,adjacent=false){
     if(operation==='open'&&pane.ready)operation='read';
     if(pane.reconnecting&&!document.hidden){try{navigator.vibrate?.(100);}catch{}}
     const currentReader=pane===active?reader:null,speechGeneration=currentReader?.stamp();
-    const request=await api('console',{chat_id:pane.chat.id,operation,...body,...currentReader?.request()});
+    const request=await api('console',{chat_id:pane.chat.id,operation,...(operation==='read'&&pane.screenRevision?{screen_revision:pane.screenRevision}:{}),...body,...currentReader?.request()});
     pending={...request,pane,operation,text:body.text,image:body.image,reader:currentReader,speechGeneration,deadline:Date.now()+23000};
     if(operation==='read'){
      controller=new AbortController();reading=controller;

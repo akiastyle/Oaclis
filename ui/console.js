@@ -1,4 +1,4 @@
-// console.js v3.124.2224
+// console.js v3.124.2231
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet();
@@ -210,7 +210,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   const jobs=document.createElement("span");panel.querySelector("h2").append(jobs);panel.jobsStatus=OaclisJobs.inline(jobs);
   let followOutput = true;
   screen.addEventListener("scroll", () => { followOutput = screen.scrollHeight-screen.clientHeight-screen.scrollTop <= 24; }, {passive:true});
-  let busy = false, ready = false, submitting = false, preparingImage = false, image = null, waitingInputs = 0, idle = Promise.resolve();
+  let screenRevision="", busy = false, ready = false, submitting = false, preparingImage = false, image = null, waitingInputs = 0, idle = Promise.resolve();
   const send = async value => {
     if (value.action !== "read") status.textContent = OaclisSettings.text("Ricevuto");
     if (value.action === "read") { if (busy || waitingInputs || document.documentElement.dataset.consoleWindow&&!panel.hasAttribute("data-window-active")) return false; }
@@ -221,11 +221,12 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     try {
       if (value.action !== "read") status.textContent = OaclisSettings.text("Operazione in corso");
       const stamp = window.OaclisLocalVoice?.stamp(panel);
-      const result = await api("terminal", { ...payload, ...value, ...window.OaclisLocalVoice?.request(panel) });
+      const result = await api("terminal", { ...payload, ...(value.action==="read"&&screenRevision?{screen_revision:screenRevision}:{}), ...value, ...window.OaclisLocalVoice?.request(panel) });
       if (!panel.isConnected) return false;
       panel.jobsStatus.update(result.jobs?.map(job=>job.device_id==='master'&&deviceId!=='master'?{...job,device_id:deviceId}:job));
       const top=screen.scrollTop,left=screen.scrollLeft;
-      const changed=OaclisTerminal.renderConsole(screen,result.screen,result.screen_ansi);
+      const changed=result.unchanged===true?false:OaclisTerminal.renderConsole(screen,result.screen,result.screen_ansi);
+      if(typeof result.screen_revision==='string')screenRevision=result.screen_revision;
       if (value.action === "input" || value.action === "open") followOutput = true;
       if (changed || value.action !== "read") {
         if (followOutput) screen.scrollTop = screen.scrollHeight;

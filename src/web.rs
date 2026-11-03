@@ -1,4 +1,4 @@
-// web.rs v2.28.1874
+// web.rs v2.29.1902
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -109,8 +109,9 @@ fn trusted(request: &Request) -> bool {
 }
 fn body(request: &mut Request) -> io::Result<Value> {
     let mut data = Vec::new();
-    request.as_reader().take(65537).read_to_end(&mut data)?;
-    if data.len() > 65536 {
+    let limit = if request.url() == "/api/terminal" { 786432 } else { 65536 };
+    request.as_reader().take(limit + 1).read_to_end(&mut data)?;
+    if data.len() as u64 > limit {
         return Err(invalid("Richiesta troppo grande"));
     }
     serde_json::from_slice(&data).map_err(|error| invalid(error.to_string()))
@@ -234,7 +235,6 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 "/icons.js" => Some((include_str!("../ui/icons.js").into(), "text/javascript; charset=utf-8")),
                 "/badge-motion.js" => Some((include_str!("../ui/badge-motion.js").into(), "text/javascript; charset=utf-8")),
                 "/panels.js" => Some((include_str!("../ui/panels.js").into(), "text/javascript; charset=utf-8")),
-                "/background.js" => Some((include_str!("../ui/background.js").into(), "text/javascript; charset=utf-8")),
                 "/map.js" => Some((include_str!("../ui/map.js").into(), "text/javascript; charset=utf-8")),
                 "/terminal-format.js" => Some((include_str!("../ui/terminal-format.js").into(), "text/javascript; charset=utf-8")),
                 "/voice.js" => Some((include_str!("../relay/voice.js").into(), "text/javascript; charset=utf-8")),
@@ -601,6 +601,28 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn clipboard_image_body_has_a_bounded_terminal_only_allowance() {
+        let server=Server::http("127.0.0.1:0").unwrap();
+        let address=server.server_addr().to_ip().unwrap();
+        let worker=thread::spawn(move|| {
+            for _ in 0..3 {
+                let mut request=server.recv().unwrap();
+                let status=if body(&mut request).is_ok(){200}else{400};
+                request.respond(Response::from_string("checked").with_status_code(status)).unwrap();
+            }
+        });
+        for (path,size,expected) in [("/api/terminal",700000,200),("/api/status",70000,400),("/api/terminal",800000,400)] {
+            let payload=serde_json::to_string(&json!({"image":"x".repeat(size)})).unwrap();
+            let status=match ureq::post(format!("http://{address}{path}")).send(payload.as_bytes()) {
+                Ok(response)=>response.status().as_u16(),
+                Err(ureq::Error::StatusCode(code))=>code,
+                Err(error)=>panic!("{error}"),
+            };
+            assert_eq!(status,expected);
+        }
+        worker.join().unwrap();
+    }
     #[test]
     fn slow_request_does_not_block_a_local_request() {
         use std::{net::TcpStream, io::{Read, Write}, sync::mpsc, time::Duration};

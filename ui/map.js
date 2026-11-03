@@ -1,4 +1,4 @@
-// map.js v4.124.3284
+// map.js v4.124.3297
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -548,6 +548,7 @@ function followMapMotion() {
 }
 
 function renderMap(animate = false) {
+  $("#nodes").connectionLinksState=undefined;
   drawingMap = true;
   const previous = animate ? Object.fromEntries([...document.querySelectorAll(".map-node")].map(n => [n.dataset.id, { x: n.offsetLeft, y: n.offsetTop }])) : {};
   $("#nodes").querySelectorAll(".map-node").forEach(node => node.remove());
@@ -803,12 +804,18 @@ function renderMap(animate = false) {
 }
 
 function renderConnections() {
-  renderLink();
+  const root=$("#nodes");
+  const graph=JSON.stringify([chatLinks,link,linkPositions,data.connections,data.appearance,data.chats?.map(chat=>[chat.id,chat.name]),data.deleted_chats,data.mobile_devices?.map(({id,active,chat_ids})=>[id,active,chat_ids])]);
+  if(root.connectionLinksState!==graph){root.connectionLinksState=graph;renderLink();}
   document.querySelectorAll(".map-node").forEach((node) => {
     const id = node.dataset.id;
     const mobile = data.mobile_devices?.find(d => d.id === id);
     const state = mobile ? mobile.active ? 'online' : 'offline' :
       id === "master" ? "online" : data.connections[id] || "unknown";
+    const runtimeState=data.device_runtime?.[id];
+    const visual=JSON.stringify([state,sourceId,deviceName(id),data.appearance?.['device:'+id]?.color,runtimeState?.available,runtimeState?.active,runtimeState?.error,runtimeState?.desktop?.id,runtimeState?.build,runtimeState?.update?.status,data.build?.source_id,[...node.querySelectorAll('button')].map(button=>[button.dataset.busy,button.dataset.checking])]);
+    if(node.connectionVisual===visual)return;
+    node.connectionVisual=visual;
     node.className =
       "map-node " +
       state +
@@ -940,7 +947,9 @@ function renderMobileLinks() {
       path.setAttribute('marker-end','url(#' + marker.id + ')'); svg.append(path);arrows.set(device.id,marker);
     }
     path.dataset.source=device.source; path.dataset.target=device.target;
-    path.setAttribute('d', mobileLinkCurve(owner.getBoundingClientRect(), node.getBoundingClientRect(), base, radius, owner.querySelector('.connection-port.console'), node.querySelector('.connection-port.console')));
+    const from=owner.getBoundingClientRect(),to=node.getBoundingClientRect(),ports=[owner.querySelector('.connection-port.console'),node.querySelector('.connection-port.console')];
+    const geometry=JSON.stringify([base.x,base.y,radius,...[from,to].map(r=>[r.x,r.y,r.width,r.height]),...ports.map(port=>{const r=port?.getBoundingClientRect();return r?[r.x,r.y,r.width,r.height,port.portNormal]:null;})]);
+    if(path.dataset.geometry!==geometry){path.setAttribute('d',mobileLinkCurve(from,to,base,radius,...ports));path.dataset.geometry=geometry;}
     svg.querySelectorAll('.link-flow-trace[data-id="' + CSS.escape(device.id) + '"]').forEach(trace => trace.setAttribute('d', path.getAttribute('d')));
     renderAccessBadges(path, device, badges, markers);
     path.dataset.active = String(device.active === true);

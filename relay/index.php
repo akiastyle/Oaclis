@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.577
+// index.php v1.8.588
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -244,6 +244,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $packet=json_decode($signed['payload'],true,16,JSON_THROW_ON_ERROR);
             if (!is_array($packet) || ($packet['purpose']??'')!=='oaclis-console-v1' || ($packet['device']??'')!==$deviceId || ($packet['chat_id']??'')!==$chat || ($packet['action']??'')!==$operation || ($packet['text']??null)!==$text || ($packet['key']??null)!==$key || !is_string($packet['id']??null) || !preg_match('/^[a-f0-9]{32}$/D',$packet['id'])) respond([],403);
             if (!is_bool($packet['speech']??false) || (($packet['speech_cursor']??null)!==null && (!is_int($packet['speech_cursor']) || $packet['speech_cursor']<0))) respond([],403);
+            if (isset($packet['screen_revision']) && (!is_string($packet['screen_revision']) || !preg_match('/^[a-f0-9]{64}$/Di',$packet['screen_revision']))) respond([],403);
             if ($operation==='create' && (trim($text)==='' || mb_strlen($text)>160 || $key!=='' || isset($packet['image']) || !is_string($packet['icon']??'') || !preg_match('/^[a-z]*$/D',$packet['icon']??''))) respond([],400);
             if (isset($packet['image'])) {
                 $image=$packet['image'];
@@ -282,11 +283,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $state['devices'][$target]['console']['result']=['models'=>$answer['models']];
                     continue;
                 }
+                $packet=json_decode($job['signed']['payload']??'{}',true);
+                $revision=$answer['screen_revision']??null;
+                $validRevision=is_string($revision)&&preg_match('/^[a-f0-9]{64}$/Di',$revision);
+                $unchanged=($answer['unchanged']??false)===true&&($job['operation']??'')==='read'&&$validRevision&&($packet['screen_revision']??null)===$revision;
                 $screen=$answer['screen']??null;
                 $state['devices'][$target]['console']['result']=is_string($screen)&&strlen($screen)<=60000?['screen'=>$screen]:['error'=>'Console non disponibile. Riprova.'];
+                if ($unchanged) $state['devices'][$target]['console']['result']=['unchanged'=>true];
+                if ($validRevision&&($unchanged||is_string($screen))) $state['devices'][$target]['console']['result']['screen_revision']=$revision;
                 if (is_string($screen)&&strlen($screen)<=60000&&is_string($answer['screen_ansi']??null)&&strlen($answer['screen_ansi'])<=24000) $state['devices'][$target]['console']['result']['screen_ansi']=$answer['screen_ansi'];
-                if (is_string($screen)&&is_array($answer['jobs']??null)&&array_is_list($answer['jobs'])&&strlen(json_encode($answer['jobs']))<=65536&&!array_filter($answer['jobs'],fn($row)=>!is_array($row)||($row['chat_id']??null)!==$job['chat_id'])) $state['devices'][$target]['console']['result']['jobs']=$answer['jobs'];
-                if (is_string($screen)&&is_array($answer['speech']??null)&&strlen(json_encode($answer['speech'],JSON_UNESCAPED_UNICODE))<=10000) $state['devices'][$target]['console']['result']['speech']=$answer['speech'];
+                if (($unchanged||is_string($screen))&&is_array($answer['jobs']??null)&&array_is_list($answer['jobs'])&&strlen(json_encode($answer['jobs']))<=65536&&!array_filter($answer['jobs'],fn($row)=>!is_array($row)||($row['chat_id']??null)!==$job['chat_id'])) $state['devices'][$target]['console']['result']['jobs']=$answer['jobs'];
+                if (($unchanged||is_string($screen))&&is_array($answer['speech']??null)&&strlen(json_encode($answer['speech'],JSON_UNESCAPED_UNICODE))<=10000) $state['devices'][$target]['console']['result']['speech']=$answer['speech'];
             }
             $result=['commands'=>[], 'console_active'=>false];
             foreach ($state['devices'] as $id=>$phone) {
