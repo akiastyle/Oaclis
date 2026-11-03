@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.607
+// index.php v1.8.617
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -265,6 +265,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $security=$input['security']??null;
             if (!is_array($security) || !is_string($security['epoch']??null) || !preg_match('/^[a-f0-9]{64}$/D',$security['epoch']) || !is_int($security['time']??null)) throw new RuntimeException();
             $state['console_security']=['epoch'=>$security['epoch'],'received_at'=>time()];
+            if (array_key_exists('active_chats',$input)) {
+                $active=$input['active_chats'];
+                if (!is_array($active)||!array_is_list($active)||count($active)>1024||array_filter($active,fn($id)=>!is_string($id)||!preg_match('/^[A-Za-z0-9_-]{1,160}$/D',$id))) throw new RuntimeException('Invalid session status');
+                $state['active_chats']=$active;
+            }
             if (array_key_exists('jobs',$input)) {
                 $jobs=$input['jobs'];
                 if (!is_array($jobs)||!array_is_list($jobs)||count($jobs)>256||strlen(json_encode($jobs,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES))>65536) throw new RuntimeException('Invalid tool status');
@@ -323,7 +328,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $jobs=array_values(array_filter($state['jobs']??[],fn($job)=>in_array($job['chat_id']??null,$allowed,true)));
             foreach ($jobs as &$job) if (($state['console_security']['received_at']??0)<time()-30) $job['stale']=true;
             unset($job);
-            $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c'),'chats'=>$record['chats']??[],'jobs'=>$jobs];
+            $chats=$record['chats']??[];
+            foreach ($chats as &$chat) $chat['active']=($state['console_security']['received_at']??0)>=time()-30&&in_array($chat['id'],$state['active_chats']??[],true);
+            unset($chat);
+            $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c'),'chats'=>$chats,'jobs'=>$jobs];
             break;
         case 'logout':
             if ($authenticated) {$state['devices'][$deviceId]['lastSeen']=0;unset($state['devices'][$deviceId]['auth_token'],$state['devices'][$deviceId]['console']);}

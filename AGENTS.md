@@ -51,6 +51,7 @@
 - Standing user authorization: update file version headers for every source change, but keep changes local until the entire agreed work block is complete and verified. Then make one commit and push for that block; do not commit at intermediate steps. Updating remote devices requires an explicit user request; publication is not deployment authorization. Preserve user data and do not interrupt active transfers.
 
 ## Background Services
+- The PWA chat-list green arrow means an open Codex session, including idle at the prompt. Reuse the existing terminal open/read/stop results in memory and the existing relay exchange; do not add session probes, tmux scans or a new polling loop for this indicator.
 - Explicit console stops propagate by chat ID plus device ID to matching desktop views/windows; cancel popup auto-return without affecting other chats or devices.
 - Mobile chat-list progress reuses OaclisJobs.inline. Send only changed tool snapshots on the existing console exchange, restricted by local mobile grants and a 32 KiB budget. The relay independently filters per-phone grants and expires its single latest snapshot after one hour; list updates reuse the existing refresh and stable rows.
 - Remote app update logs keep the device name and distinguish acceptance from completion. Carry phase/target tracking in existing volatile runtime telemetry; verify the expected build before logging success. The orchestrator log stays in RAM for at most one hour/100 rows; command output scratch files are unlinked immediately and held only by open descriptors.

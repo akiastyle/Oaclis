@@ -1,4 +1,4 @@
-// mobile_auth.rs v1.51.731
+// mobile_auth.rs v1.52.736
 //! Local mobile authority: QR-bound keys, chat grants and signed, non-replayable requests.
 use crate::invalid;
 use ring::{hmac, rand::{SecureRandom, SystemRandom}, signature};
@@ -59,6 +59,11 @@ pub(crate) fn at(config:&Path)->io::Result<Arc<Store>> {
 impl Store {
     pub(crate) fn phone_name(&self,device:&str)->String {self.settings.read().unwrap().authorization.phones.get(device).map(|phone|phone.name.clone()).unwrap_or_else(||"Telefono".into())}
     pub(crate) fn admin_key(&self)->String {self.settings.read().unwrap().admin_key.clone()}
+    pub(crate) fn active_chats(&self)->Vec<String> {
+        let chats=crate::terminal::active_chats();
+        let settings=self.settings.read().unwrap();
+        chats.into_iter().filter(|chat|settings.authorization.phones.values().any(|phone|phone.chats.contains(chat))).collect()
+    }
     pub(crate) fn visible_jobs(&self)->Vec<Value> {
         let settings=self.settings.read().unwrap();
         let mut jobs=crate::jobs::reports();

@@ -1,4 +1,4 @@
-// terminal.rs v1.30.538
+// terminal.rs v1.32.553
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -152,6 +152,14 @@ fn session_lock(chat: &str) -> io::Result<std::sync::Arc<std::sync::Mutex<Consol
     sessions.retain(|_, session| Arc::strong_count(session) > 1 || session.try_lock().map(|s|s.screen.as_ref().is_some_and(|(at,_,_)|at.elapsed()<Duration::from_secs(60))).unwrap_or(true));
     Ok(sessions.entry(chat.into()).or_default().clone())
 }
+static OPEN_CHATS:std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeSet<String>>>=std::sync::OnceLock::new();
+pub(crate) fn active_chats() -> Vec<String> {
+    OPEN_CHATS.get_or_init(Default::default).lock().unwrap().iter().cloned().collect()
+}
+fn mark_open(chat: &str, open: bool) {
+    let mut chats=OPEN_CHATS.get_or_init(Default::default).lock().unwrap();
+    if open {chats.insert(chat.into());} else {chats.remove(chat);}
+}
 pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let chat=validate(value)?;
     if value["action"]=="reset" || value["action"]=="stop" {
@@ -160,6 +168,7 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         if value["action"]=="stop" {
             let session=format!("=oaclis-{chat}");
             if tmux(&["has-session","-t",&session]).is_ok() {tmux(&["kill-session","-t",&session])?;}
+            mark_open(chat,false);
         }
         capture.screen=None;
         return Ok(json!({"ok":true}));
@@ -218,7 +227,8 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let (plain, ansi)=capture.read(|| {
         let screen=tmux(&["capture-pane","-p","-e","-t",&target,"-S","-200"]).map_err(|_|invalid("Sessione terminata: riapri la chat"))?;
         String::from_utf8(screen).map_err(io::Error::other)
-    })?;
+    }).inspect_err(|_|mark_open(chat,false))?;
+    mark_open(chat,true);
     drop(capture);
     let access=if value["action"]=="open" {
         tmux(&["show-options","-v","-t",&session,"@oaclis-access"]).ok().and_then(|v|String::from_utf8(v).ok()).map(|v|v.trim().to_owned()).filter(|v|access_flags(v).is_ok()).unwrap_or_else(||"existing".into())
@@ -283,7 +293,10 @@ mod tests {
         let chat=format!("stop-fixture-{}",std::process::id());let session=format!("oaclis-{chat}");
         tmux(&["new-session","-d","-s",&session,"sleep 30"]).unwrap();
         let lock=session_lock(&chat).unwrap();lock.lock().unwrap().read(||Ok("Old".into())).unwrap();
+        mark_open(&chat,true);
+        assert!(active_chats().contains(&chat));
         let result=local(&json!({"chat_id":chat,"action":"stop"}));
+        assert!(!active_chats().contains(&chat));
         let exists=tmux(&["has-session","-t",&format!("={session}")]).is_ok();
         if exists {let _=tmux(&["kill-session","-t",&format!("={session}")]);}
         assert_eq!(result.unwrap(),json!({"ok":true}));assert!(!exists);assert!(lock.lock().unwrap().screen.is_none());

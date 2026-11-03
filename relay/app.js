@@ -1,4 +1,4 @@
-// app.js v2.97.1060
+// app.js v2.97.1062
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -123,7 +123,7 @@ function renderAuthorizedChats(chats){
  list.append(ul);updateListJobs();
 }
 function chatButton(chat,index,select){
- const button=document.createElement('button');button.className='secondary authorized-chat';button.setAttribute('aria-label',String(index+1)+'. '+chat.name);
+ const button=document.createElement('button');button.className='secondary authorized-chat';button.dataset.active=String(chat.active===true);button.setAttribute('aria-label',String(index+1)+'. '+chat.name);
   const number=document.createElement('span');number.className='authorized-number';number.textContent=String(index+1);
   const icon=chatIcon(chat);
   const name=document.createElement('span');name.className='authorized-name';name.textContent=chat.name;
