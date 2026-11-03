@@ -1,4 +1,4 @@
-// app.js v2.94.1016
+// app.js v2.94.1020
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -176,9 +176,9 @@ async function openConsole(chat,adjacent=false){
   if(request.operation==='open'||request.operation==='input')pane.follow=true;
   const top=pane.saved?.top??pane.screen.scrollTop,left=pane.saved?.left??pane.screen.scrollLeft;
   const savedFollow=pane.saved?.follow;if(request.operation==='open'&&savedFollow===false)pane.follow=false;
-  OaclisTerminal.renderConsole(pane.screen,result.screen,result.screen_ansi);pane.saved=null;
+  const restore=!!pane.saved,changed=OaclisTerminal.renderConsole(pane.screen,result.screen,result.screen_ansi);pane.saved=null;
   if(pane===active&&request.reader===reader){if(request.operation==='input'&&typeof request.text==='string')reader.defer(2000);reader.update(result.speech,request.speechGeneration);}
-  if(pane.follow)pane.screen.scrollTop=pane.screen.scrollHeight;else{pane.screen.scrollTop=top;pane.screen.scrollLeft=left;}
+  if(changed||restore||request.operation!=='read'){if(pane.follow)pane.screen.scrollTop=pane.screen.scrollHeight;else{pane.screen.scrollTop=top;pane.screen.scrollLeft=left;}}
   pane.ready=true;
   if(pane===active){form.querySelectorAll('textarea,button').forEach(element=>element.disabled=pane.preparingImage===true);voice.ready();voice.resume();if(request.operation==='input'&&typeof request.text==='string')voice.afterSend();}
   return true;

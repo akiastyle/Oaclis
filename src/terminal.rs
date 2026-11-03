@@ -1,4 +1,4 @@
-// terminal.rs v1.25.469
+// terminal.rs v1.25.472
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -216,7 +216,8 @@ fn sgr() -> &'static regex::Regex {
     SGR.get_or_init(||regex::Regex::new(r"\x1b\[[0-9;:]*m").unwrap())
 }
 fn bounded_screen(plain: &str, ansi: Option<&str>) -> (String, Option<String>) {
-    let tail=plain.chars().rev().take(14000).collect::<String>().chars().rev().collect::<String>();
+    let start=plain.char_indices().rev().nth(13999).map_or(0,|(index,_)|index);
+    let tail=plain[start..].to_owned();
     let mut styling=None;
     if let Some(ansi)=ansi {
         let skip=plain.len()-tail.len();
