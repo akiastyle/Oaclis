@@ -1,4 +1,4 @@
-// console.js v3.124.2231
+// console.js v3.125.2253
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet();
@@ -6,12 +6,14 @@ let consoleChannel=null;
 try{if(typeof BroadcastChannel==='function')consoleChannel=new BroadcastChannel('oaclis-console-windows');}catch{}
 consoleChannel?.addEventListener('message',event=>{if(event.data==='discover'&&document.documentElement.dataset.consoleWindow)document.querySelector('.chat-terminal[data-window-active]')?.sendWindowDraft?.();});
 
-function closeChatTerminal(panel) {
+function closeChatTerminal(panel,discard=false) {
   if (!panel) return;
+  panel.consoleDiscard=discard;
   panel.sendWindowDraft?.(true);
   panel.cancelSnap?.();
   panel.saveGeometry?.();
   clearTimeout(panel.terminalTimer);
+  panel.resetTerminal?.();
   panel.closeSendMenu?.();
   panel.closeImageInput?.();
   panel.jobsStatus?.destroy();
@@ -113,6 +115,8 @@ function trackConsoleWindow(child,connection,anchor,deviceId,draft){
   const key=JSON.stringify([deviceId,connection.entry.id]);let returnConnection=connection;
   const receive=event=>{
     if(event.origin!==location.origin||event.source!==child||event.data?.device_id!==deviceId)return;
+    if(event.data.kind==='oaclis-console-draft'&&event.data.discard===true){returnConnection=null;draft=null;return;}
+    if(!returnConnection)return;
     if(event.data.kind==='oaclis-console-ready'&&event.data.chat_id===returnConnection.entry.id)child.postMessage({kind:'oaclis-console-draft',chat_id:returnConnection.entry.id,device_id:deviceId,draft},location.origin);
     if(event.data.kind==='oaclis-console-draft'&&event.data.active&&typeof event.data.entry?.id==='string'&&/^[\w-]{1,160}$/.test(event.data.entry.id)){draft=event.data.draft;returnConnection={entry:event.data.entry};}
   };
@@ -120,6 +124,7 @@ function trackConsoleWindow(child,connection,anchor,deviceId,draft){
   const watch=setInterval(()=>{
     if(!child.closed)return;
     clearInterval(watch);window.removeEventListener('message',receive);detachedConsoles.delete(key);returnedConsoleWindows.add(child);
+    if(!returnConnection)return;
     openChatTerminal(returnConnection,anchor?.isConnected?anchor:document.querySelector('#add-device'),deviceId,true);
     [...document.querySelectorAll('.chat-terminal')].find(panel=>panel.dataset.chatId===returnConnection.entry.id&&panel.dataset.deviceId===deviceId)?.restoreDraft(draft);
   },500);
@@ -211,6 +216,12 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   let followOutput = true;
   screen.addEventListener("scroll", () => { followOutput = screen.scrollHeight-screen.clientHeight-screen.scrollTop <= 24; }, {passive:true});
   let screenRevision="", busy = false, ready = false, submitting = false, preparingImage = false, image = null, waitingInputs = 0, idle = Promise.resolve();
+  panel.resetTerminal=()=>{
+    clearTimeout(panel.terminalTimer);ready=false;screenRevision="";
+    screen.replaceChildren();
+    for(const key of ['consoleSource','consoleSourceAnsi','terminalText','terminalAnsi'])delete screen[key];
+    fetch('/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,action:'reset'}),keepalive:true}).catch(()=>{});
+  };
   const send = async value => {
     if (value.action !== "read") status.textContent = OaclisSettings.text("Ricevuto");
     if (value.action === "read") { if (busy || waitingInputs || document.documentElement.dataset.consoleWindow&&!panel.hasAttribute("data-window-active")) return false; }
@@ -273,7 +284,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     else removeImage();
   };
   if(document.documentElement.dataset.consoleWindow){
-    panel.sendWindowDraft=(returning=false)=>window.opener?.postMessage({kind:'oaclis-console-draft',returning:returning===true,chat_id:connection.entry.id,device_id:deviceId,active:panel.hasAttribute('data-window-active'),entry:{id:connection.entry.id,name:chatLabel(connection.entry)},draft:panel.consoleDraft()},location.origin);
+    panel.sendWindowDraft=(returning=false)=>window.opener?.postMessage({kind:'oaclis-console-draft',returning:returning===true,discard:panel.consoleDiscard===true,chat_id:connection.entry.id,device_id:deviceId,active:panel.hasAttribute('data-window-active'),entry:{id:connection.entry.id,name:chatLabel(connection.entry)},draft:panel.consoleDraft()},location.origin);
     const receive=event=>{if(event.origin===location.origin&&event.source===window.opener&&event.data?.kind==='oaclis-console-draft'&&event.data.chat_id===connection.entry.id&&event.data.device_id===deviceId)panel.restoreDraft(event.data.draft);};
     window.addEventListener('message',receive);panel.windowMessage=receive;form.elements.text.addEventListener('input',panel.sendWindowDraft);
     window.opener?.postMessage({kind:'oaclis-console-ready',chat_id:connection.entry.id,device_id:deviceId},location.origin);
@@ -301,10 +312,13 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     const button = document.createElement("button");
     button.type = "button"; button.className = "icon-button";
     button.textContent=label;button.dataset.key=key;button.setAttribute("aria-label",label);
-    button.onclick=()=>{if(ready)send({action:"input",key});};
+    button.onclick=async()=>{if(ready&&await send({action:"input",key})&&key==='C-c')closeChatTerminal(panel,true);};
     panel.querySelector(".terminal-keys").append(button);
   }
   screen.onkeydown = e => {
+    if(ready&&e.ctrlKey&&e.key.toLowerCase()==='c'&&!String(window.getSelection())){
+      e.preventDefault();send({action:'input',key:'C-c'}).then(sent=>{if(sent)closeChatTerminal(panel,true);});return;
+    }
     const keys = { ArrowUp: "Up", ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right", Enter: "Enter", Tab: "Tab", Backspace: "BSpace" };
     if (ready && keys[e.key]) { e.preventDefault(); send({ action: "input", key: keys[e.key] }); }
   };
@@ -320,7 +334,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   if(panel.isConnected)panel.openTerminal();
 }
 
-window.addEventListener('pagehide',()=>document.querySelectorAll('.chat-terminal').forEach(panel=>{panel.sendWindowDraft?.(true);panel.saveGeometry?.();}));
+window.addEventListener('pagehide',()=>document.querySelectorAll('.chat-terminal').forEach(panel=>{panel.sendWindowDraft?.(true);panel.saveGeometry?.();panel.resetTerminal?.();}));
 
 window.addEventListener('message',event=>{
   const value=event.data;

@@ -1,4 +1,4 @@
-// state_transport.rs v1.22.389
+// state_transport.rs v1.22.396
 //! A local Unix socket forwards approved SSH requests into the running Rust app.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -44,7 +44,7 @@ pub(crate) fn console_message(chat: &str, action: &str, image: bool, result: &io
     let outcome=match result {
         Err(_)=>"operazione non riuscita",
         Ok(value) if value["unchanged"]==true=>"nessuna variazione, testo non ritrasmesso",
-        Ok(_) => match action {"read"=>"testo console inviato","open"=>"console aperta","input" if image=>"immagine inviata alla console","input"=>"comando inviato alla console","create"=>"nuova chat creata","models"=>"elenco modelli ricevuto","engines"=>"configurazione AI ricevuta",_=>"operazione completata"},
+        Ok(_) => match action {"read"=>"testo console inviato","reset"=>"cache console svuotata","open"=>"console aperta","input" if image=>"immagine inviata alla console","input"=>"comando inviato alla console","create"=>"nuova chat creata","models"=>"elenco modelli ricevuto","engines"=>"configurazione AI ricevuta",_=>"operazione completata"},
     };
     format!("{chat}: {outcome}")
 }
@@ -56,7 +56,7 @@ fn request_description(value: &Value) -> String {
         "snapshot"=>"lettura stato salvato",
         "chat-rename"=>"rinomina chat",
         "prepare-path"=>"preparazione cartella",
-        "terminal"=>match value["value"]["action"].as_str().unwrap_or("") {"read"=>"lettura console","input"=>"invio alla console","create"=>"creazione chat","engines"=>"lettura configurazione AI","models"=>"lettura modelli AI",_=>"apertura console"},
+        "terminal"=>match value["value"]["action"].as_str().unwrap_or("") {"read"=>"lettura console","reset"=>"pulizia cache console","input"=>"invio alla console","create"=>"creazione chat","engines"=>"lettura configurazione AI","models"=>"lettura modelli AI",_=>"apertura console"},
         "device-control"=>match value["action"].as_str().unwrap_or("") {"update"=>"aggiornamento Oaclis","restart"=>"riavvio Oaclis","status"=>"controllo versione Oaclis","toggle-awake"|"power-always"|"power-screen-off"|"power-normal"=>"modifica risparmio energia",_=>"operazione sul dispositivo"},
         "environment"=>match value["operation"].as_str().unwrap_or("") {"install"=>"installazione applicazioni","analyze"=>"analisi progetto","paths-status"=>"aggiornamento stato percorsi",_=>"gestione ambiente progetto"},
         "database"=>match value["operation"].as_str().unwrap_or("") {"load"|"links-get"|"preferences-get"|"analysis-list"|"analysis-get"|"inventory-list"|"inventory-get"|"preparation-get"|"status-read"|"transfer-list"=>"lettura stato",_=>"aggiornamento stato"},
@@ -113,6 +113,7 @@ pub(crate) fn remote_progress(device: &Device, value: &Value, notify: &mut impl 
     device.validate()?;
     log_request("SEND", &device.name, value);
     let mut errors=crate::staging::StagedFile::new(&std::env::temp_dir())?;
+    std::fs::remove_file(&errors.path)?;
     use std::os::unix::process::CommandExt;
     let mut child = Command::new("ssh").process_group(0)
         .args(crate::ssh::OPTIONS.split_whitespace().skip(1))
@@ -132,7 +133,7 @@ pub(crate) fn remote_progress(device: &Device, value: &Value, notify: &mut impl 
     let _=done.send(());
     if timer.join().unwrap_or(true) { return Err(io::Error::new(io::ErrorKind::TimedOut,"Tempo massimo della richiesta remota superato")); }
     let status=status?;
-    log(format!("{} · {} · {}",device.name,request_description(value),if status.success() && result.is_ok(){"completato"}else{"non riuscito"}));
+    log(format!("{} · {} · {}",device.name,request_description(value),if status.success() && result.is_ok(){if value["kind"]=="device-control" && value["action"]=="update"{"richiesta accettata, aggiornamento in corso"}else{"completato"}}else{"non riuscito"}));
     if !status.success() {
         use std::io::{Seek,SeekFrom};
         let size=errors.file.metadata()?.len();errors.file.seek(SeekFrom::Start(size.saturating_sub(4096)))?;

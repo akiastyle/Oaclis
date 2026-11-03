@@ -1,4 +1,4 @@
-// app_update.rs v1.8.155
+// app_update.rs v1.8.173
 //! Explicit fast-forward update; never discard local changes.
 use crate::{invalid, staging::StagedFile};
 use std::{io::{self, Read, Seek, SeekFrom}, path::Path, process::{Command, Stdio}, thread, time::{Duration, Instant}};
@@ -7,6 +7,7 @@ pub(crate) fn run(command: &mut Command, timeout: Duration) -> io::Result<String
     let step=match command.get_program().to_str().unwrap_or("") {"git"=>match command.get_args().next().and_then(|a|a.to_str()).unwrap_or("") {"fetch"=>"Download aggiornamento Oaclis","merge"=>"Applicazione aggiornamento Oaclis",_=>"Verifica versione Oaclis"},"cargo"=>"Compilazione Oaclis",_=>"Operazione di sistema"};
     crate::state_transport::log(format!("{step}: avviato"));
     let mut log = StagedFile::new(&std::env::temp_dir())?;
+    std::fs::remove_file(&log.path)?; // Keep only the open descriptor, including after a crash.
     command.stdin(Stdio::null()).stdout(log.file.try_clone()?).stderr(log.file.try_clone()?);
     #[cfg(unix)] {
         use std::os::unix::process::CommandExt;
@@ -37,19 +38,24 @@ pub(crate) fn run(command: &mut Command, timeout: Duration) -> io::Result<String
     Ok(output.trim().into())
 }
 
-pub(crate) fn update(directory: &Path, revision: &str) -> io::Result<()> {
+pub(crate) fn update(directory: &Path, revision: &str, mut phase: impl FnMut(&str)) -> io::Result<()> {
+    phase("Verifica installazione");
     if revision.len() != 40 || !revision.bytes().all(|b| b.is_ascii_hexdigit()) { return Err(invalid("Revisione master non valida")); }
     let revision = revision.to_ascii_lowercase();
     if !directory.join("scripts/install.sh").is_file() { return Err(invalid("Checkout Oaclis non disponibile: aggiornare dalla cartella della repo")); }
     let git = |args: &[&str]| run(Command::new("git").args(args).current_dir(directory).env("GIT_TERMINAL_PROMPT", "0"), Duration::from_secs(60));
     if !git(&["status", "--porcelain"] )?.is_empty() { return Err(invalid("Aggiornamento sospeso: la repo contiene modifiche locali")); }
     if git(&["branch", "--show-current"])? != "main" { return Err(invalid("Aggiornamento sospeso: la repo non e sul ramo main")); }
+    phase("Download aggiornamento");
     git(&["fetch", "origin", "main"])?;
     git(&["merge-base", "--is-ancestor", &revision, "origin/main"])?;
     git(&["merge-base", "--is-ancestor", "HEAD", &revision])?;
+    phase("Applicazione aggiornamento");
     git(&["merge", "--ff-only", &revision])?;
     if git(&["rev-parse", "HEAD"])? != revision { return Err(invalid("La revisione locale non coincide con quella del master")); }
+    phase("Compilazione e installazione");
     run(Command::new("bash").args(["scripts/install.sh", "--unconfigured"]).current_dir(directory).env("GIT_TERMINAL_PROMPT", "0"), Duration::from_secs(1800))?;
+    phase("Riavvio");
     Ok(())
 }
 
@@ -82,11 +88,13 @@ mod tests {
         fs::write(source.join("version"), "new").unwrap(); git(&source, &["add", "."]); git(&source, &["commit", "-m", "next"]);
         let revision = git(&source, &["rev-parse", "HEAD"]);
         fs::write(client.join("local-file"), "preserve").unwrap();
-        assert!(update(&client, &revision).unwrap_err().to_string().contains("modifiche locali"));
+        assert!(update(&client, &revision, |_|{}).unwrap_err().to_string().contains("modifiche locali"));
         assert!(!root.0.join("installed").exists());
         assert_eq!(fs::read_to_string(client.join("local-file")).unwrap(), "preserve");
         fs::remove_file(client.join("local-file")).unwrap();
-        update(&client, &revision).unwrap();
+        let mut phases=Vec::new();
+        update(&client, &revision, |phase|phases.push(phase.to_owned())).unwrap();
+        assert_eq!(phases,["Verifica installazione","Download aggiornamento","Applicazione aggiornamento","Compilazione e installazione","Riavvio"]);
         assert_eq!(git(&client, &["rev-parse", "HEAD"]), revision);
         assert_eq!(fs::read_to_string(root.0.join("installed")).unwrap().trim(), "installed");
         fs::remove_file(root.0.join("installed")).unwrap();
@@ -94,10 +102,10 @@ mod tests {
         let local = git(&client, &["rev-parse", "HEAD"]);
         fs::write(source.join("version"), "remote next").unwrap(); git(&source, &["add", "."]); git(&source, &["commit", "-m", "diverged"]);
         let revision = git(&source, &["rev-parse", "HEAD"]);
-        assert!(update(&client, &revision).is_err());
+        assert!(update(&client, &revision, |_|{}).is_err());
         assert_eq!(git(&client, &["rev-parse", "HEAD"]), local);
         assert!(!root.0.join("installed").exists());
-        assert!(update(&client, "HEAD; echo unsafe").is_err());
+        assert!(update(&client, "HEAD; echo unsafe", |_|{}).is_err());
     }
     #[test]
     fn step2_update_command_timeout_is_bounded_and_reports_stderr() {

@@ -1,4 +1,4 @@
-// terminal.rs v1.28.502
+// terminal.rs v1.29.516
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -28,7 +28,7 @@ fn validate(value: &Value) -> io::Result<&str> {
     let chat = value["chat_id"].as_str().filter(|s| !s.is_empty() && s.len()<=160 && s.bytes().all(|b|b.is_ascii_alphanumeric() || b"_-".contains(&b)))
         .ok_or_else(||invalid("Chat non valida"))?;
     match value["action"].as_str() {
-        Some("open"|"read"|"engines"|"models") => {},
+        Some("open"|"read"|"reset"|"engines"|"models") => {},
         Some("create") => {crate::appearance::Appearance{label:value["text"].as_str().unwrap_or("").into(),icon:value["icon"].as_str().unwrap_or("").into(),color:value["color"].as_str().unwrap_or("").into(),..Default::default()}.validate()?;},
         Some("input") => {
             let text = value.get("text").map_or(Some(""),Value::as_str).ok_or_else(||invalid("Messaggio non valido"))?;
@@ -154,6 +154,10 @@ fn session_lock(chat: &str) -> io::Result<std::sync::Arc<std::sync::Mutex<Consol
 }
 pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let chat=validate(value)?;
+    if value["action"]=="reset" {
+        session_lock(chat)?.lock().map_err(|_|io::Error::other("Console non disponibile"))?.screen=None;
+        return Ok(json!({"ok":true}));
+    }
     if matches!(value["action"].as_str(),Some("engines"|"models")) {
         let home=env::var_os("HOME").map(PathBuf::from).ok_or_else(||invalid("HOME non definita"))?;
         return if value["action"]=="engines" {Ok(json!({"engines":crate::engines::settings(&home)?}))} else {crate::llama::models(&home)};
@@ -268,6 +272,14 @@ pub fn request(device: Option<&Device>, value: &Value) -> io::Result<Value> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn reset_discards_only_the_capture_without_starting_or_stopping_codex() {
+        let lock=session_lock("reset-cache-test").unwrap();
+        lock.lock().unwrap().read(||Ok("Old screen".into())).unwrap();
+        assert_eq!(local(&json!({"chat_id":"reset-cache-test","action":"reset"})).unwrap(),json!({"ok":true}));
+        assert!(lock.lock().unwrap().screen.is_none());
+        assert_eq!(lock.lock().unwrap().read(||Ok("Fresh screen".into())).unwrap().0,"Fresh screen");
+    }
     #[test]
     fn unchanged_screen_omits_text_but_input_and_style_changes_send_it() {
         let first=screen_response("Hello","\x1b[31mHello",&Value::Null,true);

@@ -1,4 +1,4 @@
-// shared_settings.rs v1.12.611
+// shared_settings.rs v1.13.644
 //! Native settings replication over existing, mutually approved SSH connections.
 use crate::{
     invalid, shared_records as records,
@@ -83,7 +83,22 @@ pub(crate) fn publish_runtime(config:&Path,device:&str,result:io::Result<Value>)
     let mut value=result.unwrap_or_else(|error|json!({"available":false,"error":error.to_string(),"observed_at":now}));
     value["received_at"]=json!(now);
     let mut cache=RUNTIME.get_or_init(Default::default).lock().map_err(|_|io::Error::other("Stato device non disponibile"))?;
-    cache.entry(config.into()).or_insert_with(||json!({}))[device]=value;
+    let states=cache.entry(config.into()).or_insert_with(||json!({}));
+    let previous=&states[device];
+    if value["device_name"].is_null(){value["device_name"]=previous["device_name"].clone();}
+    if value["update_target"].is_null(){value["update_target"]=previous["update_target"].clone();}
+    if value["update_target"].is_string() {
+        let outcome=(if value["available"]==false {"temporaneamente non raggiungibile"}
+            else if value["build"]["revision"]==value["update_target"] && value["update"]["status"]!="running" {"aggiornamento completato e verificato"}
+            else if value["update"]["status"]=="failed" {"aggiornamento non riuscito"}
+            else {value["update"]["phase"].as_str().unwrap_or("aggiornamento in corso")}).to_owned();
+        if previous["update_log"]!=outcome {
+            crate::state_transport::log(format!("Aggiornamento · {} · {outcome}",value["device_name"].as_str().unwrap_or("Dispositivo")));
+        }
+        value["update_log"]=json!(outcome);
+        if outcome=="aggiornamento completato e verificato" || outcome=="aggiornamento non riuscito" {value.as_object_mut().unwrap().remove("update_target");}
+    }
+    states[device]=value;
     Ok(())
 }
 pub fn read_positions(config: &Path, file: &str) -> io::Result<Value> {
@@ -259,12 +274,26 @@ fn sync_peer(config: &Path, peer: &str, device: &crate::devices::Device) -> io::
     }
     exchange(config, Some(&response))?;
     let _=crate::jobs::receive(device,&response["jobs"]);
-    Ok(response["runtime"].clone())
+    let mut runtime=response["runtime"].clone();
+    runtime.as_object_mut().unwrap().remove("update_target");runtime.as_object_mut().unwrap().remove("update_log");
+    runtime["device_name"]=json!(device.name);Ok(runtime)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn remote_update_is_complete_only_when_the_expected_build_returns() {
+        let root=std::env::temp_dir().join(format!("oaclis-update-log-{}",std::process::id()));
+        publish_runtime(&root,"kj",Ok(json!({"device_name":"KJetson","available":true,"update_target":"expected","update":{"status":"running"},"build":{"revision":"old"}}))).unwrap();
+        assert_eq!(runtime(&root).unwrap()["kj"]["update_log"],"aggiornamento in corso");
+        publish_runtime(&root,"kj",Err(io::Error::other("offline"))).unwrap();
+        assert!(runtime(&root).unwrap()["kj"]["update_target"].is_string());
+        publish_runtime(&root,"kj",Ok(json!({"available":true,"update":{"status":"running","phase":"Compilazione e installazione"},"build":{"revision":"old"}}))).unwrap();
+        assert_eq!(runtime(&root).unwrap()["kj"]["update_log"],"Compilazione e installazione");
+        publish_runtime(&root,"kj",Ok(json!({"available":true,"update":{},"build":{"revision":"expected"}}))).unwrap();
+        let done=runtime(&root).unwrap();assert_eq!(done["kj"]["update_log"],"aggiornamento completato e verificato");assert!(done["kj"].get("update_target").is_none());
+    }
     #[test]
     fn peer_results_are_published_independently_and_expire_individually() {
         let path = std::env::temp_dir().join(format!(

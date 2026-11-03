@@ -1,4 +1,4 @@
-// device_runtime.rs v1.22.467
+// device_runtime.rs v1.22.480
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
@@ -95,7 +95,9 @@ impl Runtime {
         *current_job = json!({"status":"running","kind":"app_update"});
         drop(current_job);
         thread::spawn(move || {
-            let result = crate::app_update::update(Path::new(env!("CARGO_MANIFEST_DIR")), &revision);
+            let result = crate::app_update::update(Path::new(env!("CARGO_MANIFEST_DIR")), &revision, |phase| {
+                state.lock().unwrap()["phase"]=json!(phase);
+            });
             let error = match result {
                 Ok(()) => {
                     #[cfg(unix)] {
@@ -148,8 +150,13 @@ impl Drop for Runtime { fn drop(&mut self) { self.stop(); } }
 pub(crate) fn remote(config: &Path, id: &str, action: &str) -> io::Result<Value> {
     if !matches!(action, "status" | "restart" | "toggle-awake" | "update" | "power-always" | "power-screen-off" | "power-normal") { return Err(invalid("Comando dispositivo non valido")); }
     let device = devices::load(config.join("devices.json"))?.into_iter().find(|d|d.id==id).ok_or_else(||invalid("Dispositivo non trovato"))?;
-    crate::state_transport::remote(&device, &json!({"kind":"device-control","action":action,"revision":env!("OACLIS_REVISION")}))
-        .map_err(|error|io::Error::other(format!("{}: {error}", device.name)))
+    let result=crate::state_transport::remote(&device, &json!({"kind":"device-control","action":action,"revision":env!("OACLIS_REVISION")}))
+        .map_err(|error|io::Error::other(format!("{}: {error}", device.name)))?;
+    if action=="update" {
+        let mut status=result.clone();status["device_name"]=json!(device.name);status["update_target"]=json!(env!("OACLIS_REVISION"));
+        crate::shared_settings::publish_runtime(config,&device.id,Ok(status))?;
+    }
+    Ok(result)
 }
 
 #[cfg(test)]
