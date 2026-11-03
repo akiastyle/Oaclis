@@ -1,4 +1,4 @@
-// app.js v2.97.1062
+// app.js v2.97.1064
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -176,7 +176,7 @@ async function openConsole(chat,adjacent=false){
   if(request.operation==='create')return result.new_chat;
   if(request.operation==='engines'||request.operation==='models')return result;
   const pane=request.pane;if(pane.closed)return true;
-  if(request.operation==='stop'){
+  if(request.operation==='stop'||result.stopped===true){
    pane.screen.replaceChildren();pane.screenRevision=null;pane.saved=null;
    for(const key of ['consoleSource','consoleSourceAnsi','terminalText','terminalAnsi'])delete pane.screen[key];
    remove(pane);consolePositions.delete(pane.chat.id);

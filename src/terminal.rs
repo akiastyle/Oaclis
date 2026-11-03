@@ -1,4 +1,4 @@
-// terminal.rs v1.32.553
+// terminal.rs v1.33.569
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -142,6 +142,7 @@ impl ConsoleCapture {
 }
 static SESSIONS: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<std::sync::Mutex<ConsoleCapture>>>>> = std::sync::OnceLock::new();
 pub(crate) fn expire() {
+    if let Some(stopped)=STOPPED_CHATS.get() { stopped.lock().unwrap().retain(|_,at|at.elapsed()<Duration::from_secs(3600)); }
     if let Some(sessions)=SESSIONS.get() {
         sessions.lock().unwrap().retain(|_,session|std::sync::Arc::strong_count(session)>1 || session.try_lock().map(|capture|capture.screen.as_ref().is_some_and(|(at,_,_)|at.elapsed()<Duration::from_secs(60))).unwrap_or(true));
     }
@@ -153,12 +154,17 @@ fn session_lock(chat: &str) -> io::Result<std::sync::Arc<std::sync::Mutex<Consol
     Ok(sessions.entry(chat.into()).or_default().clone())
 }
 static OPEN_CHATS:std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeSet<String>>>=std::sync::OnceLock::new();
+static STOPPED_CHATS:std::sync::OnceLock<std::sync::Mutex<std::collections::BTreeMap<String,std::time::Instant>>>=std::sync::OnceLock::new();
+pub(crate) fn stopped_chats() -> Vec<String> {
+    STOPPED_CHATS.get_or_init(Default::default).lock().unwrap().keys().cloned().collect()
+}
 pub(crate) fn active_chats() -> Vec<String> {
     OPEN_CHATS.get_or_init(Default::default).lock().unwrap().iter().cloned().collect()
 }
 fn mark_open(chat: &str, open: bool) {
     let mut chats=OPEN_CHATS.get_or_init(Default::default).lock().unwrap();
-    if open {chats.insert(chat.into());} else {chats.remove(chat);}
+    let mut stopped=STOPPED_CHATS.get_or_init(Default::default).lock().unwrap();
+    if open {chats.insert(chat.into());stopped.remove(chat);} else {chats.remove(chat);stopped.insert(chat.into(),std::time::Instant::now());}
 }
 pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let chat=validate(value)?;
@@ -196,6 +202,10 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
     }
     let session_lock = session_lock(chat)?;
     let mut capture = session_lock.lock().map_err(|_|io::Error::other("Console non disponibile"))?;
+    if matches!(value["action"].as_str(),Some("read"|"input")) && STOPPED_CHATS.get_or_init(Default::default).lock().unwrap().contains_key(chat) {
+        capture.screen=None;
+        return Ok(json!({"stopped":true}));
+    }
     if value["action"] != "read" { capture.screen = None; }
     let session=format!("oaclis-{chat}");let target=format!("{session}:0.0");
     match value["action"].as_str().unwrap() {
@@ -272,6 +282,7 @@ fn bounded_screen(plain: &str, ansi: Option<&str>) -> (String, Option<String>) {
     (tail, styling)
 }
 pub(crate) fn mobile_screen(value: &Value) -> Value {
+    if value["stopped"]==true {return json!({"stopped":true});}
     if value["unchanged"]==true {return json!({"unchanged":true,"screen_revision":value["screen_revision"]});}
     let (plain, ansi)=bounded_screen(value["screen"].as_str().unwrap_or(""),value["screen_ansi"].as_str());
     let mut result=json!({"screen":plain});
@@ -297,6 +308,9 @@ mod tests {
         assert!(active_chats().contains(&chat));
         let result=local(&json!({"chat_id":chat,"action":"stop"}));
         assert!(!active_chats().contains(&chat));
+        assert!(stopped_chats().contains(&chat));
+        for action in ["read","input"] { assert_eq!(local(&json!({"chat_id":chat,"action":action})).unwrap(),json!({"stopped":true})); }
+        assert_eq!(mobile_screen(&json!({"stopped":true})),json!({"stopped":true}));
         let exists=tmux(&["has-session","-t",&format!("={session}")]).is_ok();
         if exists {let _=tmux(&["kill-session","-t",&format!("={session}")]);}
         assert_eq!(result.unwrap(),json!({"ok":true}));assert!(!exists);assert!(lock.lock().unwrap().screen.is_none());

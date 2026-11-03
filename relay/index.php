@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.617
+// index.php v1.8.618
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -304,6 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $screen=$answer['screen']??null;
                 $state['devices'][$target]['console']['result']=is_string($screen)&&strlen($screen)<=60000?['screen'=>$screen]:['error'=>'Console non disponibile. Riprova.'];
                 if ($unchanged) $state['devices'][$target]['console']['result']=['unchanged'=>true];
+                if (($answer['stopped']??false)===true) $state['devices'][$target]['console']['result']=['stopped'=>true];
                 if ($validRevision&&($unchanged||is_string($screen))) $state['devices'][$target]['console']['result']['screen_revision']=$revision;
                 if (is_string($screen)&&strlen($screen)<=60000&&is_string($answer['screen_ansi']??null)&&strlen($answer['screen_ansi'])<=24000) $state['devices'][$target]['console']['result']['screen_ansi']=$answer['screen_ansi'];
                 if (($unchanged||is_string($screen))&&is_array($answer['jobs']??null)&&array_is_list($answer['jobs'])&&strlen(json_encode($answer['jobs']))<=65536&&!array_filter($answer['jobs'],fn($row)=>!is_array($row)||($row['chat_id']??null)!==$job['chat_id'])) $state['devices'][$target]['console']['result']['jobs']=$answer['jobs'];

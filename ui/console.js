@@ -1,4 +1,4 @@
-// console.js v3.128.2299
+// console.js v3.128.2304
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -254,6 +254,11 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
       const stamp = window.OaclisLocalVoice?.stamp(panel);
       const result = await api("terminal", { ...payload, ...(value.action==="read"&&screenRevision?{screen_revision:screenRevision}:{}), ...value, ...window.OaclisLocalVoice?.request(panel) });
       if (!panel.isConnected) return false;
+      if (result.stopped === true) {
+        const event={kind:'oaclis-console-stopped',chat_id:connection.entry.id,device_id:deviceId};
+        consoleChannel?.postMessage(event);window.opener?.postMessage(event,location.origin);closeStoppedChatWindows(event);
+        return false;
+      }
       panel.jobsStatus.update(result.jobs?.map(job=>job.device_id==='master'&&deviceId!=='master'?{...job,device_id:deviceId}:job));
       const top=screen.scrollTop,left=screen.scrollLeft;
       const changed=result.unchanged===true?false:OaclisTerminal.renderConsole(screen,result.screen,result.screen_ansi);
