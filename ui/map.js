@@ -1,4 +1,4 @@
-// map.js v4.132.3431
+// map.js v4.133.3447
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -976,9 +976,9 @@ function renderMobileLinks() {
     path.dataset.source=device.source; path.dataset.target=device.target;
     const from=owner.getBoundingClientRect(),to=node.getBoundingClientRect(),ports=[owner.querySelector('.connection-port.console'),node.querySelector('.connection-port.console')];
     const geometry=JSON.stringify([base.x,base.y,radius,...[from,to].map(r=>[r.x,r.y,r.width,r.height]),...ports.map(port=>{const r=port?.getBoundingClientRect();return r?[r.x,r.y,r.width,r.height,port.portNormal]:null;})]);
-    if(path.dataset.geometry!==geometry){path.setAttribute('d',mobileLinkCurve(from,to,base,radius,...ports));path.dataset.geometry=geometry;}
-    svg.querySelectorAll('.link-flow-trace[data-id="' + CSS.escape(device.id) + '"]').forEach(trace => trace.setAttribute('d', path.getAttribute('d')));
+    if(path.dataset.geometry!==geometry){path.accessCurve=mobileLinkCurve(from,to,base,radius,...ports);path.setAttribute('d',path.accessCurve);path.dataset.geometry=geometry;}
     renderAccessBadges(path, device, badges, markers);
+    svg.querySelectorAll('.link-flow-trace[data-id="' + CSS.escape(device.id) + '"]').forEach(trace => trace.setAttribute('d', path.getAttribute('d')));
     path.dataset.active = String(device.active === true);
     arrows.get(device.id).dataset.active = path.dataset.active;
   }
@@ -1007,6 +1007,7 @@ function openAccessChats(marker) {
 }
 
 function renderAccessBadges(path, group, keep, markers) {
+  if(path.accessCurve&&path.getAttribute('d')!==path.accessCurve)path.setAttribute('d',path.accessCurve);
   const grouped=group.entries.length>5;
   const entries=grouped?[{id:'access-group',name:group.name||deviceName(group.target)}]:group.entries;
   entries.forEach((entry,index) => {
@@ -1018,6 +1019,11 @@ function renderAccessBadges(path, group, keep, markers) {
       marker.innerHTML='<button type="button" class="link-main"></button><button type="button" class="link-open icon-button">'+OaclisIcon('terminal')+'</button>';
       $('#nodes').append(marker);markers.set(key,marker);
       const main=marker.querySelector('.link-main'),open=marker.querySelector('.link-open');
+      marker.updateAccessCurve=()=>{
+        if(!marker.accessBend)return;
+        path.setAttribute('d',marker.accessBend({x:parseFloat(marker.style.left),y:parseFloat(marker.style.top)}));
+        path.flowOverlay?.querySelectorAll('.link-flow-trace').forEach(trace=>trace.setAttribute('d',path.getAttribute('d')));
+      };
       open.onclick=()=>openChatTerminal({entry:marker.accessState.entry},open,marker.accessState.source);
       main.onclick=event=>{if(marker.accessState.grouped&&(event.detail===0||!marker.accessMoved))openAccessChats(marker);};
       const save=()=>{
@@ -1035,13 +1041,14 @@ function renderAccessBadges(path, group, keep, markers) {
           if(Math.hypot(event.clientX-start.x,event.clientY-start.y)>4)marker.accessMoved=true;
           marker.style.left=Math.max(22,Math.min($('#nodes').clientWidth-22,start.left+event.clientX-start.x))+'px';
           marker.style.top=Math.max(22,Math.min($('#nodes').clientHeight-22,start.top+event.clientY-start.y))+'px';
+          marker.updateAccessCurve();
         };
         main.onpointerup=event=>{if(marker.accessMoved)save();delete marker.dataset.dragging;if(main.hasPointerCapture(event.pointerId))main.releasePointerCapture(event.pointerId);};
         main.onpointercancel=main.onlostpointercapture=()=>{delete marker.dataset.dragging;};
       };
       main.onkeydown=event=>{
         const direction={ArrowLeft:[-10,0],ArrowRight:[10,0],ArrowUp:[0,-10],ArrowDown:[0,10]}[event.key];
-        if(direction){event.preventDefault();marker.style.left=marker.offsetLeft+direction[0]+'px';marker.style.top=marker.offsetTop+direction[1]+'px';save();}
+        if(direction){event.preventDefault();marker.style.left=marker.offsetLeft+direction[0]+'px';marker.style.top=marker.offsetTop+direction[1]+'px';marker.updateAccessCurve();save();}
         if(event.key==='Delete'&&!marker.accessState.grouped&&marker.accessState.console){const {entry,source,target}=marker.accessState;guard(()=>removeConnection({entry,source,target,operation:'console'},null))();}
       };
     }
@@ -1060,11 +1067,14 @@ function renderAccessBadges(path, group, keep, markers) {
     const geometry = JSON.stringify([path.getAttribute('d'),index,entries.length]);
     if (marker.dataset.geometry !== geometry) {
       marker.accessMidpoint = path.getPointAtLength(path.getTotalLength()*(index+1)/(entries.length+1));
+      const coordinates=path.getAttribute('d').match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi).map(Number);
+      marker.accessBend=entries.length===1?curveThroughBadge(Array.from({length:4},(_,i)=>({x:coordinates[i*2],y:coordinates[i*2+1]})),marker.accessMidpoint):null;
       marker.dataset.geometry = geometry;
     }
     const midpoint = marker.accessMidpoint;
     marker.accessState={entry,group,grouped,source:group.source,target:group.target,console:group.id.startsWith('console-'),midpoint};
     const offset=linkPositions[key]||{x:0,y:0};
     marker.style.left=midpoint.x+offset.x+'px';marker.style.top=midpoint.y+offset.y+'px';
+    marker.updateAccessCurve();
   });
 }
