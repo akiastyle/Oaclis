@@ -1,4 +1,4 @@
-// terminal.rs v1.29.516
+// terminal.rs v1.30.538
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -28,7 +28,7 @@ fn validate(value: &Value) -> io::Result<&str> {
     let chat = value["chat_id"].as_str().filter(|s| !s.is_empty() && s.len()<=160 && s.bytes().all(|b|b.is_ascii_alphanumeric() || b"_-".contains(&b)))
         .ok_or_else(||invalid("Chat non valida"))?;
     match value["action"].as_str() {
-        Some("open"|"read"|"reset"|"engines"|"models") => {},
+        Some("open"|"read"|"reset"|"stop"|"engines"|"models") => {},
         Some("create") => {crate::appearance::Appearance{label:value["text"].as_str().unwrap_or("").into(),icon:value["icon"].as_str().unwrap_or("").into(),color:value["color"].as_str().unwrap_or("").into(),..Default::default()}.validate()?;},
         Some("input") => {
             let text = value.get("text").map_or(Some(""),Value::as_str).ok_or_else(||invalid("Messaggio non valido"))?;
@@ -154,8 +154,14 @@ fn session_lock(chat: &str) -> io::Result<std::sync::Arc<std::sync::Mutex<Consol
 }
 pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let chat=validate(value)?;
-    if value["action"]=="reset" {
-        session_lock(chat)?.lock().map_err(|_|io::Error::other("Console non disponibile"))?.screen=None;
+    if value["action"]=="reset" || value["action"]=="stop" {
+        let lock=session_lock(chat)?;
+        let mut capture=lock.lock().map_err(|_|io::Error::other("Console non disponibile"))?;
+        if value["action"]=="stop" {
+            let session=format!("=oaclis-{chat}");
+            if tmux(&["has-session","-t",&session]).is_ok() {tmux(&["kill-session","-t",&session])?;}
+        }
+        capture.screen=None;
         return Ok(json!({"ok":true}));
     }
     if matches!(value["action"].as_str(),Some("engines"|"models")) {
@@ -272,6 +278,16 @@ pub fn request(device: Option<&Device>, value: &Value) -> io::Result<Value> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn stop_ends_only_the_selected_console_session_and_clears_its_capture() {
+        let chat=format!("stop-fixture-{}",std::process::id());let session=format!("oaclis-{chat}");
+        tmux(&["new-session","-d","-s",&session,"sleep 30"]).unwrap();
+        let lock=session_lock(&chat).unwrap();lock.lock().unwrap().read(||Ok("Old".into())).unwrap();
+        let result=local(&json!({"chat_id":chat,"action":"stop"}));
+        let exists=tmux(&["has-session","-t",&format!("={session}")]).is_ok();
+        if exists {let _=tmux(&["kill-session","-t",&format!("={session}")]);}
+        assert_eq!(result.unwrap(),json!({"ok":true}));assert!(!exists);assert!(lock.lock().unwrap().screen.is_none());
+    }
     #[test]
     fn reset_discards_only_the_capture_without_starting_or_stopping_codex() {
         let lock=session_lock("reset-cache-test").unwrap();

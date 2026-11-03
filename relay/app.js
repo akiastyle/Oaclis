@@ -1,4 +1,4 @@
-// app.js v2.94.1025
+// app.js v2.95.1040
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -170,6 +170,13 @@ async function openConsole(chat,adjacent=false){
   if(request.operation==='create')return result.new_chat;
   if(request.operation==='engines'||request.operation==='models')return result;
   const pane=request.pane;if(pane.closed)return true;
+  if(request.operation==='stop'){
+   pane.screen.replaceChildren();pane.screenRevision=null;pane.saved=null;
+   for(const key of ['consoleSource','consoleSourceAnsi','terminalText','terminalAnsi'])delete pane.screen[key];
+   remove(pane);consolePositions.delete(pane.chat.id);
+   if(panes.length)activate(panes[0]);else{active=null;await protectedView();}
+   return true;
+  }
   if(request.operation==='input'&&typeof request.text==='string'&&(drafts.get(pane.chat.id)||'')===request.text){saveDraft(pane.chat.id,'');if(pane===active&&text.value===request.text)text.value='';}
   if(request.image&&imageDrafts.get(pane.chat.id)===request.image){imageDrafts.delete(pane.chat.id);if(pane===active)paintAttachment();}
   pane.reconnecting=false;if(pane.name.textContent!==pane.chat.name)pane.name.textContent=pane.chat.name;pane.jobsStatus.update(result.jobs);
@@ -217,6 +224,12 @@ async function openConsole(chat,adjacent=false){
   const value=pane===active?text.value:drafts.get(pane.chat.id)||'';saveDraft(pane.chat.id,value);
   try{return await send(pane,'input',key==='Enter'?{text:value,key,...(imageDrafts.has(pane.chat.id)?{image:imageDrafts.get(pane.chat.id)}:{})}:{key});}
   finally{inputBusy=false;if(!closed)voice.resume();schedulePoll();}
+ }
+ async function stopConsole(pane=active){
+  if(inputBusy||closed||!pane?.ready)return false;
+  inputBusy=true;clearTimeout(pollTimer);reading?.abort();
+  try{return await send(pane,'stop');}
+  finally{inputBusy=false;schedulePoll();}
  }
  function paintAttachment(){
   const image=imageDrafts.get(active?.chat.id);preview.hidden=!image;
@@ -269,7 +282,7 @@ async function openConsole(chat,adjacent=false){
  closeConsole=()=>{if(closed)return;closeSendMenu();closeImageInput();reading?.abort();if(active)saveDraft(active.chat.id,text.value);reader?.destroy();for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleActions=null;consoleWorkspace=null;closeConsole=null;};
  text.addEventListener('input',()=>{if(active)saveDraft(active.chat.id,text.value);});form.onsubmit=async event=>{event.preventDefault();await submit();};text.onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();form.requestSubmit();}};
  document.getElementById('back').onclick=()=>protectedView().catch(()=>location.replace('/auth'));
- for(const [key,label]of [['Escape','Esc'],['1','1'],['2','2'],['3','3'],['C-c','Ctrl+C']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.key=key;button.onclick=()=>submit(active,key);keys.append(button);}
+ for(const [key,label]of [['Escape','Esc'],['1','1'],['2','2'],['3','3'],['C-c','Ctrl+C']]){const button=document.createElement('button');button.type='button';button.textContent=label;button.dataset.key=key;button.onclick=()=>key==='C-c'?stopConsole():submit(active,key);keys.append(button);}
  for(const id of ['console-mic','console-read']){const slot=document.createElement('span');slot.id=id;keys.append(slot);}
  const info=document.createElement('button');info.type='button';info.className='secondary';info.title=OaclisSettings.text('Comandi vocali');info.setAttribute('aria-label',info.title);info.innerHTML=OaclisIcon('info');info.onclick=()=>voice.showHelp();keys.append(info);
  split.onclick=event=>{event.stopPropagation();toggleSplit();};

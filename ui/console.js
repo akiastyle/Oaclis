@@ -1,4 +1,4 @@
-// console.js v3.125.2253
+// console.js v3.126.2266
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet();
@@ -215,12 +215,12 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   const jobs=document.createElement("span");panel.querySelector("h2").append(jobs);panel.jobsStatus=OaclisJobs.inline(jobs);
   let followOutput = true;
   screen.addEventListener("scroll", () => { followOutput = screen.scrollHeight-screen.clientHeight-screen.scrollTop <= 24; }, {passive:true});
-  let screenRevision="", busy = false, ready = false, submitting = false, preparingImage = false, image = null, waitingInputs = 0, idle = Promise.resolve();
+  let screenRevision="", stopping=false, busy = false, ready = false, submitting = false, preparingImage = false, image = null, waitingInputs = 0, idle = Promise.resolve();
   panel.resetTerminal=()=>{
     clearTimeout(panel.terminalTimer);ready=false;screenRevision="";
     screen.replaceChildren();
     for(const key of ['consoleSource','consoleSourceAnsi','terminalText','terminalAnsi'])delete screen[key];
-    fetch('/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,action:'reset'}),keepalive:true}).catch(()=>{});
+    if(!panel.sessionStopped)fetch('/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,action:'reset'}),keepalive:true}).catch(()=>{});
   };
   const send = async value => {
     if (value.action !== "read") status.textContent = OaclisSettings.text("Ricevuto");
@@ -308,16 +308,21 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   form.elements.text.onkeydown = event => {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); }
   };
+  const stopConsole=async()=>{
+    if(!ready||stopping)return;stopping=true;
+    try{if(await send({action:'stop'})){panel.sessionStopped=true;closeChatTerminal(panel,true);}}
+    finally{stopping=false;}
+  };
   for (const [key, label] of [["Escape", "Esc"], ["1", "1"], ["2", "2"], ["3", "3"], ["C-c", "Ctrl+C"]]) {
     const button = document.createElement("button");
     button.type = "button"; button.className = "icon-button";
     button.textContent=label;button.dataset.key=key;button.setAttribute("aria-label",label);
-    button.onclick=async()=>{if(ready&&await send({action:"input",key})&&key==='C-c')closeChatTerminal(panel,true);};
+    button.onclick=()=>{if(ready){if(key==='C-c')stopConsole();else send({action:"input",key});}};
     panel.querySelector(".terminal-keys").append(button);
   }
   screen.onkeydown = e => {
     if(ready&&e.ctrlKey&&e.key.toLowerCase()==='c'&&!String(window.getSelection())){
-      e.preventDefault();send({action:'input',key:'C-c'}).then(sent=>{if(sent)closeChatTerminal(panel,true);});return;
+      e.preventDefault();stopConsole();return;
     }
     const keys = { ArrowUp: "Up", ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right", Enter: "Enter", Tab: "Tab", Backspace: "BSpace" };
     if (ready && keys[e.key]) { e.preventDefault(); send({ action: "input", key: keys[e.key] }); }
