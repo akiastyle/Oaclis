@@ -1,4 +1,4 @@
-// state_transport.rs v1.22.396
+// state_transport.rs v1.22.402
 //! A local Unix socket forwards approved SSH requests into the running Rust app.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -22,7 +22,7 @@ pub(crate) fn log(message: String) {
     let mut rows = LOG.get_or_init(Default::default).lock().unwrap();
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let id = NEXT.fetch_add(1,std::sync::atomic::Ordering::Relaxed);
-    if rows.len() == 500 { rows.pop_front(); }
+    if rows.len() >= 100 { rows.pop_front(); }
     rows.push_back(json!({"id":id,"time":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),"text":message}));
 }
 
@@ -262,8 +262,8 @@ mod log_tests {
         let rows = super::logs();
         let row = rows.as_array().unwrap().iter().find(|r|r["text"].as_str().unwrap().contains("preparazione cartella")).unwrap();
         assert!(!row.to_string().contains("never-log"));
-        for _ in 0..510 {super::log("fixture".into());}
-        assert!(super::logs().as_array().unwrap().len() <= 500);
+        for _ in 0..110 {super::log("fixture".into());}
+        assert!(super::logs().as_array().unwrap().len() <= 100);
         let previous=super::logs().as_array().unwrap().last().unwrap()["id"].as_u64().unwrap();
         {let mut rows=super::LOG.get().unwrap().lock().unwrap();rows.front_mut().unwrap()["time"]=serde_json::json!(0);}
         super::expire();
