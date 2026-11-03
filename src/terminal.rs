@@ -1,4 +1,4 @@
-// terminal.rs v1.23.437
+// terminal.rs v1.25.469
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -133,6 +133,8 @@ impl ConsoleCapture {
         }
         let ansi = load()?;
         let plain = sgr().replace_all(&ansi, "").into_owned();
+        let (plain, ansi) = bounded_screen(&plain, Some(&ansi));
+        let ansi = ansi.unwrap_or_else(||plain.clone());
         self.screen = Some((std::time::Instant::now(), plain.clone(), ansi.clone()));
         Ok((plain, ansi))
     }
@@ -213,11 +215,10 @@ fn sgr() -> &'static regex::Regex {
     static SGR: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     SGR.get_or_init(||regex::Regex::new(r"\x1b\[[0-9;:]*m").unwrap())
 }
-pub(crate) fn mobile_screen(value: &Value) -> Value {
-    let plain=value["screen"].as_str().unwrap_or("");
+fn bounded_screen(plain: &str, ansi: Option<&str>) -> (String, Option<String>) {
     let tail=plain.chars().rev().take(14000).collect::<String>().chars().rev().collect::<String>();
-    let mut result=json!({"screen":tail});
-    if let Some(ansi)=value["screen_ansi"].as_str() {
+    let mut styling=None;
+    if let Some(ansi)=ansi {
         let skip=plain.len()-tail.len();
         let (mut consumed,mut cursor,mut prefix)=(0,0,String::new());
         for code in sgr().find_iter(ansi) {
@@ -231,9 +232,15 @@ pub(crate) fn mobile_screen(value: &Value) -> Value {
         if let Some(rest)=ansi.get(cursor+skip.saturating_sub(consumed)..) {
             prefix.push_str(rest);
             // Keep the existing relay request bounded; oversized styling falls back to plain text.
-            if prefix.len()<=24000 {result["screen_ansi"]=json!(prefix);}
+            if prefix.len()<=24000 {styling=Some(prefix);}
         }
     }
+    (tail, styling)
+}
+pub(crate) fn mobile_screen(value: &Value) -> Value {
+    let (plain, ansi)=bounded_screen(value["screen"].as_str().unwrap_or(""),value["screen_ansi"].as_str());
+    let mut result=json!({"screen":plain});
+    if let Some(ansi)=ansi {result["screen_ansi"]=json!(ansi);}
     result
 }
 pub fn request(device: Option<&Device>, value: &Value) -> io::Result<Value> {
@@ -254,6 +261,17 @@ mod tests {
         assert_eq!(capture.read(||Ok("second".into())).unwrap().0, "second");
         capture.screen.as_mut().unwrap().0 -= std::time::Duration::from_secs(1);
         assert_eq!(capture.read(||Ok("third".into())).unwrap().0, "third");
+    }
+
+    #[test]
+    fn shared_capture_bounds_unicode_and_excessive_styling_before_caching() {
+        let mut capture=super::ConsoleCapture::default();
+        let input=format!("{}{}", "\x1b[31m".repeat(6000), "尾🙂".repeat(9000));
+        let (plain,ansi)=capture.read(||Ok(input)).unwrap();
+        assert_eq!(plain.chars().count(),14000);
+        assert!(ansi.len()<=24000 || ansi==plain);
+        assert_eq!(super::sgr().replace_all(&ansi,""),plain);
+        assert_eq!(capture.read(||panic!("capture should be cached")).unwrap(),(plain,ansi));
     }
 
     use super::*;
