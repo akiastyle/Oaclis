@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.618
+// index.php v1.8.626
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $value='v1.'.rtrim(strtr(base64_encode($iv.$tag.$encrypted),'+/','-_'),'=');
             if (strlen($value)>3800) {$session=[];throw new RuntimeException('Session cookie too large');}
         }
-        if (!setcookie('__Host-Oaclis',$value,['expires'=>$value===''?time()-3600:0,'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Strict'])) throw new RuntimeException('Unable to set authentication cookie');
+        if (!setcookie('__Host-Oaclis',$value,['expires'=>$value===''?time()-3600:($session['auth']['until']??$session['challenge']['until']??time()+120),'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Strict'])) throw new RuntimeException('Unable to set authentication cookie');
         $originalSession=$session;
     }
     function respond(array $value, int $code=200): never { writeCookie(); http_response_code($code); echo json_encode($value, JSON_THROW_ON_ERROR); exit; }
@@ -217,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!is_string($chat) || !in_array($chat,array_column($record['chats']??[],'id'),true)) respond([],403);
             if ($action==='console-result') {
                 $job=$state['devices'][$deviceId]['console']??[];
-                if (($job['id']??'')!==($input['request_id']??'') || ($job['chat_id']??'')!==$chat) respond([],403);
+                if (($job['id']??'')!==($input['request_id']??'') || ($job['chat_id']??'')!==$chat) respond([],409);
                 // Wait without the state lock: the master must publish the result.
                 $authUntil=$session['auth']['until'];
                 $deadline=microtime(true)+2;
@@ -231,8 +231,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $record=$state['devices'][$deviceId]??null;
                     $job=$record['console']??[];
                     if (!$record || $record['status']!=='approved' || $authUntil<time() || !hash_equals($record['auth_token']??'',hash('sha256',$session['auth']['nonce'])) ||
-                        !in_array($chat,array_column($record['chats']??[],'id'),true) ||
-                        ($job['id']??'')!==($input['request_id']??'') || ($job['chat_id']??'')!==$chat) respond([],403);
+                        !in_array($chat,array_column($record['chats']??[],'id'),true)) respond([],403);
+                    if (($job['id']??'')!==($input['request_id']??'') || ($job['chat_id']??'')!==$chat) respond([],409);
                 }
                 if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
                 $result=isset($job['result'])?$job['result']:['pending'=>true];

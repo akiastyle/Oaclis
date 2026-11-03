@@ -1,4 +1,4 @@
-// voice.js v1.38.654
+// voice.js v1.38.674
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -29,8 +29,8 @@ window.OaclisVoice=(()=>{
  }
  function create(){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-  // Android continuous mode promotes cumulative partial results to final results.
-  const singleUtterance=navigator.userAgentData?.platform==='Android'||/Android/i.test(navigator.userAgent);
+  // Keep Android listening; repeated cumulative finals are reduced to their new suffix.
+  const android=navigator.userAgentData?.platform==='Android'||/Android/i.test(navigator.userAgent);
   let adapter=null,recognition=null,recorder=null,retiring=null,generation=0,revision=0,target=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=preferences.startMic,paused=false,locked=false,state='idle',disposed=false,utteranceRevision=0;
   let button,status,preview,options,help,root,autoSendTimer;
   const cancelAutoSend=()=>{clearTimeout(autoSendTimer);autoSendTimer=null;};
@@ -186,8 +186,8 @@ window.OaclisVoice=(()=>{
   }
   function start(){
    if(!Recognition||!window.isSecureContext||disposed||!wanted||document.hidden||blocked()||recognition||retiring)return;
-   clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=(recorder??=new Recognition());let consumed=-1,sessionError=null,commandsOnly=false;recognition=session;
-   session.lang=locale.speechLanguage;session.continuous=!singleUtterance;session.interimResults=false;session.maxAlternatives=1;
+   clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=(recorder??=new Recognition());let consumed=-1,sessionError=null,commandsOnly=false,finalTranscript='';recognition=session;
+   session.lang=locale.speechLanguage;session.continuous=true;session.interimResults=false;session.maxAlternatives=1;
    state='starting';paint();utteranceRevision=revision;
    const fresh=()=>!disposed&&recognition===session&&generation===current;
    session.onstart=()=>{if(fresh()){state='listening';paint();}};
@@ -200,7 +200,13 @@ window.OaclisVoice=(()=>{
     for(let i=event.resultIndex;i<event.results.length;i++){
      if(!fresh()||blocked())break;
      const result=event.results[i];
-     if(result.isFinal){if(i<=consumed)continue;consumed=i;retries=0;preview.textContent='';route(result[0].transcript,commandsOnly);}
+     if(result.isFinal){
+      if(i<=consumed)continue;consumed=i;retries=0;preview.textContent='';
+      let transcript=result[0].transcript;
+      if(android&&finalTranscript&&normalize(transcript).startsWith(normalize(finalTranscript)+' '))transcript=transcript.trim().split(/\s+/).slice(finalTranscript.trim().split(/\s+/).length).join(' ');
+      finalTranscript=result[0].transcript;
+      route(transcript,commandsOnly);
+     }
      else {cancelAutoSend();interim.push(result[0].transcript);}
     }
     if(fresh()){preview.textContent=paused||commandsOnly||adapter?.commandOnly?.()?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
@@ -208,7 +214,7 @@ window.OaclisVoice=(()=>{
    session.onerror=event=>{
     if(!fresh())return;
     sessionError=event.error;
-    if(singleUtterance&&event.error==='no-speech'){feedback('In attesa della voce');return;}
+    if(android&&event.error==='no-speech'){feedback('In attesa della voce');return;}
     const terminal=['not-allowed','service-not-allowed','audio-capture','language-not-supported'].includes(event.error);
     const messages={'not-allowed':'Microfono non autorizzato.','service-not-allowed':'Servizio vocale non consentito.','audio-capture':'Microfono non disponibile.','network':'Rete vocale non disponibile.','language-not-supported':'Italiano non disponibile.'};
     feedback(messages[event.error]||'Ascolto interrotto.');
@@ -218,7 +224,7 @@ window.OaclisVoice=(()=>{
     if(retiring===session){releaseSession(session);retiring=null;state='idle';paint();clearTimeout(retryTimer);retryTimer=null;if(wanted&&!document.hidden&&!blocked()&&!disposed)retryTimer=setTimeout(()=>{retryTimer=null;start();},0);return;}
     if(!fresh())return;
     releaseSession(session);recognition=null;state='idle';preview.textContent='';paint();
-    const normalEnd=singleUtterance&&(!sessionError||sessionError==='no-speech');
+    const normalEnd=android&&(!sessionError||sessionError==='no-speech');
     if(normalEnd&&wanted&&!document.hidden&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},consumed>=0?200:750);
     else retry();
    };

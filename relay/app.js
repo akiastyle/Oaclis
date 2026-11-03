@@ -1,4 +1,4 @@
-// app.js v2.97.1064
+// app.js v2.97.1072
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -47,7 +47,7 @@ async function api(action,body={},signal){
  if(!r.ok)throw Object.assign(new Error(r.status===403?OaclisSettings.text('Accesso non autorizzato.'):OaclisSettings.text('Collegamento temporaneamente non disponibile. Riprova.')),{status:r.status});
  const result=await r.json();
  OaclisMobileSecurity.update(result.security);
- if(action==='console'&&result.request_id!==JSON.parse(body.signed.payload).id)throw Object.assign(new Error(OaclisSettings.text('Accesso non autorizzato.')),{status:403});
+ if(action==='console'&&result.request_id!==JSON.parse(body.signed.payload).id)throw Object.assign(new Error(OaclisSettings.text('Collegamento temporaneamente non disponibile. Riprova.')),{status:409});
  return result;
 }
 function buffer(s){return Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));}
@@ -214,7 +214,11 @@ async function openConsole(chat,adjacent=false){
      if(inputBusy||document.hidden)controller.abort();
     }
     return await complete(pending,controller?.signal);
-   }catch(error){if(controller?.signal.aborted){if(pending?.operation==='read')pending=null;return false;}if(error.status===403){voice.stop();show('');location.replace('/auth');}else if(operation==='engines'||operation==='models')throw error;else if(!closed&&!pane.closed){pane.jobsStatus.stale();pane.reconnecting=true;pane.name.textContent=pane.chat.name+OaclisSettings.text(operation==='input'?' · Invio non confermato':' · Riconnessione…');}return false;}
+   }catch(error){if(controller?.signal.aborted){if(pending?.operation==='read')pending=null;return false;}if(error.status===403){
+    try{await api('protected');}catch(authError){if(authError.status===403){voice.stop();show('');location.replace('/auth');return false;}}
+   }
+   if(error.status===409)pending=null;
+   if(operation==='engines'||operation==='models')throw error;else if(!closed&&!pane.closed){pane.jobsStatus.stale();pane.reconnecting=true;pane.name.textContent=pane.chat.name+OaclisSettings.text(operation==='input'?' · Invio non confermato':' · Riconnessione…');}return false;}
    finally{if(reading===controller)reading=null;}
   });queue=task.catch(()=>false);return task;
  }
