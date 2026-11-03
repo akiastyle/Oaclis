@@ -1,4 +1,4 @@
-// assistant_stream.rs v1.12.278
+// assistant_stream.rs v1.12.280
 //! Bounded, on-demand observation of already loaded Codex threads; never starts a turn.
 use serde_json::{Value,json};
 use std::{collections::{BTreeMap,VecDeque},io,os::unix::net::UnixStream,path::Path,sync::{Arc,Mutex,OnceLock,atomic::{AtomicBool,Ordering}},thread,time::{Duration,Instant}};
@@ -160,7 +160,7 @@ pub(crate) fn snapshot(chat:&str,after:Option<u64>)->Value {
         reader.running.store(true,Ordering::Relaxed);let worker=reader.clone();let chat=chat.to_owned();
         thread::spawn(move||{
             let root=std::env::var_os("CODEX_HOME").map(std::path::PathBuf::from).unwrap_or_else(||std::path::PathBuf::from(std::env::var_os("HOME").unwrap_or_default()).join(".codex"));
-            if let Err(error)=follow(&root,&chat,&worker){crate::state_transport::log(format!("Speech {chat}: {error}"));}
+            if let Err(error)=follow(&root,&chat,&worker){crate::state_transport::log(format!("Voce · {}: lettura non disponibile ({error})",crate::state_transport::chat_name(&chat)));}
             worker.feed.lock().unwrap().ready=false;worker.running.store(false,Ordering::Relaxed);
         });
     }

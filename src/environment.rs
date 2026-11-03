@@ -1,4 +1,4 @@
-// environment.rs v1.21.729
+// environment.rs v1.21.739
 //! Chat environment analysis and destination preparation, independent of the UI.
 use crate::{
     devices::{self, Device},
@@ -294,12 +294,12 @@ fn transfer_paths(device: &Device, paths: &[PathBuf], incoming: bool, state: &Pa
     }
     list.file.flush()?;
     let mut command = paths_command(device, &list.path, incoming);
-    crate::state_transport::log(format!("EXEC {command:?}"));
+    crate::state_transport::log(format!("{}: trasferimento file avviato",device.name));
     let result = crate::progress::run(&mut command, &mut |mut event| {
         if let crate::progress::Event::Transferring { percent, .. } = &mut event { *percent = (*percent).min(99); }
         notify(json!({"event":event}));
     });
-    crate::state_transport::log(format!("EXIT rsync {}", match &result { Ok(()) => "OK".into(), Err(error) => error.to_string() }));
+    crate::state_transport::log(format!("{}: trasferimento file {}",device.name,if result.is_ok(){"completato"}else{"non riuscito"}));
     result
 }
 
@@ -384,7 +384,7 @@ pub fn execute(
             exclude: vec![],
         };
         let files = rules::execute(device, &rule, &state.join(&id), |p| {
-            crate::state_transport::log(format!("APPS FILE {} {}", p.path.display(),serde_json::to_string(&p.event).unwrap_or_default()))
+            crate::state_transport::log(format!("Applicazioni: trasferimento file {}",p.path.file_name().unwrap_or_default().to_string_lossy()))
         })?;
         if files.iter().any(|f| f.outcome == Outcome::Conflict) {
             return Err(invalid("Conflitto nelle cartelle: copie conservate"));
@@ -421,12 +421,12 @@ pub fn execute(
             staged.file.write_all(&serde_json::to_vec_pretty(&definition)?)?;
             staged.file.sync_all()?;
             let previous = transfer::inspect_remote(device, &target)?.map(|(receipt,_)|receipt);
-            transfer::write_file(device, &staged.path, &target, previous.as_ref(), None, &mut |event|crate::state_transport::log(format!("APPS DEFINITION {}",serde_json::to_string(&event).unwrap_or_default())))?;
+            transfer::write_file(device, &staged.path, &target, previous.as_ref(), None, &mut |event|crate::state_transport::log(format!("Applicazioni: invio configurazione · {}",if matches!(event,crate::progress::Event::Completed){"completato"}else{"in corso"})))?;
         }
         results.push(json!({"definition":target}));
         let installation=if incoming {crate::app_install::saved(&target,&mut notify)} else {
             crate::state_transport::remote_progress(device,&json!({"kind":"environment","operation":"install","value":{"definition":target}}),&mut notify)
-        }.map_err(|error| {crate::state_transport::log(format!("APP INSTALL FAILED {}",crate::environment_analysis::redact(&error.to_string())));invalid("Installazione delle app non riuscita. Dettagli nel log.")})?;
+        }.map_err(|error| {crate::state_transport::log(format!("Installazione applicazioni non riuscita: {}",crate::environment_analysis::redact(&error.to_string())));invalid("Installazione delle app non riuscita. Dettagli nel log.")})?;
         if installation["status"]!="completed" {return Err(invalid("Installazione delle app non completata. Dettagli nel log."));}
         results.push(json!({"installation":installation}));
     }

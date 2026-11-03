@@ -1,4 +1,4 @@
-// chat_deletion.rs v1.12.172
+// chat_deletion.rs v1.12.177
 //! Irreversible chat deletion; only UUIDs and peer acknowledgements remain for offline delivery.
 use crate::{invalid, state_store::{self,State}};
 use serde_json::{Value,json};
@@ -141,6 +141,7 @@ pub(crate) fn start(home:PathBuf,config:PathBuf,codex:PathBuf,job:Arc<Mutex<Valu
                 for id in pending {
                     let done=state.shared["deletions"][&id]["done"].as_array().is_some_and(|v|v.iter().any(|v|v==&local));
                     if done && !present.contains(&id){continue;}
+                    let label=crate::state_transport::chat_name(&id);
                     remove_local(&home,&codex,&id,present.contains(&id))?;
                     if state.shared["deletions"][&id]["global"]!=false {crate::mobile::forget_chat(&config,&id)?;}
                     state_store::change(&config,|state|{
@@ -148,11 +149,11 @@ pub(crate) fn start(home:PathBuf,config:PathBuf,codex:PathBuf,job:Arc<Mutex<Valu
                         if !done.as_array().unwrap().iter().any(|v|v==&local){done.as_array_mut().unwrap().push(json!(local));}
                         Ok(())
                     })?;
-                    crate::state_transport::log(format!("CHAT DELETE {id} completed"));
+                    crate::state_transport::log(format!("{label}: chat eliminata da questo dispositivo"));
                 }
                 Ok(())
             })();
-            if let Err(error)=result{crate::state_transport::log(format!("CHAT DELETE pending: {}",crate::environment_analysis::redact(&error.to_string())));}
+            if let Err(error)=result{crate::state_transport::log(format!("Eliminazione chat in attesa: {}",crate::environment_analysis::redact(&error.to_string())));}
             thread::sleep(Duration::from_secs(1));
         }
     });

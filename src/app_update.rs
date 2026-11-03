@@ -1,10 +1,11 @@
-// app_update.rs v1.8.148
+// app_update.rs v1.8.153
 //! Explicit fast-forward update; never discard local changes.
 use crate::{invalid, staging::StagedFile};
 use std::{io::{self, Read, Seek, SeekFrom}, path::Path, process::{Command, Stdio}, thread, time::{Duration, Instant}};
 
 pub(crate) fn run(command: &mut Command, timeout: Duration) -> io::Result<String> {
-    crate::state_transport::log(format!("EXEC {command:?}"));
+    let step=match command.get_program().to_str().unwrap_or("") {"git"=>match command.get_args().next().and_then(|a|a.to_str()).unwrap_or("") {"fetch"=>"Download aggiornamento Oaclis","merge"=>"Applicazione aggiornamento Oaclis",_=>"Verifica versione Oaclis"},"cargo"=>"Compilazione Oaclis",_=>"Preparazione aggiornamento Oaclis"};
+    crate::state_transport::log(format!("{step}: avviato"));
     let mut log = StagedFile::new(&std::env::temp_dir())?;
     command.stdin(Stdio::null()).stdout(log.file.try_clone()?).stderr(log.file.try_clone()?);
     #[cfg(unix)] {
@@ -23,7 +24,7 @@ pub(crate) fn run(command: &mut Command, timeout: Duration) -> io::Result<String
         }
         thread::sleep(Duration::from_millis(50));
     };
-    crate::state_transport::log(format!("EXIT {status}"));
+    crate::state_transport::log(format!("{step}: {}",if status.success(){"completato"}else{"non riuscito"}));
     let length = log.file.metadata()?.len();
     log.file.seek(SeekFrom::Start(length.saturating_sub(65536)))?;
     let mut output = String::new();

@@ -1,4 +1,4 @@
-// state_transport.rs v1.18.332
+// state_transport.rs v1.22.389
 //! A local Unix socket forwards approved SSH requests into the running Rust app.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -37,10 +37,37 @@ pub(crate) fn expire() {
     }
 }
 
+pub(crate) fn chat_name(chat: &str) -> String {
+    crate::state_store::cached_label(chat).or_else(||crate::catalog::cached_name(chat)).unwrap_or_else(||"Chat senza nome".into())
+}
+pub(crate) fn console_message(chat: &str, action: &str, image: bool, result: &io::Result<Value>) -> String {
+    let outcome=match result {
+        Err(_)=>"operazione non riuscita",
+        Ok(value) if value["unchanged"]==true=>"nessuna variazione, testo non ritrasmesso",
+        Ok(_) => match action {"read"=>"testo console inviato","open"=>"console aperta","input" if image=>"immagine inviata alla console","input"=>"comando inviato alla console","create"=>"nuova chat creata","models"=>"elenco modelli ricevuto","engines"=>"configurazione AI ricevuta",_=>"operazione completata"},
+    };
+    format!("{chat}: {outcome}")
+}
+fn request_description(value: &Value) -> String {
+    let action=match value["kind"].as_str().unwrap_or("") {
+        "shared-exchange"=>"scambio impostazioni e stato (nessun trasferimento chat)",
+        "catalog"=>"lettura elenco chat",
+        "chat-proof"=>"confronto chat",
+        "snapshot"=>"lettura stato salvato",
+        "chat-rename"=>"rinomina chat",
+        "prepare-path"=>"preparazione cartella",
+        "terminal"=>match value["value"]["action"].as_str().unwrap_or("") {"read"=>"lettura console","input"=>"invio alla console","create"=>"creazione chat","engines"=>"lettura configurazione AI","models"=>"lettura modelli AI",_=>"apertura console"},
+        "device-control"=>match value["action"].as_str().unwrap_or("") {"update"=>"aggiornamento Oaclis","restart"=>"riavvio Oaclis","status"=>"controllo versione Oaclis","toggle-awake"|"power-always"|"power-screen-off"|"power-normal"=>"modifica risparmio energia",_=>"operazione sul dispositivo"},
+        "environment"=>match value["operation"].as_str().unwrap_or("") {"install"=>"installazione applicazioni","analyze"=>"analisi progetto","paths-status"=>"aggiornamento stato percorsi",_=>"gestione ambiente progetto"},
+        "database"=>match value["operation"].as_str().unwrap_or("") {"load"|"links-get"|"preferences-get"|"analysis-list"|"analysis-get"|"inventory-list"|"inventory-get"|"preparation-get"|"status-read"|"transfer-list"=>"lettura stato",_=>"aggiornamento stato"},
+        _=>"operazione sul dispositivo",
+    };
+    match value["chat_id"].as_str().or_else(||value["value"]["chat_id"].as_str()) {
+        Some(chat)=>format!("{action} · {}",chat_name(chat)), None=>action.into(),
+    }
+}
 fn log_request(direction: &str, peer: &str, value: &Value) {
-    let fields: serde_json::Map<String,Value> = ["kind","action","operation","key","path","root","chat_id","revision"]
-        .into_iter().filter_map(|key|value.get(key).filter(|v|v.is_string()).map(|v|(key.into(),v.clone()))).collect();
-    log(format!("{direction} {peer} {}", Value::Object(fields)));
+    log(format!("{peer} · {} · {}",request_description(value),if direction=="SEND"{"richiesta inviata"}else{"richiesta ricevuta"}));
 }
 
 
@@ -84,7 +111,7 @@ pub(crate) fn remote(device: &Device, value: &Value) -> io::Result<Value> {
 }
 pub(crate) fn remote_progress(device: &Device, value: &Value, notify: &mut impl FnMut(Value)) -> io::Result<Value> {
     device.validate()?;
-    log_request("SEND", &device.ssh_alias, value);
+    log_request("SEND", &device.name, value);
     let mut errors=crate::staging::StagedFile::new(&std::env::temp_dir())?;
     use std::os::unix::process::CommandExt;
     let mut child = Command::new("ssh").process_group(0)
@@ -105,12 +132,11 @@ pub(crate) fn remote_progress(device: &Device, value: &Value, notify: &mut impl 
     let _=done.send(());
     if timer.join().unwrap_or(true) { return Err(io::Error::new(io::ErrorKind::TimedOut,"Tempo massimo della richiesta remota superato")); }
     let status=status?;
-    log(format!("RECV {} {}", device.ssh_alias, status));
+    log(format!("{} · {} · {}",device.name,request_description(value),if status.success() && result.is_ok(){"completato"}else{"non riuscito"}));
     if !status.success() {
         use std::io::{Seek,SeekFrom};
         let size=errors.file.metadata()?.len();errors.file.seek(SeekFrom::Start(size.saturating_sub(4096)))?;
         let mut text=String::new();errors.file.read_to_string(&mut text)?;
-        log(crate::environment_analysis::redact(&text));
         if text.trim().is_empty() {return result.and_then(|_|Err(io::Error::other(format!("SSH: {status}"))));}
         return Err(io::Error::other(format!("SSH: {}",text.trim())));
     }
@@ -162,9 +188,11 @@ pub(crate) fn start(
                 let Ok(mut stream) = stream else { return };
                 let _ = stream.set_read_timeout(Some(Duration::from_secs(10)));
                 let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
+                let mut description=String::from("richiesta");
                 let result = (|| -> io::Result<Value> {
                     let request = receive(&mut stream)?;
-                    log_request("RECV", "local", &request);
+                    description=request_description(&request);
+                    log_request("RECV", "Questo dispositivo", &request);
                     match request["kind"].as_str(){
                 Some("terminal")=>crate::terminal::local(&request["value"]),
                 Some("device-control")=>crate::device_runtime::control(&runtime,&job,&analyses,&role,request["action"].as_str().ok_or_else(||invalid("Comando richiesto"))?,request["revision"].as_str().unwrap_or("")),
@@ -182,7 +210,7 @@ pub(crate) fn start(
                 _=>Err(invalid("Azione stato non valida")),
             }
                 })();
-                log(format!("SEND local {}", match &result { Ok(_) => "OK".to_owned(), Err(error) => error.to_string() }));
+                log(format!("Questo dispositivo · {description}: {}",if result.is_ok(){"completato"}else{"non riuscito"}));
                 let response = match result {
                     Ok(value) => json!({"ok":true,"value":value}),
                     Err(error) => json!({"ok":false,"error":error.to_string()}),
@@ -205,6 +233,17 @@ pub(crate) fn start(
 #[cfg(test)]
 mod log_tests {
     #[test]
+    fn human_console_log_distinguishes_delivery_and_no_change_without_payloads() {
+        use super::*;
+        let unchanged=console_message("Oaclis","read",false,&Ok(json!({"unchanged":true,"text":"secret"})));
+        assert!(unchanged.contains("testo non ritrasmesso"));assert!(!unchanged.contains("secret"));
+        assert!(console_message("Santi","input",true,&Ok(json!({}))).contains("immagine inviata"));
+        assert!(console_message("Santi","input",true,&Err(io::Error::other("private-command"))).contains("non riuscita"));
+        assert!(!request_description(&json!({"kind":"shared-exchange"})).contains("shared-exchange"));
+        let hidden=request_description(&json!({"kind":"terminal","value":{"action":"read","chat_id":"unresolved-private-id","text":"private-input"}}));
+        assert!(!hidden.contains("unresolved-private-id"));assert!(!hidden.contains("private-input"));
+    }
+    #[test]
     fn receiver_streams_installation_progress_and_preserves_regular_responses() {
         let input=b"{\"_oaclis_progress\":{\"event\":{\"phase\":\"transferring\",\"percent\":50}}}\n{\"_oaclis_result\":{\"status\":\"completed\"}}\n";
         let mut events=Vec::new();
@@ -220,7 +259,7 @@ mod log_tests {
     fn receiver_log_omits_passwords_and_payloads_and_is_bounded() {
         super::log_request("RECV", "fixture", &serde_json::json!({"kind":"prepare-path","path":"/var/www/log-fixture","password":"never-log-password","value":{"token":"never-log-token"}}));
         let rows = super::logs();
-        let row = rows.as_array().unwrap().iter().find(|r|r["text"].as_str().unwrap().contains("/var/www/log-fixture")).unwrap();
+        let row = rows.as_array().unwrap().iter().find(|r|r["text"].as_str().unwrap().contains("preparazione cartella")).unwrap();
         assert!(!row.to_string().contains("never-log"));
         for _ in 0..510 {super::log("fixture".into());}
         assert!(super::logs().as_array().unwrap().len() <= 500);

@@ -1,4 +1,4 @@
-// catalog.rs v2.38.1814
+// catalog.rs v2.39.1818
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -34,6 +34,10 @@ struct ArchiveIndex {
     directories: HashMap<PathBuf, (Stamp, Vec<(PathBuf, bool)>)>,
 }
 static INDEXES: std::sync::OnceLock<std::sync::Mutex<HashMap<PathBuf,std::sync::Arc<std::sync::Mutex<ArchiveIndex>>>>> = std::sync::OnceLock::new();
+pub(crate) fn cached_name(chat: &str) -> Option<String> {
+    let indexes=INDEXES.get()?.lock().ok()?;
+    indexes.values().find_map(|index|index.try_lock().ok()?.names.get(chat).cloned())
+}
 pub(crate) fn expire() {
     if let Some(indexes)=INDEXES.get() {
         indexes.lock().unwrap().retain(|_,index|std::sync::Arc::strong_count(index)>1 || index.try_lock().map(|index|index.touched.is_some_and(|time|time.elapsed().as_secs()<3600)).unwrap_or(true));

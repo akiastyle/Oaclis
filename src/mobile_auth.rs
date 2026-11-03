@@ -1,4 +1,4 @@
-// mobile_auth.rs v1.48.708
+// mobile_auth.rs v1.49.709
 //! Local mobile authority: QR-bound keys, chat grants and signed, non-replayable requests.
 use crate::invalid;
 use ring::{hmac, rand::{SecureRandom, SystemRandom}, signature};
@@ -57,6 +57,7 @@ pub(crate) fn at(config:&Path)->io::Result<Arc<Store>> {
     stores.insert(config,store.clone());Ok(store)
 }
 impl Store {
+    pub(crate) fn phone_name(&self,device:&str)->String {self.settings.read().unwrap().authorization.phones.get(device).map(|phone|phone.name.clone()).unwrap_or_else(||"Telefono".into())}
     pub(crate) fn admin_key(&self)->String {self.settings.read().unwrap().admin_key.clone()}
     pub(crate) fn authority(&self)->Authority {self.settings.read().unwrap().authorization.clone()}
     fn change<T>(&self,edit:impl FnOnce(&mut Authority)->io::Result<T>)->io::Result<T> {

@@ -1,11 +1,10 @@
-// transfer_job.rs v2.30.1667
+// transfer_job.rs v2.30.1690
 //! Executes an authorized transfer; independent of routes and scheduling.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid,rules};
 use serde_json::{Value,json};
 use std::{fs,io,path::{Path,PathBuf},sync::{Arc,Mutex},thread};
 
 fn module_event(job: &Arc<Mutex<Value>>, module: &str, progress: Value) {
-    crate::state_transport::log(format!("TRANSFER {module} {progress}"));
     let mut state = job.lock().unwrap();
     let event = &progress["event"];
     let fraction = if event["phase"] == "completed" { 1.0 }
@@ -14,7 +13,12 @@ fn module_event(job: &Arc<Mutex<Value>>, module: &str, progress: Value) {
         if total > 0.0 { ((index - 1.0).max(0.0) + fraction) / total } else { fraction }
     } else { fraction };
     let previous = state["module_progress"][module]["progress"].as_f64().unwrap_or(0.0);
-    state["module_progress"][module]["progress"] = json!(previous.max(fraction.clamp(0.0,1.0)));
+    let current=previous.max(fraction.clamp(0.0,1.0));
+    if (current*100.0).floor()>(previous*100.0).floor() {
+        let label=match module {"chat"=>"Chat","paths"=>"File e percorsi","apps"=>"Applicazioni",_=>"Sincronizzazione"};
+        crate::state_transport::log(format!("{} · {} → {} · {label}: {:.0}%",state["title"].as_str().unwrap_or("Chat"),state["source"].as_str().unwrap_or("Questo dispositivo"),state["destination"].as_str().unwrap_or("Dispositivo"),(current*100.0).floor()));
+    }
+    state["module_progress"][module]["progress"] = json!(current);
     state["progress"] = progress;
 }
 
@@ -40,14 +44,14 @@ fn finish(config: &Path, transfer_key: Option<&str>, flow_key: Option<&str>, gen
         Ok(())
     })();
     if let Err(error)=result {
-        crate::state_transport::log(format!("TRANSFER FINAL SAVE FAILED {error}"));
+        crate::state_transport::log(format!("Sincronizzazione: salvataggio esito non riuscito {error}"));
         finished["status"]=json!("failed");
         finished["message"]=json!("Esito del trasferimento non salvato. Dettagli nel log.");
         if let Some(key)=transfer_key {
-            if let Err(error)=environment::database(config,key,"transfer-save",Some(finished)) {crate::state_transport::log(format!("TRANSFER SAVE RETRY FAILED {error}"));}
+            if let Err(error)=environment::database(config,key,"transfer-save",Some(finished)) {crate::state_transport::log(format!("Sincronizzazione: nuovo salvataggio esito non riuscito {error}"));}
         }
         if let Some(key)=flow_key {
-            if let Err(error)=crate::link_flow::finish(config,key,generation,false,finished["message"].as_str().unwrap()) {crate::state_transport::log(format!("TRANSFER FLOW SAVE FAILED {error}"));}
+            if let Err(error)=crate::link_flow::finish(config,key,generation,false,finished["message"].as_str().unwrap()) {crate::state_transport::log(format!("Sincronizzazione: salvataggio stato collegamento non riuscito {error}"));}
         }
     }
 }
@@ -209,7 +213,9 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
         }
     }
     let transfer_key = chat.as_ref().map(|c| environment::key(v["source_device_id"].as_str().unwrap_or("master"), c["id"].as_str().unwrap())).transpose()?;
+    let activity=format!("{} · {} → {}",pending["title"].as_str().unwrap_or("Chat"),pending["source"].as_str().unwrap_or("Questo dispositivo"),pending["destination"].as_str().unwrap_or("Dispositivo"));
     begin(config, transfer_key.as_deref(), job, pending)?;
+    crate::state_transport::log(format!("{activity}: sincronizzazione avviata"));
     let transfer_config = config.to_path_buf();
     let job = job.clone();
     let flow_key = v["link_key"].as_str().map(str::to_owned);
@@ -236,7 +242,7 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                     match environment::request(target,"paths-status",json!({"id":path_status,"status":"pending"})) {
                         Ok(_) => installation_inventory["paths_status"]=json!(path_status),
                         // Older clients keep their existing installer until explicitly updated.
-                        Err(error) if error.to_string().contains("Operazione ambiente non valida") => crate::state_transport::log("PATH STATUS unavailable on installed client".into()),
+                        Err(error) if error.to_string().contains("Operazione ambiente non valida") => crate::state_transport::log("File e percorsi: stato non disponibile su questo device".into()),
                         Err(error) => return Err(error),
                     }
                 }
@@ -263,7 +269,7 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                         );
                         if module=="paths" && app_inventory["paths_status"].is_string() {
                             if let Err(error)=environment::request(if incoming {None} else {Some(device)},"paths-status",json!({"id":path_status,"status":if result.is_ok(){"completed"}else{"failed"}})) {
-                                if result.is_ok() {result=Err(error);} else {crate::state_transport::log(format!("PATH STATUS FAILED {error}"));}
+                                if result.is_ok() {result=Err(error);} else {crate::state_transport::log(format!("File e percorsi: aggiornamento stato non riuscito {error}"));}
                             }
                         }
                         match &result {
@@ -350,7 +356,7 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
                     }
                 }
                 if installation_inventory["paths_status"].is_string() {
-                    if let Err(error)=environment::request(target,"paths-status",json!({"id":path_status,"status":"remove"})) {crate::state_transport::log(format!("PATH STATUS CLEANUP FAILED {error}"));}
+                    if let Err(error)=environment::request(target,"paths-status",json!({"id":path_status,"status":"remove"})) {crate::state_transport::log(format!("File e percorsi: rimozione stato temporaneo non riuscita {error}"));}
                 }
                 if errors.is_empty() { Ok(results) } else { Err(io::Error::other(errors.join("; "))) }
                 })
@@ -369,6 +375,7 @@ pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value
         }
         if crate::automation::conflict(&finished["results"]) {finished["status"]=json!("failed");finished["message"]=json!("Copie divergenti: nessuna sovrascrittura");}
         finish(&transfer_config,transfer_key.as_deref(),flow_key.as_deref(),&flow_generation,&mut finished);
+        crate::state_transport::log(format!("{activity}: {}",if finished["status"]=="completed"{"sincronizzazione completata"}else{"sincronizzazione non completata"}));
         *job.lock().unwrap() = finished;
     });
     Ok(json!({"ok":true}))

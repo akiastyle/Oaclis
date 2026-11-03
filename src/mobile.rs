@@ -1,9 +1,9 @@
-// mobile.rs v1.21.518
+// mobile.rs v1.21.551
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
 use serde_json::{Value, json};
-use std::{io::{self, Read}, path::{Path, PathBuf}, sync::{Arc, Mutex, OnceLock}, thread, time::{Duration, Instant}};
+use std::{io::{self, Read}, path::{Path, PathBuf}, sync::{Arc, Mutex, OnceLock}, thread, time::Duration};
 
 const ENDPOINT: &str = "https://oaclis.krprojects.it/auth";
 const ACCESS_URL: &str = "https://oaclis.krprojects.it/";
@@ -19,31 +19,33 @@ fn invitation_qr(url: &str) -> io::Result<String> {
 }
 
 fn request(config: &Path, payload: Value) -> io::Result<Value> {
-    let admin_key = crate::mobile_auth::at(config)?.admin_key();
+    let authority=crate::mobile_auth::at(config)?;
+    let admin_key = authority.admin_key();
     let body = serde_json::to_vec(&payload)?;
     if body.len() > 131072 { return Err(invalid("Selezione troppo ampia")); }
     let action = payload["action"].as_str().unwrap_or("");
-    crate::state_transport::log(format!("SEND mobile-relay {action}"));
+    let label=match action {"admin-list"=>"Controllo telefoni collegati","chat-access"=>"Lettura chat autorizzate","set-chat-access"=>"Aggiornamento chat autorizzate","invite"=>"Preparazione abbinamento telefono","approve"=>"Approvazione telefono","revoke"=>"Rimozione abbinamento telefono",_=>"Operazione collegamento mobile"};
+    let context=payload["id"].as_str().map(|device|format!("PWA · {} · {label}",authority.phone_name(device))).unwrap_or_else(||format!("PWA · {label}"));
+    if action!="console-exchange" {crate::state_transport::log(format!("{context}: richiesta inviata"));}
     static CLIENT: OnceLock<ureq::Agent> = OnceLock::new();
     let client = CLIENT.get_or_init(|| ureq::Agent::config_builder()
         .timeout_global(Some(Duration::from_secs(10)))
         .timeout_connect(Some(Duration::from_secs(3)))
         .max_redirects(0).build().into());
-    let started = Instant::now();
     let response = client.post(ENDPOINT)
         .header("Origin", "https://oaclis.krprojects.it")
         .header("Content-Type", "application/json")
         .header("X-Admin-Key", &admin_key)
         .send(body);
     let mut response = response.map_err(|_| {
-        crate::state_transport::log(format!("RECV mobile-relay {action} failed"));
+        crate::state_transport::log(format!("{context}: collegamento non disponibile"));
         io::Error::other("Collegamento mobile non disponibile. Riprova.")
     })?;
     let mut bytes = Vec::new();
     response.body_mut().as_reader().take(1048577).read_to_end(&mut bytes)?;
     if bytes.len() > 1048576 { return Err(invalid("Risposta mobile troppo ampia")); }
     let reply: Value = serde_json::from_slice(&bytes).map_err(|_| io::Error::other("Risposta mobile non valida"))?;
-    crate::state_transport::log(format!("RECV mobile-relay {action} OK {}ms", started.elapsed().as_millis()));
+    if action!="console-exchange" {crate::state_transport::log(format!("{context}: completato"));}
     Ok(reply)
 }
 
@@ -139,21 +141,32 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
         let console_config = config.clone();
         thread::spawn(move || {
             let mut results = Vec::<Value>::new();
+            let mut pending_log:Option<(String,bool)>=None;
+            let mut last_read=String::new();
             let authority = match crate::mobile_auth::at(&console_config) { Ok(authority)=>authority,Err(_)=>return };
             loop {
                 let mut active = false;
                 if let Ok(reply) = request(&console_config, json!({"action":"console-exchange","results":results,"security":authority.security()})) {
                     active = reply["console_active"] == true;
+                    if let Some((message,read))=pending_log.take() {
+                        if !read || message!=last_read {crate::state_transport::log(message.clone());}
+                        last_read=if read {message}else{String::new()};
+                    }
                     results.clear();
                     for command in reply["commands"].as_array().into_iter().flatten().take(1) {
                         let Some(device)=command["device"].as_str().filter(|id|id.len()==64 && id.bytes().all(|b|b.is_ascii_hexdigit())) else {continue;};
                         let Some(id)=command["id"].as_str().filter(|id|id.len()==32 && id.bytes().all(|b|b.is_ascii_hexdigit())) else {continue;};
                         let checked=authority.command(command);
-                        if let Err(error)=&checked {crate::state_transport::log(format!("REJECT mobile-relay {error}"));}
+                        if checked.is_err() {crate::state_transport::log("PWA: richiesta rifiutata, autorizzazione non valida".into());}
                         let result=checked.and_then(|value|{
-                            let result=crate::terminal::request(None,&value)?;
-                            if value["action"]=="create"{authority.allow_created(device,value["chat_id"].as_str().unwrap(),result["new_chat"]["id"].as_str().ok_or_else(||invalid("Nuova chat non disponibile"))?)?;}
-                            Ok(result)
+                            let result=crate::terminal::request(None,&value).and_then(|result| {
+                                if value["action"]=="create"{authority.allow_created(device,value["chat_id"].as_str().unwrap(),result["new_chat"]["id"].as_str().ok_or_else(||invalid("Nuova chat non disponibile"))?)?;}
+                                Ok(result)
+                            });
+                            let chat=result.as_ref().ok().and_then(|result|result["new_chat"]["name"].as_str()).map(str::to_owned).unwrap_or_else(||crate::state_transport::chat_name(value["chat_id"].as_str().unwrap_or("")));
+                            let action=value["action"].as_str().unwrap_or("");
+                            pending_log=Some((format!("PWA · {} · {}",authority.phone_name(device),crate::state_transport::console_message(&chat,action,value["image"].is_string(),&result)),action=="read"&&result.as_ref().is_ok_and(|value|value["unchanged"]==true)));
+                            result
                         });
                         let mut answer = json!({"device":device,"id":id});
                         match result { Ok(value) if value["engines"].is_object() || value["models"].is_array()=>{if value["engines"].is_object(){answer["engines"]=value["engines"].clone();}else{answer["models"]=value["models"].clone();}}, Ok(value) if value["new_chat"].is_object()=>{answer["new_chat"]=value["new_chat"].clone();}, Ok(value) => { if let Some(jobs)=value.get("jobs") {answer["jobs"]=jobs.clone();} if let Some(speech)=value.get("speech") {answer["speech"]=speech.clone();} let screen=crate::terminal::mobile_screen(&value); answer.as_object_mut().unwrap().extend(screen.as_object().unwrap().clone()); }, Err(_) => answer["error"] = json!(true) }

@@ -1,4 +1,4 @@
-// state_store.rs v2.39.1407
+// state_store.rs v2.40.1411
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -68,6 +68,10 @@ pub(crate) struct Store {
 }
 static STORES: OnceLock<Mutex<BTreeMap<PathBuf, Arc<Store>>>> = OnceLock::new();
 
+pub(crate) fn cached_label(chat: &str) -> Option<String> {
+    let stores=STORES.get()?.lock().ok()?;
+    stores.values().find_map(|store|store.state.read().ok()?.appearance.get(&format!("chat:{chat}"))?.value["label"].as_str().filter(|name|!name.trim().is_empty()).map(str::to_owned))
+}
 pub(crate) fn read_json(path: &Path, default: Value) -> io::Result<Value> {
     match crate::open_regular(path) {
         Ok((file, _)) => serde_json::from_reader(file).map_err(io::Error::other),

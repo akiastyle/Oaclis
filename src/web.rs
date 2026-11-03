@@ -1,4 +1,4 @@
-// web.rs v2.29.1902
+// web.rs v2.29.1915
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -261,7 +261,10 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
         let _configuration_edit = if request.method() == &Method::Post && matches!(url.as_str(), "/api/device" | "/api/device/delete" | "/api/rule") {
             Some(configuration_edits.lock().unwrap())
         } else { None };
-        if !matches!(url.as_str(),"/api/state"|"/api/status"|"/api/log"|"/api/links"|"/api/peers"|"/api/mobile/qr"|"/api/mobile/pending"|"/api/jobs/status"|"/api/jobs/list") { crate::state_transport::log(format!("HTTP POST {url}")); }
+        if !matches!(url.as_str(),"/api/state"|"/api/status"|"/api/log"|"/api/links"|"/api/peers"|"/api/mobile/qr"|"/api/mobile/pending"|"/api/jobs/status"|"/api/jobs/list"|"/api/terminal") {
+            let action=match url.as_str(){"/api/device/control"=>"Controllo dispositivo","/api/links/play"=>"Richiesta sincronizzazione","/api/appearance"=>"Salvataggio impostazioni chat","/api/positions"|"/api/link-position"=>"Salvataggio posizione",_=>"Operazione dall'interfaccia"};
+            crate::state_transport::log(action.into());
+        }
         let result = (|| -> io::Result<Value> {
             match (request.method(), url.as_str()) {
                 (&Method::Post, "/api/jobs/status") => crate::jobs::update(body(&mut request)?),
@@ -333,8 +336,12 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         crate::terminal::access_flags(access)?;
                         v["access"]=json!(access);
                     }
-                    let result=crate::terminal::request(device.as_ref(), &v)?;
-                    Ok(result)
+                    let result=crate::terminal::request(device.as_ref(), &v);
+                    if v["action"]!="read" || result.is_err() {
+                        let name=crate::state_transport::chat_name(&chat);
+                        crate::state_transport::log(format!("Console · {} · {}",device.as_ref().map(|d|d.name.as_str()).unwrap_or("Questo dispositivo"),crate::state_transport::console_message(&name,v["action"].as_str().unwrap_or(""),v["image"].is_string(),&result)));
+                    }
+                    result
                 }
                 (&Method::Post, "/api/state") => Ok(
                     json!({"engines":crate::engines::settings(&home).unwrap_or(Value::Null),"mobile_devices":mobile.snapshot(),"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?,"build":crate::device_runtime::build(),"paused":paused,"checks_paused":checks_paused,"settings_paused":settings_paused,"positions":crate::shared_settings::positions(&config)?,"link_positions":crate::shared_settings::read_positions(&config,"link-positions.json")?,"role":role,"devices":devices::load(config.join("devices.json"))?,"rules":rules::load(config.join("rules.json"))?,"chats":catalog(&codex)?,"chat_settings":environment::database(&config,"","preferences-get",None)?["preferences"],"deleted_chats":crate::chat_deletion::ids(crate::state_store::snapshot(&config)?.as_ref()),"ssh_settings":crate::ssh_settings::settings(&home,&config,"list",&json!(devices::load(config.join("devices.json"))?))?,"codex_root":codex,"appearance":crate::appearance::load(config.join("appearance.json"))?,"job":*job.lock().unwrap(),"connections":*connections.lock().unwrap(),"links":environment::database(&config,"","links-get",None)?}),
