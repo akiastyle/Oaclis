@@ -1,4 +1,4 @@
-// mobile.rs v1.21.562
+// mobile.rs v1.22.592
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -132,13 +132,26 @@ pub(crate) struct Registry {
     exchange: Mutex<()>,
 }
 impl Registry {
-    pub(crate) fn snapshot(&self) -> Vec<Value> { self.devices.lock().unwrap().clone() }
+    pub(crate) fn snapshot(&self) -> Vec<Value> {
+        let now=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+        self.devices.lock().unwrap().iter().map(|device| {
+            let mut device=device.clone();
+            for key in ["flow_in","flow_out"] { device[key]=json!(device[key].as_u64().is_some_and(|time|now.saturating_sub(time)<2150)); }
+            device
+        }).collect()
+    }
+    fn flow(&self, id:&str, key:&str) {
+        if let Some(device)=self.devices.lock().unwrap().iter_mut().find(|device|device["id"].as_str().is_some_and(|value|value.strip_prefix("mobile-")==Some(id))) {
+            device[key]=json!(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64);
+        }
+    }
 }
 
 pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
     let registry = Arc::new(Registry { devices: Mutex::new(Vec::new()), exchange: Mutex::new(()) });
     if enabled && config.join("mobile-relay.json").is_file() {
         let console_config = config.clone();
+        let console_registry = registry.clone();
         thread::spawn(move || {
             let mut results = Vec::<Value>::new();
             let mut pending_log:Option<(String,bool)>=None;
@@ -161,6 +174,9 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
                         if !read || message!=last_read {crate::state_transport::log(message.clone());}
                         last_read=if read {message}else{String::new()};
                     }
+                    for answer in &results {
+                        if answer["screen"].is_string() { if let Some(device)=answer["device"].as_str() { console_registry.flow(device,"flow_out"); } }
+                    }
                     results.clear();
                     for command in reply["commands"].as_array().into_iter().flatten().take(1) {
                         let Some(device)=command["device"].as_str().filter(|id|id.len()==64 && id.bytes().all(|b|b.is_ascii_hexdigit())) else {continue;};
@@ -168,6 +184,7 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
                         let checked=authority.command(command);
                         if checked.is_err() {crate::state_transport::log("PWA: richiesta rifiutata, autorizzazione non valida".into());}
                         let result=checked.and_then(|value|{
+                            if matches!(value["action"].as_str(),Some("input"|"stop"|"open"|"create")) { console_registry.flow(device,"flow_in"); }
                             let result=crate::terminal::request(None,&value).and_then(|result| {
                                 if value["action"]=="create"{authority.allow_created(device,value["chat_id"].as_str().unwrap(),result["new_chat"]["id"].as_str().ok_or_else(||invalid("Nuova chat non disponibile"))?)?;}
                                 Ok(result)
@@ -194,7 +211,16 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
                 let _exchange = worker.exchange.lock().unwrap();
                 match request(&config, json!({"action":"admin-list"})).and_then(|r| approved_devices(&config, &r)) {
                     Ok(reply) => {
-                        *worker.devices.lock().unwrap() = reply["devices"].as_array().unwrap().clone();
+                        {
+                            let mut devices=worker.devices.lock().unwrap();
+                            let mut next=reply["devices"].as_array().unwrap().clone();
+                            for device in &mut next {
+                                if let Some(previous)=devices.iter().find(|previous|previous["id"]==device["id"]) {
+                                    for key in ["flow_in","flow_out"] { device[key]=previous[key].clone(); }
+                                }
+                            }
+                            *devices=next;
+                        }
                         if let Ok(state)=crate::state_store::snapshot(&config) {
                             if last_appearance.as_ref().is_none_or(|previous| !Arc::ptr_eq(previous,&state.appearance)) {
                                 if refresh_chat_appearance(&config,&state,&reply["devices"]).is_ok() { last_appearance=Some(state.appearance.clone()); }

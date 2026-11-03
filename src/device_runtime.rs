@@ -1,4 +1,4 @@
-// device_runtime.rs v1.22.480
+// device_runtime.rs v1.22.482
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
@@ -55,7 +55,7 @@ impl Runtime {
             self.child.take();
             self.error = Some("Il blocco standby non è più attivo".into());
         }
-        json!({"available":true,"observed_at":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,"power_mode":self.power_mode,"power_applied":self.power_mode=="normal" || self.child.is_some(),"active":self.awake_pending.unwrap_or(self.child.is_some()),"error":self.error,"restarting":self.restarting,"build":build(),"desktop":*self.desktop.lock().unwrap(),"update":*self.update.lock().unwrap()})
+        json!({"available":true,"active_chats":crate::terminal::active_chats(),"observed_at":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,"power_mode":self.power_mode,"power_applied":self.power_mode=="normal" || self.child.is_some(),"active":self.awake_pending.unwrap_or(self.child.is_some()),"error":self.error,"restarting":self.restarting,"build":build(),"desktop":*self.desktop.lock().unwrap(),"update":*self.update.lock().unwrap()})
     }
     fn start_inhibitor(mode: &str) -> io::Result<Child> {
         let mut child = Command::new(executable_path(std::env::current_exe()?)?).args(["keep-awake-hold",mode])

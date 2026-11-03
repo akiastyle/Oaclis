@@ -1,4 +1,4 @@
-// map.js v4.124.3297
+// map.js v4.128.3380
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -25,31 +25,60 @@ function updateBadgeMotion(marker, connection) {
   marker.badgeMotion.update({ phase, modules });
 }
 
-// Preview direction only: the original paths and transfer controls stay untouched.
-function previewLinkFlow(node) {
-  document.querySelectorAll('.link-flow-overlay').forEach(overlay => overlay.remove());
-  if (!node || node.dataset.dragging || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const id = node.dataset.id;
-  const paths = [...document.querySelectorAll('.chat-link')]
-    .filter(layer => layer.dataset.source === id || layer.dataset.target === id)
-    .map(layer => ({ path: layer.querySelector('.connection-lines > path'), both: layer.dataset.operation === 'sync' }));
-  for (const path of document.querySelectorAll('#mobile-links > path')) {
-    if (path.dataset.source === id || path.dataset.target === id) paths.push({ path, both: false });
+// Reuse status events; a stationary connection has no animated overlay.
+function updateLinkFlow(path, directions) {
+  if (!path) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) directions = [];
+  const signature = directions.join(':');
+  if (path.flowDirections === signature) return;
+  path.flowDirections = signature;
+  path.flowOverlay?.remove();
+  if (!directions.length) return;
+  const overlay = document.createElementNS(path.namespaceURI, 'g');
+  overlay.classList.add('link-flow-overlay');
+  path.flowOverlay = overlay;
+  for (const reverse of directions) {
+    const trace = document.createElementNS(path.namespaceURI, 'path');
+    trace.setAttribute('d', path.getAttribute('d'));
+    trace.setAttribute('pathLength', '1');
+    if (path.dataset.id) trace.dataset.id = path.dataset.id;
+    trace.classList.add('link-flow-trace');
+    if (reverse) trace.classList.add('is-reverse');
+    overlay.append(trace);
   }
-  for (const { path, both } of paths) {
-    const overlay = document.createElementNS(path.namespaceURI, 'g');
-    overlay.classList.add('link-flow-overlay');
-    for (const reverse of both ? [false, true] : [false]) {
-      const trace = document.createElementNS(path.namespaceURI, 'path');
-      trace.setAttribute('d', path.getAttribute('d'));
-      trace.setAttribute('pathLength', '1');
-      if (path.dataset.id) trace.dataset.id = path.dataset.id;
-      trace.style.stroke = getComputedStyle(path).stroke;
-      trace.classList.add('link-flow-trace');
-      if (reverse) trace.classList.add('is-reverse');
-      overlay.append(trace);
+  path.parentNode.append(overlay);
+}
+
+function renderActiveLinkFlows() {
+  const online = id => id === 'master' || data.connections?.[id] === 'online';
+  for (const layer of document.querySelectorAll('.chat-link')) {
+    const connection = chatLinks.find(value => JSON.stringify([value.entry.id, value.source, value.target]) === layer.dataset.renderKey);
+    let directions = [];
+    if (connection && online(connection.source) && online(connection.target) && !data.paused) {
+      const pair = [connection.entry.id, ...[connection.source, connection.target].sort()].join(':');
+      const current = data.job?.link_key === pair ? data.job : [data.transfers?.[connection.source + ':' + connection.entry.id], data.transfers?.[connection.target + ':' + connection.entry.id]].find(record => record && record.chat_id === connection.entry.id && [record.source_device_id, record.device_id].sort().join(':') === [connection.source, connection.target].sort().join(':'));
+      const running = connection.flow?.phase === 'transferring' || current?.status === 'running';
+      const matches = !current?.generation || !connection.flow?.generation || current.generation === connection.flow.generation;
+      if (running && matches && !['paused', 'failed', 'completed'].includes(current?.status)) {
+        const source = current?.source_device_id || (connection.flow?.newer === 'target' ? connection.target : connection.source);
+        directions = [source === connection.target];
+      } else if (!running && [connection.source, connection.target].some(id => data.device_runtime?.[id]?.active_chats?.includes(connection.entry.id))) {
+        directions = connection.operation === 'sync' ? [false, true] : [false];
+      }
     }
-    path.parentNode.append(overlay);
+    updateLinkFlow(layer.querySelector('.connection-lines > path'), directions);
+  }
+  for (const path of document.querySelectorAll('#mobile-links > path')) {
+    const phone = data.mobile_devices?.find(device => device.id === path.dataset.id);
+    let directions = [];
+    if (phone?.active) {
+      if (phone.flow_out) directions.push(false);
+      if (phone.flow_in) directions.push(true);
+    } else if (!phone && online(path.dataset.source) && online(path.dataset.target)) {
+      const owner = data.device_runtime?.[path.dataset.source];
+      if (chatLinks.some(link => link.operation === 'console' && link.source === path.dataset.source && link.target === path.dataset.target && owner?.active_chats?.includes(link.entry.id))) directions = [false, true];
+    }
+    updateLinkFlow(path, directions);
   }
 }
 
@@ -192,6 +221,7 @@ function renderLinkNow(force = false) {
     else if (existing) disposeChatLink(existing);
   });
   for (const layer of layers.values()) disposeChatLink(layer);
+  renderActiveLinkFlows();
 }
 
 // Split the original cubic at the badge, preserving its shape and endpoint tangents.
@@ -730,10 +760,6 @@ function renderMap(animate = false) {
         node.append(port);
       }
     }
-    node.onpointerenter = event => { if (event.pointerType !== 'touch') previewLinkFlow(node); };
-    node.onpointerleave = () => previewLinkFlow(null);
-    node.onfocus = () => previewLinkFlow(node);
-    node.onblur = () => previewLinkFlow(null);
     let start,
       moved = false;
     node.onpointerdown = (e) => {
@@ -804,6 +830,7 @@ function renderMap(animate = false) {
 }
 
 function renderConnections() {
+  renderActiveLinkFlows();
   const root=$("#nodes");
   const graph=JSON.stringify([chatLinks,link,linkPositions,data.connections,data.appearance,data.chats?.map(chat=>[chat.id,chat.name]),data.deleted_chats,data.mobile_devices?.map(({id,active,chat_ids})=>[id,active,chat_ids])]);
   if(root.connectionLinksState!==graph){root.connectionLinksState=graph;renderLink();}
@@ -956,7 +983,7 @@ function renderMobileLinks() {
     arrows.get(device.id).dataset.active = path.dataset.active;
   }
   document.querySelectorAll('.access-chat').forEach(node=>{if(!badges.has(node.dataset.accessKey))node.remove();});
-  for (const item of [...svg.querySelectorAll(':scope > path, defs > marker')]) if (!keep.has(item.dataset.id)) item.remove();
+  for (const item of [...svg.querySelectorAll(':scope > path, defs > marker')]) if (!keep.has(item.dataset.id)) { item.flowOverlay?.remove(); item.remove(); }
 }
 
 function renderAccessBadges(path, group, keep, markers) {
