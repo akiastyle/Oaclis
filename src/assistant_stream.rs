@@ -1,4 +1,4 @@
-// assistant_stream.rs v1.12.299
+// assistant_stream.rs v1.14.324
 //! Bounded, on-demand observation of already loaded Codex threads; never starts a turn.
 use serde_json::{Value,json};
 use std::{collections::{BTreeMap,VecDeque},io,os::unix::net::UnixStream,path::Path,sync::{Arc,Mutex,OnceLock,atomic::{AtomicBool,Ordering}},thread,time::{Duration,Instant}};
@@ -107,7 +107,7 @@ impl Feed {
 fn send(socket:&mut WebSocket<UnixStream>,value:Value)->io::Result<()> {
     socket.send(Message::Text(value.to_string().into())).map_err(io::Error::other)
 }
-fn rpc(socket:&mut WebSocket<UnixStream>,id:u64,method:&str,params:Value)->io::Result<Value> {
+pub(crate) fn rpc(socket:&mut WebSocket<UnixStream>,id:u64,method:&str,params:Value)->io::Result<Value> {
     send(socket,json!({"id":id,"method":method,"params":params}))?;
     let deadline=Instant::now()+Duration::from_secs(5);
     while Instant::now()<deadline {
@@ -121,13 +121,17 @@ fn rpc(socket:&mut WebSocket<UnixStream>,id:u64,method:&str,params:Value)->io::R
     }
     Err(io::Error::new(io::ErrorKind::TimedOut,"Osservazione Codex non disponibile"))
 }
-fn follow(root:&Path,chat:&str,reader:&Reader)->io::Result<()> {
+pub(crate) fn connect(root:&Path)->io::Result<WebSocket<UnixStream>> {
     let stream=UnixStream::connect(root.join("app-server-control/app-server-control.sock"))?;
     stream.set_read_timeout(Some(Duration::from_millis(500)))?;stream.set_write_timeout(Some(Duration::from_secs(2)))?;
     let config=tungstenite::protocol::WebSocketConfig::default().max_message_size(Some(1048576)).max_frame_size(Some(1048576));
     let (mut socket,_)=tungstenite::client::client_with_config("ws://localhost/",stream,Some(config)).map_err(io::Error::other)?;
     rpc(&mut socket,0,"initialize",json!({"clientInfo":{"name":"oaclis-speech","version":env!("OACLIS_APP_VERSION")}}))?;
     send(&mut socket,json!({"method":"initialized","params":{}}))?;
+    Ok(socket)
+}
+fn follow(root:&Path,chat:&str,reader:&Reader)->io::Result<()> {
+    let mut socket=connect(root)?;
     let loaded=rpc(&mut socket,1,"thread/loaded/list",json!({}))?;
     if !loaded["data"].as_array().is_some_and(|ids|ids.iter().any(|id|id==chat)) {return Err(io::Error::other("Chat non attiva"));}
     let resumed=rpc(&mut socket,2,"thread/resume",json!({"threadId":chat,"excludeTurns":true}))?;
@@ -210,6 +214,23 @@ mod tests {
         assert_eq!(feed.snapshot(None)["activity"],"Running");
         feed.event(chat,&json!({"method":"turn/completed","params":{"threadId":chat}}));
         assert!(feed.snapshot(None)["activity"].is_null());
+    }
+    #[test]
+    fn rename_uses_running_codex_without_starting_a_process() {
+        let root=std::env::temp_dir().join(format!("oaclis-rename-socket-{}",std::process::id()));
+        std::fs::create_dir_all(root.join("app-server-control")).unwrap();
+        let listener=std::os::unix::net::UnixListener::bind(root.join("app-server-control/app-server-control.sock")).unwrap();
+        let server=thread::spawn(move||{
+            let (stream,_)=listener.accept().unwrap();stream.set_read_timeout(Some(Duration::from_secs(3))).unwrap();
+            let mut ws=tungstenite::accept(stream).unwrap();
+            let read=|ws:&mut WebSocket<UnixStream>|->Value {loop {if let Message::Text(text)=ws.read().unwrap(){break serde_json::from_str(&text).unwrap();}}};
+            assert_eq!(read(&mut ws)["method"],"initialize");send(&mut ws,json!({"id":0,"result":{}})).unwrap();
+            assert_eq!(read(&mut ws)["method"],"initialized");
+            let request=read(&mut ws);assert_eq!(request["method"],"thread/name/set");assert_eq!(request["params"]["name"],"Nuovo nome");
+            send(&mut ws,json!({"id":1,"result":{}})).unwrap();
+        });
+        crate::catalog::rename(&root,&root,"00000000-0000-0000-0000-000000000001","Nuovo nome").unwrap();
+        server.join().unwrap();std::fs::remove_dir_all(root).unwrap();
     }
     #[test]
     fn observer_subscribes_only_to_loaded_thread_without_starting_turns() {

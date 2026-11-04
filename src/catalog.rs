@@ -1,4 +1,4 @@
-// catalog.rs v2.39.1818
+// catalog.rs v2.39.1825
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -272,8 +272,11 @@ pub(crate) fn rename(home: &Path, root: &Path, id: &str, name: &str) -> io::Resu
         return Err(crate::invalid("Nome chat non valido"));
     }
     crate::appearance::Appearance { label: name.into(), ..Default::default() }.validate()?;
-    native(home,root,false,|client|client.request("thread/name/set",json!({"threadId":id,"name":name})).map(|_|()))
-        .map_err(|_|io::Error::other("Impossibile rinominare la chat in Codex. Riprova."))
+    let params=json!({"threadId":id,"name":name});
+    match crate::assistant_stream::connect(root) {
+        Ok(mut socket)=>crate::assistant_stream::rpc(&mut socket,1,"thread/name/set",params).map(|_|()),
+        Err(_)=>native(home,root,false,|client|client.request("thread/name/set",params).map(|_|())),
+    }.map_err(|_|io::Error::other("Impossibile rinominare la chat in Codex. Riprova."))
 }
 fn native<T>(home:&Path,root:&Path,release:bool,work:impl FnOnce(&mut NativeClient)->io::Result<T>)->io::Result<T> {
     static CLIENT:std::sync::OnceLock<std::sync::Mutex<Option<(std::path::PathBuf,NativeClient)>>>=std::sync::OnceLock::new();
