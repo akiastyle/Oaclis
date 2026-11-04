@@ -1,4 +1,4 @@
-// terminal-format.js v1.21.167
+// terminal-format.js v1.29.212
 "use strict";
 const OaclisTerminal = (() => {
   const palette=['#000000','#cd3131','#0dbc79','#e5e510','#2472c8','#bc3fbc','#11a8cd','#e5e5e5','#666666','#f14c4c','#23d18b','#f5f543','#3b8eea','#d670d6','#29b8db','#ffffff'];
@@ -158,5 +158,48 @@ function consoleScreen(value){
  sendButton.onkeydown=event=>{if(event.key==='ArrowDown'||event.key==='ContextMenu'||event.shiftKey&&event.key==='F10'){event.preventDefault();showSendMenu();}};
  return Object.assign(()=>{document.removeEventListener('pointerdown',dismissSendMenu);document.removeEventListener('keydown',dismissSendMenu);cancelHold();sendMenu.remove();},{show:showSendMenu});
   }
-  return {render,renderConsole,parse,consoleScreen,imageData,attachImages,attachSendMenu};
+  function chatIcon(chat){
+ const icon=document.createElement('span');icon.className='authorized-icon';icon.setAttribute('aria-hidden','true');
+ if(typeof chat.icon==='string'&&/^data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+/=]*$/.test(chat.icon)&&chat.icon.length<=48000){const image=document.createElement('img');image.src=chat.icon;image.alt='';icon.append(image);}
+ else if(Object.hasOwn(OaclisIcons,chat.icon))icon.innerHTML=OaclisIcon(chat.icon);
+ else icon.textContent=[...chat.name.trim()][0]?.toLocaleUpperCase()||'?';
+ if(/^#[a-f0-9]{6}$/i.test(chat.color||''))icon.style.color=chat.color;
+ return icon;
+}
+  function createConsole(){
+   const view=document.createElement('section');view.className='oaclis-console';
+   view.innerHTML=OaclisSettings.html('<div class="console-panes"></div><form class="terminal-input"><div class="console-draft"><div class="console-attachment" hidden><img alt=""><button type="button" data-console-action="remove-image" aria-label="Rimuovi immagine">'+OaclisIcon('close')+'</button></div><textarea name="text" maxlength="8000" aria-label="Messaggio" rows="2" placeholder="Scrivi un messaggio" disabled></textarea></div><button type="submit" class="console-send icon-button" data-console-action="send" aria-label="Invia messaggio" aria-haspopup="menu" aria-expanded="false" disabled>'+OaclisIcon('arrowUp')+'</button></form><div class="terminal-keys"></div>');
+   const keys=view.querySelector('.terminal-keys');
+   for(const [key,label]of [['Escape','Esc'],['1','1'],['2','2'],['3','3'],['C-c','Ctrl+C']]){
+    const button=document.createElement('button');button.type='button';button.className='icon-button';button.textContent=label;button.dataset.key=key;button.setAttribute('aria-label',label);keys.append(button);
+   }
+   const voice=document.createElement('span');voice.className='voice-controls';keys.append(voice);
+   keys.addEventListener('click',event=>{const key=event.target.closest('button[data-key]')?.dataset.key;if(key)view.activeConsole.send(key==='C-c'?'stop':'input',{key});});
+   view.querySelector('form').onsubmit=event=>{event.preventDefault();view.activeConsole.send('input',{text:view.querySelector('textarea').value,key:'Enter'});};
+   view.querySelector('textarea').onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();view.querySelector('form').requestSubmit();}};
+   return view;
+  }
+  function createPane({id,name,icon},transport){
+   const pane=document.createElement('article');pane.className='console-pane';pane.setAttribute('aria-label',name);
+   pane.innerHTML=OaclisSettings.html('<h2 class="console-title"><span class="console-name"></span></h2><pre class="console-screen" tabindex="0" aria-label="Console">Connessione…</pre>');
+   pane.querySelector('.console-name').textContent=name;if(icon)pane.querySelector('h2').prepend(icon);
+   const screen=pane.querySelector('pre');
+   const chat=pane.console={id,send:transport,follow:true,revision:'',
+    render(result,operation='read',saved=null){
+     if(operation==='open'||operation==='input')chat.follow=saved?.follow??true;
+     const top=saved?.top??screen.scrollTop,left=saved?.left??screen.scrollLeft;
+     const changed=result.unchanged===true?false:renderConsole(screen,result.screen,result.screen_ansi);
+     if(typeof result.screen_revision==='string')chat.revision=result.screen_revision;
+     if(changed||saved||operation!=='read'){if(chat.follow)screen.scrollTop=screen.scrollHeight;else{screen.scrollTop=top;screen.scrollLeft=left;}}
+    },
+    reset(){chat.revision='';screen.replaceChildren();for(const key of ['consoleSource','consoleSourceAnsi','terminalText','terminalAnsi'])delete screen[key];}
+   };
+   screen.addEventListener('scroll',()=>{chat.follow=screen.scrollHeight-screen.clientHeight-screen.scrollTop<=24;},{passive:true});
+   screen.onkeydown=event=>{
+    const key=event.ctrlKey&&event.key.toLowerCase()==='c'&&!String(window.getSelection())?'C-c':({ArrowUp:'Up',ArrowDown:'Down',ArrowLeft:'Left',ArrowRight:'Right',Enter:'Enter',Tab:'Tab',Backspace:'BSpace'})[event.key];
+    if(key){event.preventDefault();chat.send(key==='C-c'?'stop':'input',{key});}
+   };
+   return pane;
+  }
+  return {render,renderConsole,parse,consoleScreen,imageData,attachImages,attachSendMenu,chatIcon,createConsole,createPane};
 })();

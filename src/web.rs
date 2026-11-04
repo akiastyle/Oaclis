@@ -1,4 +1,4 @@
-// web.rs v2.29.1915
+// web.rs v2.29.1917
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -240,7 +240,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 "/voice.js" => Some((include_str!("../relay/voice.js").into(), "text/javascript; charset=utf-8")),
                 "/read-aloud.js" => Some((include_str!("../relay/read-aloud.js").into(), "text/javascript; charset=utf-8")),
                 "/voice-local.js" => Some((include_str!("../ui/voice-local.js").into(), "text/javascript; charset=utf-8")),
-                "/voice-local.css" => Some((include_str!("../ui/voice-local.css").into(), "text/css; charset=utf-8")),
+                "/console.css" => Some((include_str!("../ui/console.css").into(), "text/css; charset=utf-8")),
                 "/console.js" => Some((include_str!("../ui/console.js").into(), "text/javascript; charset=utf-8")),
                 "/app.js" => Some((
                     include_str!("../ui/app.js").into(),

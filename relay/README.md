@@ -157,7 +157,7 @@ Il sottodominio deve avere HTTPS valido e document root `www/oaclis`. Origin e R
 Le richieste senza sessione valida o chiave amministrativa sono limitate a 60 al minuto per bucket derivato dall’IP di connessione (256 bucket fissi, senza fidarsi di X-Forwarded-For). Le richieste negate non acquisiscono il lock dello stato una volta raggiunto il limite; il traffico autenticato ne è esente. Il limite applicativo non sostituisce le protezioni anti-DDoS del provider.
 
 La console conserva colori ANSI, grassetto e colori RGB. Pubblicare anche terminal-format.js
-dalla stessa sorgente ui/terminal-format.js usata dal master, prima di index.php.
+dalla stessa sorgente ui/terminal-format.js usata dal master, insieme a ui/console.css, prima di index.php.
 Il testo resta separato dalla formattazione; nessun output della console viene interpretato come HTML.
 
 Il pulsante audio legge solo nuovi messaggi dell'assistente, a frasi complete, escludendo

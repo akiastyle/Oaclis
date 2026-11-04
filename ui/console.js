@@ -1,4 +1,4 @@
-// console.js v3.128.2304
+// console.js v3.131.2356
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -163,8 +163,8 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     existing.openTerminal?.();
     return;
   }
-  const panel = document.createElement("section");
-  panel.className = "chat-terminal";
+  const panel = OaclisTerminal.createConsole();
+  panel.classList.add("chat-terminal");
   activateConsoleWindow(panel,connection.entry,deviceId);
   panel.dataset.chatId = connection.entry.id;
   panel.dataset.deviceId = deviceId;
@@ -172,9 +172,10 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   panel.setAttribute("popover", "manual");
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", OaclisSettings.text("Console Codex · ") + deviceName(deviceId));
-  panel.innerHTML = OaclisSettings.html(('<button class="icon-button popover-close" aria-label="Chiudi chat">' + OaclisIcon('close') + '</button><h2><span class="terminal-title">')) + esc(chatLabel(connection.entry)) + ' · ' + esc(deviceName(deviceId)) + OaclisSettings.html('</span></h2><pre class="terminal-screen" tabindex="0" aria-label="Schermo Codex">Connessione…</pre><form class="terminal-input"><div class="console-draft"><div class="console-attachment" hidden><img alt=""><button type="button" aria-label="Rimuovi immagine">' + OaclisIcon('close') + '</button></div><textarea name="text" maxlength="8000" aria-label="Messaggio a Codex" rows="2" placeholder="Scrivi a Codex" disabled></textarea></div><button type="submit" class="icon-button" aria-label="Invia messaggio" aria-haspopup="menu" aria-expanded="false" disabled>' + OaclisIcon('arrowUp') + '</button></form><div class="terminal-keys"></div>');
-  panel.querySelector("h2").insertAdjacentHTML("afterbegin",badge(connection.entry));
-  panel.querySelector("h2 .chat-badge").style.color=appearance(connection.entry).color||"var(--ink)";
+  const chatIcon=OaclisTerminal.chatIcon({...connection.entry,...appearance(connection.entry),name:chatLabel(connection.entry)});
+  const pane=OaclisTerminal.createPane({id:connection.entry.id,name:chatLabel(connection.entry)+' · '+deviceName(deviceId),icon:chatIcon},(action,body)=>action==='stop'?stopConsole():Object.hasOwn(body,'text')?submit():send({action,...body}));
+  const chat=pane.console;panel.activeConsole=chat;panel.querySelector('.console-panes').append(pane);
+  const close=document.createElement('button');close.type='button';close.className='icon-button popover-close';close.setAttribute('aria-label',OaclisSettings.text('Chiudi chat'));close.innerHTML=OaclisIcon('close');panel.querySelector('h2').append(close);
   document.body.append(panel);
   panel.showPopover();
   if(document.documentElement.dataset.consoleWindow)panel.classList.add('context-popover','resizable-panel');
@@ -233,13 +234,9 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   const status = document.createElement("small"); status.className = "terminal-state"; status.setAttribute("role", "status"); panel.querySelector("h2").append(status);
   status.addEventListener("mouseenter",()=>{status.title=status.textContent;});
   const jobs=document.createElement("span");panel.querySelector("h2").append(jobs);panel.jobsStatus=OaclisJobs.inline(jobs);
-  let followOutput = true;
-  screen.addEventListener("scroll", () => { followOutput = screen.scrollHeight-screen.clientHeight-screen.scrollTop <= 24; }, {passive:true});
-  let screenRevision="", stopping=false, busy = false, ready = false, submitting = false, preparingImage = false, image = null, waitingInputs = 0, idle = Promise.resolve();
+  let stopping=false,busy=false,ready=false,submitting=false,preparingImage=false,image=null,waitingInputs=0,idle=Promise.resolve();
   panel.resetTerminal=()=>{
-    clearTimeout(panel.terminalTimer);ready=false;screenRevision="";
-    screen.replaceChildren();
-    for(const key of ['consoleSource','consoleSourceAnsi','terminalText','terminalAnsi'])delete screen[key];
+    clearTimeout(panel.terminalTimer);ready=false;chat.reset();
     if(!panel.sessionStopped)fetch('/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,action:'reset'}),keepalive:true}).catch(()=>{});
   };
   const send = async value => {
@@ -252,7 +249,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     try {
       if (value.action !== "read") status.textContent = OaclisSettings.text("Operazione in corso");
       const stamp = window.OaclisLocalVoice?.stamp(panel);
-      const result = await api("terminal", { ...payload, ...(value.action==="read"&&screenRevision?{screen_revision:screenRevision}:{}), ...value, ...window.OaclisLocalVoice?.request(panel) });
+      const result = await api("terminal", { ...payload, ...(value.action==="read"&&chat.revision?{screen_revision:chat.revision}:{}), ...value, ...window.OaclisLocalVoice?.request(panel) });
       if (!panel.isConnected) return false;
       if (result.stopped === true) {
         const event={kind:'oaclis-console-stopped',chat_id:connection.entry.id,device_id:deviceId};
@@ -260,21 +257,14 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
         return false;
       }
       panel.jobsStatus.update(result.jobs?.map(job=>job.device_id==='master'&&deviceId!=='master'?{...job,device_id:deviceId}:job));
-      const top=screen.scrollTop,left=screen.scrollLeft;
-      const changed=result.unchanged===true?false:OaclisTerminal.renderConsole(screen,result.screen,result.screen_ansi);
-      if(typeof result.screen_revision==='string')screenRevision=result.screen_revision;
-      if (value.action === "input" || value.action === "open") followOutput = true;
-      if (changed || value.action !== "read") {
-        if (followOutput) screen.scrollTop = screen.scrollHeight;
-        else {screen.scrollTop=top;screen.scrollLeft=left;}
-      }
+      chat.render(result,value.action);
       window.OaclisLocalVoice?.update(panel,result,stamp,typeof value.text === "string");
       if (value.action !== "read" || status.dataset.error) status.textContent=OaclisSettings.text(value.action === "input" ? "Inviato" : "Collegato");
       delete status.dataset.error;
       ready = true;
       form.querySelectorAll("textarea,button").forEach(e => e.disabled = false);
       return true;
-    } catch (error) { if (panel.isConnected) {panel.jobsStatus.stale();status.textContent=OaclisSettings.text(value.action === "input" ? "Invio non confermato" : "Collegamento temporaneamente non disponibile. Riprova.");status.dataset.error="true";} if (value.action === "open") ready = false; return false; }
+    } catch (error) { if (panel.isConnected) {panel.jobsStatus.stale();status.textContent=OaclisSettings.text(value.action === "input" ? "Invio non confermato" : "Collegamento temporaneamente non disponibile. Riprova.");status.dataset.error="true";} if (value.action === "open") ready = false; console.error(error);throw error; }
     finally { busy = false; done(); }
   };
   let terminalPolling=false;
@@ -284,8 +274,8 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     try { await send({ action: "read" }); }
     finally {
       terminalPolling=false;clearTimeout(panel.terminalTimer);
-      if (panel.isConnected && ready && !document.hidden) panel.terminalTimer=setTimeout(pollTerminal,1500);
     }
+    if (panel.isConnected && ready && !document.hidden) panel.terminalTimer=setTimeout(pollTerminal,1500);
   };
   panel.terminalVisibility=()=>{clearTimeout(panel.terminalTimer);if(!document.hidden)pollTerminal();};
   document.addEventListener('visibilitychange',panel.terminalVisibility);
@@ -298,7 +288,6 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
       return sent;
     } finally {submitting=false;}
   };
-  form.onsubmit=guard(async event=>{event.preventDefault();await submit();});
   const sendButton=form.querySelector('button[type="submit"]'),preview=form.querySelector('.console-attachment');
   const removeImage=()=>{image=null;preview.hidden=true;preview.querySelector('img').removeAttribute('src');panel.sendWindowDraft?.();};
   preview.querySelector('button').onclick=removeImage;
@@ -330,9 +319,6 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   panel.closeImageInput=OaclisTerminal.attachImages(panel,attachImage);
   panel.closeSendMenu=OaclisTerminal.attachSendMenu(form,sendButton,{pickImage,submit,closed:()=>!panel.isConnected});
   panel.voiceAdapter={chatId:connection.entry.id,compose:form.elements.text,send:submit,sending:()=>submitting||preparingImage,takePhoto:()=>pickImage(true),pickImage:()=>pickImage(false),removeImage,hasAttachment:()=>!!image};
-  form.elements.text.onkeydown = event => {
-    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) { event.preventDefault(); form.requestSubmit(); }
-  };
   const stopConsole=async()=>{
     if(!ready||stopping)return;stopping=true;
     try{if(await send({action:'stop'})){
@@ -340,20 +326,6 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
       consoleChannel?.postMessage(value);window.opener?.postMessage(value,location.origin);closeStoppedChatWindows(value);
     }}
     finally{stopping=false;}
-  };
-  for (const [key, label] of [["Escape", "Esc"], ["1", "1"], ["2", "2"], ["3", "3"], ["C-c", "Ctrl+C"]]) {
-    const button = document.createElement("button");
-    button.type = "button"; button.className = "icon-button";
-    button.textContent=label;button.dataset.key=key;button.setAttribute("aria-label",label);
-    button.onclick=()=>{if(ready){if(key==='C-c')stopConsole();else send({action:"input",key});}};
-    panel.querySelector(".terminal-keys").append(button);
-  }
-  screen.onkeydown = e => {
-    if(ready&&e.ctrlKey&&e.key.toLowerCase()==='c'&&!String(window.getSelection())){
-      e.preventDefault();stopConsole();return;
-    }
-    const keys = { ArrowUp: "Up", ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right", Enter: "Enter", Tab: "Tab", Backspace: "BSpace" };
-    if (ready && keys[e.key]) { e.preventDefault(); send({ action: "input", key: keys[e.key] }); }
   };
   panel.openTerminal=async()=>{
     if(ready||busy)return;

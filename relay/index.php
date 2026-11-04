@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.626
+// index.php v1.8.630
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -360,7 +360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD']!=='GET') {http_response_code(405);exit;}
 function pwaVersion(): string {
     $sums=[0,0,0]; $counts=[0,0,0];
-    foreach (['index.php','app.js','style.css','voice.js','read-aloud.js','security.js','sw.js','locale.js','engines.js','jobs.js','jobs.css','icons.js','terminal-format.js'] as $file) {
+    foreach (['index.php','app.js','style.css','voice.js','read-aloud.js','security.js','sw.js','locale.js','engines.js','jobs.js','jobs.css','icons.js','terminal-format.js','console.css'] as $file) {
         $source=file_get_contents(__DIR__.'/'.$file,false,null,0,512);
         if ($source===false || !preg_match('/'.preg_quote($file,'/').' v([0-9]+)\.([0-9]+)\.([0-9]+)/',$source,$match)) throw new RuntimeException('Missing PWA source version');
         for ($i=0;$i<3;$i++) {
@@ -375,5 +375,5 @@ function pwaVersion(): string {
 }
 ?>
 <!doctype html>
-<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><meta name="theme-color" content="#111314"><link rel="stylesheet" href="/jobs.css?v=<?= hash_file('sha256', __DIR__.'/jobs.css') ?>"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-192.png"><link rel="stylesheet" href="/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><script defer src="/locale.js?v=<?= hash_file('sha256', __DIR__.'/locale.js') ?>"></script><script defer src="/engines.js?v=<?= hash_file('sha256', __DIR__.'/engines.js') ?>"></script><script defer src="/jobs.js?v=<?= hash_file('sha256', __DIR__.'/jobs.js') ?>"></script><script defer src="/icons.js?v=<?= hash_file('sha256', __DIR__.'/icons.js') ?>"></script><script defer src="/voice.js?v=<?= hash_file('sha256', __DIR__.'/voice.js') ?>"></script><script defer src="/security.js?v=<?= hash_file('sha256', __DIR__.'/security.js') ?>"></script><script defer src="/terminal-format.js?v=<?= hash_file('sha256', __DIR__.'/terminal-format.js') ?>"></script><script defer src="/read-aloud.js?v=<?= hash_file('sha256', __DIR__.'/read-aloud.js') ?>"></script><script defer src="/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><meta name="theme-color" content="#111314"><link rel="stylesheet" href="/jobs.css?v=<?= hash_file('sha256', __DIR__.'/jobs.css') ?>"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-192.png"><link rel="stylesheet" href="/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><link rel="stylesheet" href="/console.css?v=<?= hash_file('sha256', __DIR__.'/console.css') ?>"><script defer src="/locale.js?v=<?= hash_file('sha256', __DIR__.'/locale.js') ?>"></script><script defer src="/engines.js?v=<?= hash_file('sha256', __DIR__.'/engines.js') ?>"></script><script defer src="/jobs.js?v=<?= hash_file('sha256', __DIR__.'/jobs.js') ?>"></script><script defer src="/icons.js?v=<?= hash_file('sha256', __DIR__.'/icons.js') ?>"></script><script defer src="/voice.js?v=<?= hash_file('sha256', __DIR__.'/voice.js') ?>"></script><script defer src="/security.js?v=<?= hash_file('sha256', __DIR__.'/security.js') ?>"></script><script defer src="/terminal-format.js?v=<?= hash_file('sha256', __DIR__.'/terminal-format.js') ?>"></script><script defer src="/read-aloud.js?v=<?= hash_file('sha256', __DIR__.'/read-aloud.js') ?>"></script><script defer src="/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
 <body><main id="app" data-pwa-version="<?= pwaVersion() ?>" hidden aria-live="polite"></main></body></html>

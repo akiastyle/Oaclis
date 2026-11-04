@@ -1,4 +1,4 @@
-// read-aloud.js v1.21.276
+// read-aloud.js v1.22.278
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -119,7 +119,7 @@ window.OaclisReadAloud=(()=>{
   button.onclick=()=>{if(enabled)stop();else enable();};
   if(!engine||!window.SpeechSynthesisUtterance){button.disabled=true;button.title=OaclisSettings.text('Lettura non disponibile');}else paint();
   const hidden=()=>{if(!enabled)return;if(document.hidden){clearTimeout(speechTimer);speechTimer=null;engine.pause?.();}else{lastSpeechProgress=Date.now();engine.resume?.();if(recoverSpeech&&!speechTimer)speechTimer=setTimeout(recoverSpeech,1500);play();}};document.addEventListener('visibilitychange',hidden);host.append(button);if(desired)enable(true);
-  return {enable,disable:stop,skip,defer,commandOnly:()=>speaking||Date.now()<echoUntil,stamp:()=>generation,request:()=>({speech:enabled,speech_cursor:cursor}),update,speaking:()=>speaking,stop,destroy:()=>{stop(true,true);disposed=true;document.removeEventListener('visibilitychange',hidden);button.remove();}};
+  return {reset:(active=true)=>{stop(true,true);echoUntil=0;if(active&&desired)enable(true);},enable,disable:stop,skip,defer,commandOnly:()=>speaking||Date.now()<echoUntil,stamp:()=>generation,request:()=>({speech:enabled,speech_cursor:cursor}),update,speaking:()=>speaking,stop,destroy:()=>{stop(true,true);disposed=true;document.removeEventListener('visibilitychange',hidden);button.remove();}};
  }
  return {create,spokenText,feedback};
 })();

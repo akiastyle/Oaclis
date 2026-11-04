@@ -1,4 +1,4 @@
-// voice.js v1.38.701
+// voice.js v1.47.832
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -31,8 +31,9 @@ window.OaclisVoice=(()=>{
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   // Keep Android listening; repeated cumulative finals are reduced to their new suffix.
   const android=navigator.userAgentData?.platform==='Android'||/Android/i.test(navigator.userAgent);
-  let adapter=null,recognition=null,recorder=null,retiring=null,generation=0,revision=0,target=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=preferences.startMic,paused=false,locked=false,suspended=false,state='idle',disposed=false,utteranceRevision=0;
-  let button,status,preview,options,help,root,autoSendTimer;
+  const session=Recognition&&window.isSecureContext?new Recognition():null;
+  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,locked=false,state='idle',disposed=false,utteranceRevision=0,consumed=-1,commandsOnly=false,finalTranscript='';
+  let button,status,preview,options,help,root,autoSendTimer,reader=null,controls=null,info=null;
   const cancelAutoSend=()=>{clearTimeout(autoSendTimer);autoSendTimer=null;};
   function scheduleAutoSend(){
    cancelAutoSend();
@@ -44,28 +45,30 @@ window.OaclisVoice=(()=>{
     if(preferences.autoSend&&wanted&&!paused&&!document.hidden&&!blocked()&&!pending&&valid(field)&&adapter?.compose===field&&adapter?.chatId===chat&&field.value===value)action(()=>adapter.send());
    },preferences.waitFive?5000:3000);
   }
-  const blocked=()=>suspended||locked||adapter?.sending?.();
+  const blocked=()=>locked||adapter?.sending?.();
   const valid=field=>field?.isConnected&&!field.disabled&&!field.readOnly&&adapter?.fields().includes(field)&&['textarea','input'].includes(field.localName)&&field.type!=='password';
   const feedback=text=>{if(status)status.textContent=locale.text(text);};
   const paint=()=>{
    if(!button)return;
    if(button.disabled){button.dataset.mode='off';button.setAttribute('aria-pressed','false');button.title=locale.text('Voce non disponibile in questo browser.');button.setAttribute('aria-label',button.title);return;}
-   const mode=!wanted?'off':paused?'paused':state==='listening'&&!blocked()?'listening':'busy';
+   const mode=!wanted?'off':paused?'paused':state==='listening'?'listening':'busy';
    button.dataset.state=state;button.dataset.mode=mode;button.setAttribute('aria-pressed',String(wanted));
    button.title=locale.text(({off:'Attiva voce',paused:'Dettatura in pausa · riprendi',listening:'Dettatura attiva · clic per spegnere',busy:'Collegamento o elaborazione vocale · clic per spegnere'})[mode]);
    button.setAttribute('aria-label',button.title);
   };
   const clearPending=()=>{clearTimeout(pendingTimer);pending=null;if(options){if(options.open)options.close();options.replaceChildren();}};
-  function releaseSession(session){
-   for(const name of ['onstart','onspeechstart','onspeechend','onresult','onerror','onend'])session[name]=null;
+  function setListening(on,silent=true){
+   if(on===wanted||disposed||!session)return;
+   wanted=on;paused=false;cancelAutoSend();clearPending();
+   if(!silent)OaclisReadAloud.feedback();
+   if(preview)preview.textContent='';
+   try{
+    if(on){consumed=-1;finalTranscript='';utteranceRevision=revision;state='starting';session.start();}
+    else{state='idle';session.abort();}
+   }catch(error){state='error';feedback('Microfono non avviato.');paint();throw error;}
+   paint();
   }
-  const invalidate=()=>{
-   clearTimeout(retryTimer);retryTimer=null;generation++;
-   const old=recognition;recognition=null;
-   if(old){retiring=old;state='stopping';try{old.abort();}catch{releaseSession(old);recorder=null;retiring=null;}}
-   if(preview)preview.textContent='';if(!retiring)state='idle';paint();
-  };
-  const stop=(silent=true)=>{cancelAutoSend();if(wanted&&!silent)window.OaclisReadAloud?.feedback();wanted=false;paused=false;retries=0;clearPending();invalidate();feedback('Ascolto disattivato');};
+  const stop=(silent=true)=>setListening(false,silent);
   function insert(value){
    const field=target;
    if(!valid(field)){feedback('Seleziona un campo oppure pronuncia un comando');return;}
@@ -103,6 +106,7 @@ window.OaclisVoice=(()=>{
   }
   function available(id){
    if(['stop','help','pauseRec','resumeRec','selectChat'].includes(id))return true;
+   if(['readOn','readOff','readStop'].includes(id))return !!adapter.chatId;
    if(id==='send')return valid(adapter?.compose)&&typeof adapter?.send==='function';
    if(id==='clearDraft')return !!adapter?.compose?.value||adapter?.hasAttachment?.()===true;
    return typeof adapter?.[id]==='function';
@@ -122,7 +126,7 @@ window.OaclisVoice=(()=>{
    if(blocked()){feedback('Operazione in corso');return;}
    cancelAutoSend();locked=true;clearPending();
    try{const result=await task();feedback(result===false?'Operazione non completata. Riprova.':'Comando eseguito');}catch{feedback('Operazione non completata. Riprova.');}
-   finally{locked=false;if(wanted&&!document.hidden&&!disposed)start();}
+   finally{locked=false;paint();}
   }
   function openChat(chat,method='selectChat'){
    const current=adapter?.chats().find(item=>item.id===chat.id);
@@ -137,21 +141,22 @@ window.OaclisVoice=(()=>{
    const chat=choice.items[index];clearPending();return openChat(chat,choice.method);
   }
   async function route(segment,commandsOnly=false){
-   if(blocked()){feedback('Operazione in corso');return;}
    const result=parse(segment);
    const audio=result.type==='command'&&['readOn','readOff','readStop','selectPane'].includes(result.id);
    const media=result.type==='command'&&['takePhoto','pickImage','removeImage'].includes(result.id);
    const navigation=result.type==='command'&&['selectChat','splitChat'].includes(result.id);
    const recording=result.type==='command'&&['pauseRec','resumeRec','stop','help'].includes(result.id);
-   if((commandsOnly||adapter?.commandOnly?.())&&!audio&&!media&&!navigation&&!recording)return;
-   if(audio||media){if(available(result.id))await action(()=>adapter[result.id](result.args));else feedback('Comando non disponibile in questa schermata.');return;}
+   if((commandsOnly||reader?.commandOnly())&&!audio&&!media&&!navigation&&!recording)return;
    if(result.type==='command'){
     cancelAutoSend();
     if(result.id==='stop'){stop(false);return;}
-    if(result.id==='pauseRec'){if(!paused)window.OaclisReadAloud?.feedback();paused=true;clearPending();preview.textContent='';paint();return;}
-    if(result.id==='resumeRec'){if(paused)window.OaclisReadAloud?.feedback();paused=false;paint();return;}
+    if(result.id==='pauseRec'){if(!paused)OaclisReadAloud.feedback();paused=true;clearPending();preview.textContent='';paint();return;}
+    if(result.id==='resumeRec'){if(paused)OaclisReadAloud.feedback();paused=false;paint();return;}
     if(result.id==='help'){if(help.open)help.close();else showHelp();return;}
    }
+   if(audio){if(available(result.id)){if(['readOn','readOff','readStop'].includes(result.id))reader[{readOn:'enable',readOff:'disable',readStop:'skip'}[result.id]]();else adapter[result.id](result.args);}return;}
+   if(blocked()){feedback('Operazione in corso');return;}
+   if(media){await action(()=>adapter[result.id](result.args));return;}
    if(paused)return;
    if(pending){
     const value=normalize(segment).replace(new RegExp('^'+grammar.explicit+' '),'');
@@ -179,29 +184,21 @@ window.OaclisVoice=(()=>{
     default:await action(()=>adapter[id](args));
    }
   }
-  function retry(){
-   if(!wanted||document.hidden||blocked()||disposed)return;
-   if(retries>=3){wanted=false;state='error';paint();feedback('Ascolto interrotto. Tocca il microfono per riprovare.');return;}
-   const delay=[500,1000,2000][retries++];retryTimer=setTimeout(()=>{retryTimer=null;start();},delay);
-  }
-  function start(){
-   if(!Recognition||!window.isSecureContext||disposed||!wanted||!adapter||document.hidden||blocked()||recognition||retiring)return;
-   clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=(recorder??=new Recognition());let consumed=-1,sessionError=null,commandsOnly=false,finalTranscript='';recognition=session;
+  if(session){
    session.lang=locale.speechLanguage;session.continuous=true;session.interimResults=true;session.maxAlternatives=1;
-   state='starting';paint();utteranceRevision=revision;
-   const fresh=()=>!disposed&&recognition===session&&generation===current;
+   const fresh=()=>wanted&&!disposed;
    session.onstart=()=>{if(fresh()){state='listening';paint();}};
-   session.onspeechstart=()=>{if(fresh()){cancelAutoSend();commandsOnly=adapter?.commandOnly?.()===true;utteranceRevision=revision;state='listening';paint();}};
+   session.onspeechstart=()=>{if(fresh()){cancelAutoSend();commandsOnly=reader?.commandOnly()===true;utteranceRevision=revision;state='listening';paint();}};
    session.onspeechend=()=>{if(fresh()){state='processing';paint();}};
    session.onresult=event=>{
-    if(!fresh()||!adapter||blocked()||utteranceRevision!==revision)return;
+    if(!fresh()||!adapter||utteranceRevision!==revision)return;
     state='processing';paint();
     const interim=[];
     for(let i=event.resultIndex;i<event.results.length;i++){
-     if(!fresh()||blocked())break;
+     if(!fresh())break;
      const result=event.results[i];
      if(result.isFinal){
-      if(i<=consumed)continue;consumed=i;retries=0;preview.textContent='';
+      if(i<=consumed)continue;consumed=i;preview.textContent='';
       let transcript=result[0].transcript;
       if(android&&finalTranscript&&normalize(transcript).startsWith(normalize(finalTranscript)+' '))transcript=transcript.trim().split(/\s+/).slice(finalTranscript.trim().split(/\s+/).length).join(' ');
       finalTranscript=result[0].transcript;
@@ -209,26 +206,19 @@ window.OaclisVoice=(()=>{
      }
      else {cancelAutoSend();interim.push(result[0].transcript);}
     }
-    if(fresh()){preview.textContent=paused||commandsOnly||adapter?.commandOnly?.()?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
+    if(fresh()){preview.textContent=paused||commandsOnly||reader?.commandOnly()?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
    };
    session.onerror=event=>{
     if(!fresh())return;
-    sessionError=event.error;
-    if(android&&event.error==='no-speech'){feedback('In attesa della voce');return;}
-    const terminal=['not-allowed','service-not-allowed','audio-capture','language-not-supported'].includes(event.error);
-    const messages={'not-allowed':'Microfono non autorizzato.','service-not-allowed':'Servizio vocale non consentito.','audio-capture':'Microfono non disponibile.','network':'Rete vocale non disponibile.','language-not-supported':'Italiano non disponibile.'};
-    feedback(messages[event.error]||'Ascolto interrotto.');
-    if(terminal){wanted=false;invalidate();state='error';paint();}
+    const messages={'no-speech':'In attesa della voce','not-allowed':'Microfono non autorizzato.','service-not-allowed':'Servizio vocale non consentito.','audio-capture':'Microfono non disponibile.','network':'Rete vocale non disponibile.','language-not-supported':'Italiano non disponibile.'};
+    state='error';feedback(messages[event.error]||'Ascolto interrotto.');paint();
    };
    session.onend=()=>{
-    if(retiring===session){releaseSession(session);retiring=null;state='idle';paint();clearTimeout(retryTimer);retryTimer=null;if(wanted&&!document.hidden&&!blocked()&&!disposed)retryTimer=setTimeout(()=>{retryTimer=null;start();},0);return;}
-    if(!fresh())return;
-    releaseSession(session);recognition=null;state='idle';preview.textContent='';paint();
-    if(android&&(!sessionError||sessionError==='no-speech')){
-     wanted=false;state='error';paint();feedback('Ascolto interrotto. Tocca il microfono per riprovare.');
-    }else retry();
+    state=wanted?'error':'idle';
+    if(preview)preview.textContent='';
+    if(wanted)feedback('Ascolto interrotto. Tocca il microfono per riprovare.');
+    paint();
    };
-   try{session.start();}catch{if(fresh()){releaseSession(session);recognition=null;state='error';paint();feedback('Microfono non avviato.');retry();}}
   }
   function focus(event){
    if(valid(event.target)&&target!==event.target){
@@ -238,31 +228,38 @@ window.OaclisVoice=(()=>{
   function input(event){
    if(event.target===adapter?.compose)cancelAutoSend();
   }
-  function hidden(){if(document.hidden){cancelAutoSend();clearPending();}else if(wanted&&!retryTimer)start();}
+  function hidden(){if(document.hidden){cancelAutoSend();clearPending();}}
   function bind(next,host){
-   cancelAutoSend();
-   root?.remove();button?.remove();clearPending();revision++;target=null;adapter=next;suspended=false;
-   root=document.createElement('section');root.className='voice-panel';root.setAttribute('aria-label',locale.text('Controlli vocali'));
-   status=document.createElement('span');status.className='voice-sr';status.setAttribute('aria-live','polite');status.setAttribute('role','status');
-   preview=document.createElement('span');preview.className='voice-preview voice-sr';preview.setAttribute('aria-hidden','true');
-   options=document.createElement('dialog');options.className='voice-options voice-dialog';options.setAttribute('aria-label',locale.text('Conferma comando vocale'));options.addEventListener('cancel',event=>{event.preventDefault();clearPending();});
-   help=document.createElement('dialog');help.className='voice-help voice-dialog';help.setAttribute('aria-label',locale.text('Comandi vocali'));
-   root.append(status,preview,options,help);(document.getElementById('app')||document.body).append(root);
-   button=document.createElement('button');button.type='button';button.className='voice-mic secondary';button.innerHTML=OaclisIcon('microphone');
-   host.append(button);
-   button.onclick=()=>{if(wanted)stop(false);else{window.OaclisReadAloud?.feedback();wanted=true;paused=false;retries=0;start();}};
-   if(!Recognition||!window.isSecureContext){button.disabled=true;feedback('Voce non disponibile in questo browser.');}
-   paint();
-   if(wanted&&!blocked()&&!recognition&&!retryTimer)retryTimer=setTimeout(()=>{retryTimer=null;start();},0);
+   cancelAutoSend();clearPending();
+   const changed=adapter?.chatId!==next.chatId||adapter?.compose!==next.compose;
+   revision++;adapter=next;target=next.compose||next.fields()[0];
+   if(!button){
+    controls=host;controls.classList.add('voice-controls');
+    root=document.createElement('section');root.className='voice-panel';root.setAttribute('aria-label',locale.text('Controlli vocali'));
+    status=document.createElement('span');status.className='voice-sr';status.setAttribute('aria-live','polite');status.setAttribute('role','status');
+    preview=document.createElement('span');preview.className='voice-preview voice-sr';preview.setAttribute('aria-hidden','true');
+    options=document.createElement('dialog');options.className='voice-options voice-dialog';options.setAttribute('aria-label',locale.text('Conferma comando vocale'));options.addEventListener('cancel',event=>{event.preventDefault();clearPending();});
+    help=document.createElement('dialog');help.className='voice-help voice-dialog';help.setAttribute('aria-label',locale.text('Comandi vocali'));
+    root.append(status,preview,options,help);
+    button=document.createElement('button');button.type='button';button.className='voice-mic secondary icon-button';button.dataset.voiceAction='microphone';button.innerHTML=OaclisIcon('microphone');controls.append(button);
+    button.onclick=()=>setListening(!wanted,false);
+    if(!session){button.disabled=true;feedback('Voce non disponibile in questo browser.');}
+    info=document.createElement('button');info.type='button';info.className='voice-info secondary icon-button';info.dataset.voiceAction='commands';info.title=locale.text('Comandi vocali');info.setAttribute('aria-label',info.title);info.innerHTML=OaclisIcon('info');info.onclick=showHelp;controls.append(info);
+   }else if(host!==controls){host.replaceWith(controls);}
+   if(next.chatId&&!reader){
+    reader=OaclisReadAloud.create(controls);const read=controls.querySelector('.read-aloud');read.dataset.voiceAction='read';read.classList.add('icon-button');controls.insertBefore(read,info);
+   }else if(changed)reader?.reset(!!next.chatId);
+   const read=controls.querySelector('.read-aloud');if(read)read.hidden=!next.chatId;
+   (document.getElementById('app')||document.body).append(root);paint();
+   if(!initialized){initialized=true;if(preferences.startMic)setListening(true);}
   }
-  function leave(){cancelAutoSend();clearPending();suspended=true;revision++;target=null;adapter=null;root=null;button=null;status=null;preview=null;options=null;help=null;}
-  function ready(){if(adapter?.compose&&valid(adapter.compose)&&!target)target=adapter.compose;}
+  function leave(){cancelAutoSend();clearPending();reader?.reset(false);revision++;target=null;adapter=null;root?.remove();}
   function afterSend(){
    if(preferences.pauseAfterSend&&wanted&&!paused){cancelAutoSend();paused=true;paint();}
   }
-  function destroy(){stop();disposed=true;leave();recorder=null;document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
+  function destroy(){stop();disposed=true;leave();reader?.destroy();controls?.remove();if(session)for(const name of ['onstart','onspeechstart','onspeechend','onresult','onerror','onend'])session[name]=null;document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
   document.addEventListener('focusin',focus);document.addEventListener('input',input);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',stop);
-  return {bind,leave,ready,stop,destroy,showHelp,afterSend,pause:()=>{cancelAutoSend();clearPending();suspended=true;revision++;paint();},resume:()=>{suspended=false;if(wanted&&!blocked()&&!retryTimer)start();}};
+  return {bind,leave,stop,destroy,showHelp,afterSend,get reader(){return reader;}};
  }
  return {create,parse,resolve,commands,normalize,number,preferences};
 })();

@@ -1,4 +1,4 @@
-/* style.css v2.0.1564 */
+/* style.css v2.0.1593 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -808,7 +808,7 @@ select {
 #panel,
 .connection-port,
 .link-badge,
-.terminal-screen,
+.console-screen,
 .terminal-input textarea {
   --glass-base: var(--panel);
   background: color-mix(in srgb, var(--glass-base) var(--glass-opacity), transparent);
@@ -1011,15 +1011,9 @@ select {
 }
 
 .chat-terminal.context-popover { width: min(800px, calc(100vw - 16px)); }
-.terminal-screen { height: min(55dvh, 560px); overflow: auto; font: var(--font-caption)/1.4 monospace; white-space: pre-wrap; overflow-wrap: anywhere; min-width: 0; background: color-mix(in srgb, var(--soft) var(--glass-opacity), transparent); padding: var(--space-12); border-radius: var(--radius-control); }
-.terminal-input { display: flex; gap: var(--space-8); }
-.terminal-input textarea { width: 100%; box-sizing: border-box; }
-.terminal-input textarea { flex: 1; min-width: 0; background: color-mix(in srgb, var(--panel) var(--glass-opacity), transparent); color: var(--ink); border: var(--border-width) solid var(--line); border-radius: var(--radius-control); padding: var(--space-8); font: inherit; }
-.terminal-keys { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8); margin-top: var(--space-8); }
 
 .terminal-destinations { display: flex; flex-direction: column; gap: var(--space-8); }
 
-.chat-terminal h2 { display: flex; align-items: center; gap: var(--space-8); cursor: move; touch-action: none; }
 
 
 .device-symbol { position: relative; display: inline-flex; flex-shrink: 0; }
@@ -1236,20 +1230,15 @@ select {
   min-height: min(240px, calc(100dvh - 16px));
   transition-property: background, color, border-color, box-shadow;
 }
-.chat-terminal.resizable-panel:popover-open,
 #orchestrator-log.resizable-panel:not([hidden]) { display: flex; flex-direction: column; }
+.chat-terminal.resizable-panel:popover-open { display:grid; }
 .chat-terminal.resizable-panel { height: min(560px, calc(100dvh - 16px)); min-height: min(320px, calc(100dvh - 16px)); gap: var(--space-8); }
-.chat-terminal.resizable-panel > h2, .chat-terminal.resizable-panel > pre, .chat-terminal.resizable-panel > .terminal-keys { margin: 0; }
 .chat-terminal h2 { min-width: 0; padding-right: calc((var(--size-20) + var(--space-9) * 2) * 2 + var(--space-8)); }
-.chat-terminal .terminal-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-terminal .terminal-state { flex: 0 1 auto; max-width: 45%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: normal calc(var(--font-body) * .833333) var(--font-family); }
 .chat-terminal .console-detach { position: absolute; top: var(--space-4); right: calc(var(--size-20) + var(--space-9) * 2 + var(--space-4)); }
 .chat-terminal[data-raised="true"]:popover-open { animation: none; }
 #orchestrator-log.resizable-panel { height: min(480px, calc(100dvh - 96px)); }
 .resizable-panel > h2, .resizable-panel > form, .resizable-panel > .terminal-keys { flex-shrink: 0; }
-.chat-terminal.resizable-panel .terminal-screen,
 #orchestrator-log.resizable-panel pre { flex: 1; min-height: 0; height: auto; max-height: none; }
-.chat-terminal.resizable-panel textarea { resize: none; }
 
 .mobile-qr { width: min(288px, 100%); margin: var(--space-16) auto; background: #fff; }
 .mobile-qr svg { display: block; width: 100%; height: auto; stroke: none; }
@@ -1341,18 +1330,6 @@ select {
 
 .library-row > .library-console{right:calc(var(--space-3) + 2 * (var(--size-24) + var(--space-4)))}
 
-.terminal-input .console-draft { position: relative; flex: 1; min-width: 0; }
-.terminal-input .console-attachment[hidden] { display: none; }
-.terminal-input .console-attachment { z-index: 1; position: absolute; left: 8px; top: 50%; transform: translateY(-50%); width: 40px; height: 40px; }
-.terminal-input .console-attachment img { width: 100%; height: 100%; object-fit: cover; border-radius: var(--radius-control); }
-.terminal-input .console-attachment button { position: absolute; right: -7px; top: -7px; width: 22px; height: 22px; padding: 4px; border: var(--border-width) solid var(--line); border-radius: var(--radius-round); background: var(--panel); color: var(--ink); }
-.terminal-input .console-attachment button svg { width: 12px; height: 12px; }
-.terminal-input .console-draft:has(.console-attachment:not([hidden])) textarea { padding-left: 60px; }
-.terminal-input .console-send-menu { position: fixed; inset: auto; margin: 0; width: 190px; padding: 4px; border: var(--border-width) solid var(--line); border-radius: var(--radius-control); background: var(--panel); color: var(--ink); box-shadow: var(--shadow-surface); }
-.terminal-input .console-send-menu::backdrop { background: transparent; }
-.terminal-input .console-send-menu button { display: flex; gap: 12px; align-items: center; width: 100%; height: 44px; padding: 10px 12px; background: transparent; color: inherit; border: 0; border-radius: var(--radius-control); font: inherit; text-align: left; cursor: pointer; }
-.terminal-input .console-send-menu button:hover, .terminal-input .console-send-menu button:focus-visible { background: var(--soft); }
-.terminal-input .console-send-menu button svg { width: 20px; height: 20px; flex: none; }
 
 .console-snap-preview { position: fixed; pointer-events: none; z-index: 1000; border: 2px solid var(--ink); border-radius: var(--radius-panel); background: color-mix(in srgb, var(--ink) 10%, transparent); transition: none; }
 
@@ -1377,3 +1354,5 @@ html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: va
 .access-chat-row:last-child { border-bottom: 0; }
 .access-chat-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: var(--font-small); }
 .access-chat-row .icon-button { flex-shrink: 0; }
+
+.chat-terminal h2{cursor:move;touch-action:none}
