@@ -1,4 +1,4 @@
-// voice-local.js v1.20.65
+// voice-local.js v1.20.70
 'use strict';
 window.OaclisLocalVoice=(()=>{
  const toolbar=document.getElementById('toolbar-actions')||document.querySelector('.toolbar');
@@ -13,14 +13,13 @@ window.OaclisLocalVoice=(()=>{
   if(panel===active&&host.childElementCount)return;
   active=panel;
   const adapter=panel?.voiceAdapter,search=document.getElementById('search');
-  voice.bind({chatId:adapter?.chatId,compose:adapter?.compose,fields:()=>[adapter?.compose||search].filter(Boolean),chats,list,
+  voice.bind({...adapter,fields:()=>[adapter?.compose||search].filter(Boolean),chats,list,
    selectChat:chat=>openChatTerminal({entry:chat},host,sourceId||'master'),
-   ...(adapter?{send:adapter.send,sending:adapter.sending,takePhoto:adapter.takePhoto,pickImage:adapter.pickImage,removeImage:adapter.removeImage,hasAttachment:adapter.hasAttachment}:{}),
   },host);
  }
  document.addEventListener('focusin',event=>{const panel=event.target.closest('.chat-terminal');if(panel?.voiceAdapter)bind(panel);else if(event.target.id==='search')bind(null);},true);
  bind(null);
  return {activate:bind,library:()=>bind(null),close:panel=>{if(panel===active)bind([...document.querySelectorAll('.chat-terminal')].at(-1)||null);},request:panel=>panel===active?voice.reader?.request()||{}:{},stamp:panel=>panel===active&&voice.reader?{reader:voice.reader,generation:voice.reader.stamp()}:null,
-  update:(panel,result,stamp,input)=>{if(panel===active&&stamp?.reader===voice.reader){if(input)voice.reader.defer(2000);voice.reader.update(result.speech,stamp.generation);}},sent:panel=>{if(panel===active)voice.afterSend();},
+  update:(panel,result,stamp,input)=>{if(panel===active&&stamp?.reader===voice.reader)voice.reader.update(result.speech,stamp.generation,input);},sent:panel=>{if(panel===active)voice.afterSend();},
  };
 })();

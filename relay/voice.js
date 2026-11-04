@@ -1,4 +1,4 @@
-// voice.js v1.47.832
+// voice.js v1.48.862
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -32,20 +32,19 @@ window.OaclisVoice=(()=>{
   // Keep Android listening; repeated cumulative finals are reduced to their new suffix.
   const android=navigator.userAgentData?.platform==='Android'||/Android/i.test(navigator.userAgent);
   const session=Recognition&&window.isSecureContext?new Recognition():null;
-  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,locked=false,state='idle',disposed=false,utteranceRevision=0,consumed=-1,commandsOnly=false,finalTranscript='';
+  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,consumed=-1,commandsOnly=false,finalTranscript='';
   let button,status,preview,options,help,root,autoSendTimer,reader=null,controls=null,info=null;
   const cancelAutoSend=()=>{clearTimeout(autoSendTimer);autoSendTimer=null;};
   function scheduleAutoSend(){
    cancelAutoSend();
    if(!preferences.autoSend)return;
    const field=adapter?.compose,value=field?.value,chat=adapter?.chatId;
-   if(target!==field||!value?.trim()||typeof adapter?.send!=='function')return;
+   if(target!==field||!value?.trim()||!adapter.view)return;
    autoSendTimer=setTimeout(()=>{
     autoSendTimer=null;
-    if(preferences.autoSend&&wanted&&!paused&&!document.hidden&&!blocked()&&!pending&&valid(field)&&adapter?.compose===field&&adapter?.chatId===chat&&field.value===value)action(()=>adapter.send());
+    if(preferences.autoSend&&wanted&&!paused&&!document.hidden&&!pending&&valid(field)&&adapter?.compose===field&&adapter?.chatId===chat&&field.value===value)action(()=>adapter.view.command('send'));
    },preferences.waitFive?5000:3000);
   }
-  const blocked=()=>locked||adapter?.sending?.();
   const valid=field=>field?.isConnected&&!field.disabled&&!field.readOnly&&adapter?.fields().includes(field)&&['textarea','input'].includes(field.localName)&&field.type!=='password';
   const feedback=text=>{if(status)status.textContent=locale.text(text);};
   const paint=()=>{
@@ -107,8 +106,7 @@ window.OaclisVoice=(()=>{
   function available(id){
    if(['stop','help','pauseRec','resumeRec','selectChat'].includes(id))return true;
    if(['readOn','readOff','readStop'].includes(id))return !!adapter.chatId;
-   if(id==='send')return valid(adapter?.compose)&&typeof adapter?.send==='function';
-   if(id==='clearDraft')return !!adapter?.compose?.value||adapter?.hasAttachment?.()===true;
+   if(['send','clearDraft','takePhoto','pickImage','removeImage'].includes(id))return !!adapter.view;
    return typeof adapter?.[id]==='function';
   }
   function choices(items,method='selectChat'){
@@ -123,10 +121,8 @@ window.OaclisVoice=(()=>{
    pendingTimer=setTimeout(()=>{clearPending();feedback('Scelta scaduta');},15000);
   }
   async function action(task){
-   if(blocked()){feedback('Operazione in corso');return;}
-   cancelAutoSend();locked=true;clearPending();
-   try{const result=await task();feedback(result===false?'Operazione non completata. Riprova.':'Comando eseguito');}catch{feedback('Operazione non completata. Riprova.');}
-   finally{locked=false;paint();}
+   cancelAutoSend();clearPending();
+   const result=await task();feedback(result===false?'Operazione non completata. Riprova.':'Comando eseguito');
   }
   function openChat(chat,method='selectChat'){
    const current=adapter?.chats().find(item=>item.id===chat.id);
@@ -155,8 +151,7 @@ window.OaclisVoice=(()=>{
     if(result.id==='help'){if(help.open)help.close();else showHelp();return;}
    }
    if(audio){if(available(result.id)){if(['readOn','readOff','readStop'].includes(result.id))reader[{readOn:'enable',readOff:'disable',readStop:'skip'}[result.id]]();else adapter[result.id](result.args);}return;}
-   if(blocked()){feedback('Operazione in corso');return;}
-   if(media){await action(()=>adapter[result.id](result.args));return;}
+   if(media){await action(()=>adapter.view.command(result.id));return;}
    if(paused)return;
    if(pending){
     const value=normalize(segment).replace(new RegExp('^'+grammar.explicit+' '),'');
@@ -170,7 +165,7 @@ window.OaclisVoice=(()=>{
    const {id,args}=result;
    if(!available(id)){feedback('Comando non disponibile in questa schermata.');return;}
    switch(id){
-    case 'clearDraft':clearPending();adapter.removeImage?.();adapter.compose.value='';adapter.compose.dispatchEvent(new Event('input',{bubbles:true}));feedback('Messaggio svuotato');break;
+    case 'clearDraft':clearPending();adapter.view.command('clearDraft');feedback('Messaggio svuotato');break;
     case 'selectChat':case 'splitChat':{
      const n=number(normalize(args));
      if(n>0){const chat=adapter.list()[n-1];if(!chat){feedback('Numero fuori elenco.');break;}await openChat(chat,id);break;}
@@ -179,8 +174,7 @@ window.OaclisVoice=(()=>{
      if(matches.length===1)await openChat(matches[0],id);else{choices(matches.slice(0,20),id);feedback('Più chat corrispondono. Scegli un numero.');}break;
     }
     case 'send':
-     if(!adapter.compose?.value.trim()&&adapter.hasAttachment?.()!==true){feedback('Scrivi prima un messaggio.');break;}
-     await action(()=>adapter.send());break;
+     await action(()=>adapter.view.command('send'));break;
     default:await action(()=>adapter[id](args));
    }
   }
@@ -230,9 +224,9 @@ window.OaclisVoice=(()=>{
   }
   function hidden(){if(document.hidden){cancelAutoSend();clearPending();}}
   function bind(next,host){
-   cancelAutoSend();clearPending();
-   const changed=adapter?.chatId!==next.chatId||adapter?.compose!==next.compose;
-   revision++;adapter=next;target=next.compose||next.fields()[0];
+   const changed=!adapter||adapter.chatId!==next.chatId||adapter.compose!==next.compose;
+   if(changed){cancelAutoSend();clearPending();revision++;target=next.compose||next.fields()[0];}
+   adapter=next;
    if(!button){
     controls=host;controls.classList.add('voice-controls');
     root=document.createElement('section');root.className='voice-panel';root.setAttribute('aria-label',locale.text('Controlli vocali'));

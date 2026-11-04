@@ -1,10 +1,10 @@
-// assistant_stream.rs v1.12.280
+// assistant_stream.rs v1.12.299
 //! Bounded, on-demand observation of already loaded Codex threads; never starts a turn.
 use serde_json::{Value,json};
 use std::{collections::{BTreeMap,VecDeque},io,os::unix::net::UnixStream,path::Path,sync::{Arc,Mutex,OnceLock,atomic::{AtomicBool,Ordering}},thread,time::{Duration,Instant}};
 use tungstenite::{Message,WebSocket};
 #[derive(Default)]
-struct Feed { sequence:u64, events:VecDeque<Value>, items:BTreeMap<String,(bool,String)>, work:BTreeMap<String,String>, ready:bool }
+struct Feed { sequence:u64, events:VecDeque<Value>, items:BTreeMap<String,(bool,String)>, work:BTreeMap<String,String>, waiting:bool, ready:bool }
 struct Reader { touched:Mutex<Instant>, started:Mutex<Instant>, running:AtomicBool, feed:Mutex<Feed> }
 fn activity_header(item:&Value,completed:bool)->Option<&'static str> {
     match item["type"].as_str()? {
@@ -49,8 +49,8 @@ impl Feed {
         let item=&params["item"];
         let eligible=item["type"]=="agentMessage";
         match value["method"].as_str() {
-            Some("turn/completed")=>{self.work.clear();},
-            Some("thread/status/changed")=>{if params["status"]["type"]!="active" {self.work.clear();}},
+            Some("turn/completed")=>{self.work.clear();self.waiting=false;},
+            Some("thread/status/changed")=>{self.waiting=params["status"]["activeFlags"].as_array().is_some_and(|flags|flags.iter().any(|flag|flag=="waitingOnApproval"||flag=="waitingOnUserInput"));if params["status"]["type"]!="active" {self.work.clear();}},
             Some("item/started"|"item/completed") if item["type"]!="agentMessage"=>{
                 if let Some(id)=item["id"].as_str() {
                     let completed=value["method"]=="item/completed";
@@ -95,13 +95,13 @@ impl Feed {
     fn snapshot(&self,after:Option<u64>)->Value {
         let activity=self.work.values().next().cloned();
         let reset=after.is_some_and(|after|after>self.sequence || self.events.front().is_some_and(|v|after.saturating_add(1)<v["seq"].as_u64().unwrap_or(0)));
-        if after.is_none() || reset {return json!({"ready":self.ready,"cursor":self.sequence,"reset":reset,"events":[],"activity":activity});}
+        if after.is_none() || reset {return json!({"ready":self.ready,"cursor":self.sequence,"reset":reset,"events":[],"activity":activity,"waiting":self.waiting});}
         let mut events=Vec::new();let mut bytes=0;let mut cursor=after.unwrap();
         for event in self.events.iter().filter(|v|v["seq"].as_u64().unwrap_or(0)>after.unwrap()) {
             let size=serde_json::to_vec(event).unwrap().len();if bytes+size>5000 {break;}
             bytes+=size;cursor=event["seq"].as_u64().unwrap();events.push(event);
         }
-        json!({"ready":self.ready,"cursor":cursor,"events":events,"activity":activity})
+        json!({"ready":self.ready,"cursor":cursor,"events":events,"activity":activity,"waiting":self.waiting})
     }
 }
 fn send(socket:&mut WebSocket<UnixStream>,value:Value)->io::Result<()> {
@@ -130,8 +130,8 @@ fn follow(root:&Path,chat:&str,reader:&Reader)->io::Result<()> {
     send(&mut socket,json!({"method":"initialized","params":{}}))?;
     let loaded=rpc(&mut socket,1,"thread/loaded/list",json!({}))?;
     if !loaded["data"].as_array().is_some_and(|ids|ids.iter().any(|id|id==chat)) {return Err(io::Error::other("Chat non attiva"));}
-    rpc(&mut socket,2,"thread/resume",json!({"threadId":chat,"excludeTurns":true}))?;
-    {let mut feed=reader.feed.lock().unwrap();feed.work.clear();feed.ready=true;}
+    let resumed=rpc(&mut socket,2,"thread/resume",json!({"threadId":chat,"excludeTurns":true}))?;
+    {let mut feed=reader.feed.lock().unwrap();feed.work.clear();feed.event(chat,&json!({"method":"thread/status/changed","params":{"threadId":chat,"status":resumed["thread"]["status"]}}));feed.ready=true;}
     while reader.touched.lock().unwrap().elapsed()<Duration::from_secs(30) {
         match socket.read() {
             Ok(Message::Text(text))=>{if let Ok(value)=serde_json::from_str(&text){reader.feed.lock().unwrap().event(chat,&value);}},
@@ -202,6 +202,11 @@ mod tests {
         feed.event(chat,&json!({"method":"turn/started","params":{"threadId":chat}}));
         assert!(feed.snapshot(None)["activity"].is_null());
         feed.event(chat,&json!({"method":"item/started","params":{"threadId":chat,"item":{"id":"long","type":"commandExecution"}}}));
+        assert_eq!(feed.snapshot(None)["activity"],"Running");
+        feed.event(chat,&json!({"method":"thread/status/changed","params":{"threadId":chat,"status":{"type":"active","activeFlags":["waitingOnApproval"]}}}));
+        assert_eq!(feed.snapshot(None)["waiting"],true);
+        feed.event(chat,&json!({"method":"thread/status/changed","params":{"threadId":chat,"status":{"type":"active","activeFlags":[]}}}));
+        assert_eq!(feed.snapshot(None)["waiting"],false);
         assert_eq!(feed.snapshot(None)["activity"],"Running");
         feed.event(chat,&json!({"method":"turn/completed","params":{"threadId":chat}}));
         assert!(feed.snapshot(None)["activity"].is_null());

@@ -1,4 +1,4 @@
-// console.js v3.131.2356
+// console.js v3.140.2395
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -26,12 +26,12 @@ function closeStoppedChatWindows(value){
 function closeChatTerminal(panel,discard=false) {
   if (!panel) return;
   panel.consoleDiscard=discard;
+  panel.activeConsole.closed=true;
   panel.sendWindowDraft?.(true);
   panel.cancelSnap?.();
   panel.saveGeometry?.();
   clearTimeout(panel.terminalTimer);
   panel.resetTerminal?.();
-  panel.closeSendMenu?.();
   panel.closeImageInput?.();
   panel.jobsStatus?.destroy();
   document.removeEventListener('visibilitychange',panel.terminalVisibility);
@@ -220,7 +220,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   if(!document.documentElement.dataset.consoleWindow){
     const detach=document.createElement('button');detach.type='button';detach.className='icon-button console-detach';detach.title=OaclisSettings.text('Apri in una finestra separata');detach.setAttribute('aria-label',detach.title);detach.innerHTML=OaclisIcon('externalLink');
     detach.onclick=()=>{
-      if(submitting||preparingImage)return;
+      if(submitting||chat.preparingImage)return;
       const url=new URL(location.pathname,location.origin);url.hash='console='+encodeURIComponent(JSON.stringify({id:connection.entry.id,name:chatLabel(connection.entry),device:deviceId}));
       const child=window.open(url,'oaclis-console-'+deviceId+'-'+connection.entry.id,'popup=yes,width='+Math.min(window.screen.availWidth,Math.max(480,panel.offsetWidth+16))+',height='+Math.min(window.screen.availHeight,Math.max(400,panel.offsetHeight+16)));
       if(!child){notice(OaclisSettings.text('Consenti l’apertura della finestra nel browser.'));return;}
@@ -234,7 +234,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   const status = document.createElement("small"); status.className = "terminal-state"; status.setAttribute("role", "status"); panel.querySelector("h2").append(status);
   status.addEventListener("mouseenter",()=>{status.title=status.textContent;});
   const jobs=document.createElement("span");panel.querySelector("h2").append(jobs);panel.jobsStatus=OaclisJobs.inline(jobs);
-  let stopping=false,busy=false,ready=false,submitting=false,preparingImage=false,image=null,waitingInputs=0,idle=Promise.resolve();
+  let stopping=false,busy=false,ready=false,submitting=false,waitingInputs=0,idle=Promise.resolve();
   panel.resetTerminal=()=>{
     clearTimeout(panel.terminalTimer);ready=false;chat.reset();
     if(!panel.sessionStopped)fetch('/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,action:'reset'}),keepalive:true}).catch(()=>{});
@@ -280,22 +280,20 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   panel.terminalVisibility=()=>{clearTimeout(panel.terminalTimer);if(!document.hidden)pollTerminal();};
   document.addEventListener('visibilitychange',panel.terminalVisibility);
   const submit = async () => {
-    if (!ready || submitting || preparingImage) return false;
-    const text = form.elements.text.value, attachment=image; submitting = true;
+    if (!ready || submitting || chat.preparingImage) return false;
+    const text = form.elements.text.value, attachment=chat.image; submitting = true;
     try {
       const sent=await send({action:"input",text,key:"Enter",...(attachment?{image:attachment}:{})});
-      if(sent){if(image===attachment)removeImage();if(form.elements.text.value===text)form.elements.text.value="";panel.sendWindowDraft?.();window.OaclisLocalVoice?.sent(panel);}
+      if(sent){if(chat.image===attachment)files.remove();if(form.elements.text.value===text)form.elements.text.value="";panel.sendWindowDraft?.();window.OaclisLocalVoice?.sent(panel);}
       return sent;
     } finally {submitting=false;}
   };
-  const sendButton=form.querySelector('button[type="submit"]'),preview=form.querySelector('.console-attachment');
-  const removeImage=()=>{image=null;preview.hidden=true;preview.querySelector('img').removeAttribute('src');panel.sendWindowDraft?.();};
-  preview.querySelector('button').onclick=removeImage;
-  panel.consoleDraft=()=>({text:form.elements.text.value,image});
+  const files=panel.files=OaclisTerminal.attachImages(panel,()=>chat,()=>panel.sendWindowDraft?.());
+  panel.closeImageInput=files.destroy;
+  panel.consoleDraft=()=>({text:form.elements.text.value,image:chat.image});
   panel.restoreDraft=draft=>{
     if(typeof draft?.text==='string'&&draft.text.length<=8000)form.elements.text.value=draft.text;
-    if(typeof draft?.image==='string'&&draft.image.startsWith('data:image/jpeg;base64,')&&draft.image.length<=699075){image=draft.image;preview.querySelector('img').src=image;preview.hidden=false;}
-    else removeImage();
+    files.set(typeof draft?.image==='string'&&draft.image.startsWith('data:image/jpeg;base64,')&&draft.image.length<=699075?draft.image:null);
   };
   if(document.documentElement.dataset.consoleWindow){
     panel.sendWindowDraft=(returning=false)=>window.opener?.postMessage({kind:'oaclis-console-draft',returning:returning===true,discard:panel.consoleDiscard===true,chat_id:connection.entry.id,device_id:deviceId,active:panel.hasAttribute('data-window-active'),entry:{id:connection.entry.id,name:chatLabel(connection.entry)},draft:panel.consoleDraft()},location.origin);
@@ -303,22 +301,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     window.addEventListener('message',receive);panel.windowMessage=receive;form.elements.text.addEventListener('input',panel.sendWindowDraft);
     window.opener?.postMessage({kind:'oaclis-console-ready',chat_id:connection.entry.id,device_id:deviceId},location.origin);
   }
-  const attachImage=async file=>{
-    if(!file||!panel.isConnected||submitting||preparingImage)return;
-    preparingImage=true;sendButton.disabled=true;
-    try{const result=await OaclisTerminal.imageData(file);if(panel.isConnected){image=result;preview.querySelector('img').src=image;preview.hidden=false;panel.sendWindowDraft?.();}}
-    catch{if(panel.isConnected)notice(OaclisSettings.text('Impossibile caricare l’immagine. Prova un’altra foto.'));}
-    finally{preparingImage=false;if(panel.isConnected)sendButton.disabled=!ready;}
-  };
-  const pickImage=camera=>{
-    if(submitting||preparingImage)return;
-    if(navigator.userActivation&&!navigator.userActivation.isActive){panel.closeSendMenu.show(camera?0:1);return;}
-    const input=document.createElement('input');input.type='file';input.accept='image/*';if(camera)input.setAttribute('capture','environment');
-    input.onchange=()=>attachImage(input.files?.[0]);input.click();
-  };
-  panel.closeImageInput=OaclisTerminal.attachImages(panel,attachImage);
-  panel.closeSendMenu=OaclisTerminal.attachSendMenu(form,sendButton,{pickImage,submit,closed:()=>!panel.isConnected});
-  panel.voiceAdapter={chatId:connection.entry.id,compose:form.elements.text,send:submit,sending:()=>submitting||preparingImage,takePhoto:()=>pickImage(true),pickImage:()=>pickImage(false),removeImage,hasAttachment:()=>!!image};
+  panel.voiceAdapter={chatId:connection.entry.id,compose:form.elements.text,view:panel};
   const stopConsole=async()=>{
     if(!ready||stopping)return;stopping=true;
     try{if(await send({action:'stop'})){

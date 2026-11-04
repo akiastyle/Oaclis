@@ -1,4 +1,4 @@
-// locale.js v1.3.522
+// locale.js v1.3.523
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -254,6 +254,7 @@ window.OaclisSettings=(()=>{
   "Invito copiato.": "Invitation copied.",
   "Nessun telefono abbinato.": "No paired phones.",
   "In attesa di approvazione": "Waiting for approval",
+  "In attesa della tua scelta": "Waiting for your choice",
   "Autorizzato": "Approved",
   "Revocato": "Revoked",
   "Revoca": "Revoke",

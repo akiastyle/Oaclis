@@ -1,4 +1,4 @@
-// terminal-format.js v1.29.212
+// terminal-format.js v1.40.254
 "use strict";
 const OaclisTerminal = (() => {
   const palette=['#000000','#cd3131','#0dbc79','#e5e510','#2472c8','#bc3fbc','#11a8cd','#e5e5e5','#666666','#f14c4c','#23d18b','#f5f543','#3b8eea','#d670d6','#29b8db','#ffffff'];
@@ -115,18 +115,34 @@ function consoleScreen(value){
     if(result.length>699075)throw Error();
     return result;
   }
-  function attachImages(root,receive){
+  function attachImages(root,target,changed){
+   const form=root.querySelector('form'),preview=form.querySelector('.console-attachment'),send=form.querySelector('.console-send');
+   function paint(){const image=target().image;preview.hidden=!image;if(image)preview.querySelector('img').src=image;else preview.querySelector('img').removeAttribute('src');}
+   function set(image,chat=target()){chat.image=image;if(chat===target())paint();changed(chat);}
+   async function receive(file,chat){
+    chat.preparingImage=true;if(chat===target())send.disabled=true;
+    try{const image=await imageData(file);if(!chat.closed)set(image,chat);}
+    finally{chat.preparingImage=false;if(!chat.closed&&chat===target())send.disabled=false;}
+   }
+   function pick(camera){
+    const chat=target();
+    if(navigator.userActivation&&!navigator.userActivation.isActive){menu.show(camera?0:1);return;}
+    const input=document.createElement('input');input.type='file';input.accept='image/*';if(camera)input.setAttribute('capture','environment');
+    input.onchange=()=>{if(input.files.length)receive(input.files[0],chat);};input.click();
+   }
+   preview.querySelector('button').onclick=()=>set(null);
+   const menu=attachSendMenu(form,send,{pickImage:pick,submit:()=>root.command('send'),closed:()=>!root.isConnected});
    const accept=event=>{
     const data=event.clipboardData||event.dataTransfer;
     const files=[...(data?.files||[])];
     if(!files.length)for(const item of data?.items||[]){if(item.kind==='file'){const file=item.getAsFile();if(file)files.push(file);}}
     const image=files.find(file=>file.type.startsWith('image/'));if(!image)return;
-    event.preventDefault();event.stopPropagation();receive(image,event.target);
+    event.preventDefault();event.stopPropagation();receive(image,target(event.target));
    };
    const drag=event=>{if([...event.dataTransfer?.types||[]].includes('Files')){event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect='copy';}};
    const drop=event=>{drag(event);accept(event);};
    root.addEventListener('paste',accept);root.addEventListener('dragover',drag);root.addEventListener('drop',drop);
-   return ()=>{root.removeEventListener('paste',accept);root.removeEventListener('dragover',drag);root.removeEventListener('drop',drop);};
+   return {paint,set,remove:()=>set(null),pick,destroy(){root.removeEventListener('paste',accept);root.removeEventListener('dragover',drag);root.removeEventListener('drop',drop);menu();}};
   }
   function attachSendMenu(form,sendButton,{pickImage,submit,closed}){
  const sendMenu=document.createElement('div');sendMenu.className='console-send-menu';sendMenu.setAttribute('popover','manual');sendMenu.setAttribute('role','menu');sendMenu.setAttribute('aria-label',OaclisSettings.text('Allega o invia'));
@@ -174,8 +190,20 @@ function consoleScreen(value){
     const button=document.createElement('button');button.type='button';button.className='icon-button';button.textContent=label;button.dataset.key=key;button.setAttribute('aria-label',label);keys.append(button);
    }
    const voice=document.createElement('span');voice.className='voice-controls';keys.append(voice);
-   keys.addEventListener('click',event=>{const key=event.target.closest('button[data-key]')?.dataset.key;if(key)view.activeConsole.send(key==='C-c'?'stop':'input',{key});});
-   view.querySelector('form').onsubmit=event=>{event.preventDefault();view.activeConsole.send('input',{text:view.querySelector('textarea').value,key:'Enter'});};
+   view.command=(action,value,chat=view.activeConsole)=>{
+    switch(action){
+     case 'send':return chat.send('input',{text:view.querySelector('textarea').value,key:'Enter'});
+     case 'stopConsole':return chat.send('stop',{});
+     case 'key':return chat.send(value==='C-c'?'stop':'input',{key:value});
+     case 'clearDraft':{const field=view.querySelector('textarea');field.value='';field.dispatchEvent(new Event('input',{bubbles:true}));view.files.remove();return;}
+     case 'takePhoto':return view.files.pick(true);
+     case 'pickImage':return view.files.pick(false);
+     case 'removeImage':return view.files.remove();
+     default:throw Error('Unknown console action: '+action);
+    }
+   };
+   keys.addEventListener('click',event=>{const key=event.target.closest('button[data-key]')?.dataset.key;if(key)view.command('key',key);});
+   view.querySelector('form').onsubmit=event=>{event.preventDefault();view.command('send');};
    view.querySelector('textarea').onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();view.querySelector('form').requestSubmit();}};
    return view;
   }
@@ -184,7 +212,7 @@ function consoleScreen(value){
    pane.innerHTML=OaclisSettings.html('<h2 class="console-title"><span class="console-name"></span></h2><pre class="console-screen" tabindex="0" aria-label="Console">Connessione…</pre>');
    pane.querySelector('.console-name').textContent=name;if(icon)pane.querySelector('h2').prepend(icon);
    const screen=pane.querySelector('pre');
-   const chat=pane.console={id,send:transport,follow:true,revision:'',
+   const chat=pane.console={id,send:transport,follow:true,revision:'',image:null,preparingImage:false,closed:false,
     render(result,operation='read',saved=null){
      if(operation==='open'||operation==='input')chat.follow=saved?.follow??true;
      const top=saved?.top??screen.scrollTop,left=saved?.left??screen.scrollLeft;
@@ -197,7 +225,7 @@ function consoleScreen(value){
    screen.addEventListener('scroll',()=>{chat.follow=screen.scrollHeight-screen.clientHeight-screen.scrollTop<=24;},{passive:true});
    screen.onkeydown=event=>{
     const key=event.ctrlKey&&event.key.toLowerCase()==='c'&&!String(window.getSelection())?'C-c':({ArrowUp:'Up',ArrowDown:'Down',ArrowLeft:'Left',ArrowRight:'Right',Enter:'Enter',Tab:'Tab',Backspace:'BSpace'})[event.key];
-    if(key){event.preventDefault();chat.send(key==='C-c'?'stop':'input',{key});}
+    if(key){event.preventDefault();pane.closest('.oaclis-console').command('key',key,chat);}
    };
    return pane;
   }

@@ -1,4 +1,4 @@
-/* console.css v2.0.1639 */
+/* console.css v2.0.1640 */
 .oaclis-console,.voice-controls,.voice-dialog{--console-ink:var(--ink,var(--text));--console-line:var(--line,#ffffff26);--console-soft:var(--soft,#394247);--console-accent:var(--accent,var(--ink));color:var(--console-ink)}
 .oaclis-console[popover]:not(:popover-open){display:none}
 .oaclis-console{display:grid;grid-template-rows:minmax(0,1fr) auto auto;gap:8px;min-width:0;min-height:0;overflow:hidden}
@@ -14,6 +14,7 @@
 .terminal-input{display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:4px;min-width:0;margin:0;align-items:center}
 .console-draft{position:relative;min-width:0}
 .terminal-input textarea{display:block;width:100%;min-width:0;max-height:25dvh;margin:0;padding:10px;resize:none;border:1px solid var(--console-line);border-radius:var(--radius-control,8px);background:var(--panel);color:var(--console-ink);font:inherit}
+.terminal-input textarea:focus-visible{outline:none;border-color:var(--console-ink)}
 .console-send{display:grid;place-items:center;width:44px;height:44px;padding:10px;border-radius:50%;touch-action:manipulation;user-select:none;-webkit-touch-callout:none}
 .console-send svg{width:24px;height:24px}
 .terminal-keys{display:flex;align-items:center;gap:4px;min-width:0;margin:0}
