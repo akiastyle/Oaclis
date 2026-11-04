@@ -1,4 +1,4 @@
-// voice.js v1.48.862
+// voice.js v1.48.876
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -29,8 +29,6 @@ window.OaclisVoice=(()=>{
  }
  function create(){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-  // Keep Android listening; repeated cumulative finals are reduced to their new suffix.
-  const android=navigator.userAgentData?.platform==='Android'||/Android/i.test(navigator.userAgent);
   const session=Recognition&&window.isSecureContext?new Recognition():null;
   let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,consumed=-1,commandsOnly=false,finalTranscript='';
   let button,status,preview,options,help,root,autoSendTimer,reader=null,controls=null,info=null;
@@ -194,9 +192,15 @@ window.OaclisVoice=(()=>{
      if(result.isFinal){
       if(i<=consumed)continue;consumed=i;preview.textContent='';
       let transcript=result[0].transcript;
-      if(android&&finalTranscript&&normalize(transcript).startsWith(normalize(finalTranscript)+' '))transcript=transcript.trim().split(/\s+/).slice(finalTranscript.trim().split(/\s+/).length).join(' ');
-      finalTranscript=result[0].transcript;
-      route(transcript,commandsOnly);
+      const dictation=parse(transcript).type==='dictation';
+      if(dictation&&finalTranscript){
+       const previous=normalize(finalTranscript).split(' '),words=transcript.trim().split(/\s+/);
+       for(let overlap=Math.min(previous.length,words.length);overlap>0;overlap--){
+        if(normalize(words.slice(0,overlap).join(' '))===previous.slice(-overlap).join(' ')){transcript=words.slice(overlap).join(' ');break;}
+       }
+      }
+      finalTranscript=dictation?result[0].transcript:'';
+      if(transcript)route(transcript,commandsOnly);
      }
      else {cancelAutoSend();interim.push(result[0].transcript);}
     }
