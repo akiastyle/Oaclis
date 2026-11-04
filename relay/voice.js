@@ -1,4 +1,4 @@
-// voice.js v1.38.693
+// voice.js v1.38.701
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -187,7 +187,7 @@ window.OaclisVoice=(()=>{
   function start(){
    if(!Recognition||!window.isSecureContext||disposed||!wanted||!adapter||document.hidden||blocked()||recognition||retiring)return;
    clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=(recorder??=new Recognition());let consumed=-1,sessionError=null,commandsOnly=false,finalTranscript='';recognition=session;
-   session.lang=locale.speechLanguage;session.continuous=true;session.interimResults=false;session.maxAlternatives=1;
+   session.lang=locale.speechLanguage;session.continuous=true;session.interimResults=true;session.maxAlternatives=1;
    state='starting';paint();utteranceRevision=revision;
    const fresh=()=>!disposed&&recognition===session&&generation===current;
    session.onstart=()=>{if(fresh()){state='listening';paint();}};
@@ -224,9 +224,9 @@ window.OaclisVoice=(()=>{
     if(retiring===session){releaseSession(session);retiring=null;state='idle';paint();clearTimeout(retryTimer);retryTimer=null;if(wanted&&!document.hidden&&!blocked()&&!disposed)retryTimer=setTimeout(()=>{retryTimer=null;start();},0);return;}
     if(!fresh())return;
     releaseSession(session);recognition=null;state='idle';preview.textContent='';paint();
-    const normalEnd=android&&(!sessionError||sessionError==='no-speech');
-    if(normalEnd&&wanted&&!document.hidden&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},consumed>=0?200:750);
-    else retry();
+    if(android&&(!sessionError||sessionError==='no-speech')){
+     wanted=false;state='error';paint();feedback('Ascolto interrotto. Tocca il microfono per riprovare.');
+    }else retry();
    };
    try{session.start();}catch{if(fresh()){releaseSession(session);recognition=null;state='error';paint();feedback('Microfono non avviato.');retry();}}
   }

@@ -1,4 +1,4 @@
-// app.js v2.97.1072
+// app.js v2.97.1074
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -194,7 +194,7 @@ async function openConsole(chat,adjacent=false){
   if(pane===active&&request.reader===reader){if(request.operation==='input'&&typeof request.text==='string')reader.defer(2000);reader.update(result.speech,request.speechGeneration);}
   if(changed||restore||request.operation!=='read'){if(pane.follow)pane.screen.scrollTop=pane.screen.scrollHeight;else{pane.screen.scrollTop=top;pane.screen.scrollLeft=left;}}
   pane.ready=true;
-  if(pane===active){form.querySelectorAll('textarea,button').forEach(element=>element.disabled=pane.preparingImage===true);voice.ready();voice.resume();if(request.operation==='input'&&typeof request.text==='string')voice.afterSend();}
+  if(pane===active){form.querySelectorAll('textarea,button').forEach(element=>element.disabled=pane.preparingImage===true);voice.ready();if(request.operation!=='read')voice.resume();if(request.operation==='input'&&typeof request.text==='string')voice.afterSend();}
   return true;
  }
  function send(pane,operation,body={}){
