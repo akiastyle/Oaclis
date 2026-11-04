@@ -1,4 +1,4 @@
-// voice.js v1.38.674
+// voice.js v1.38.693
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -31,7 +31,7 @@ window.OaclisVoice=(()=>{
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   // Keep Android listening; repeated cumulative finals are reduced to their new suffix.
   const android=navigator.userAgentData?.platform==='Android'||/Android/i.test(navigator.userAgent);
-  let adapter=null,recognition=null,recorder=null,retiring=null,generation=0,revision=0,target=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=preferences.startMic,paused=false,locked=false,state='idle',disposed=false,utteranceRevision=0;
+  let adapter=null,recognition=null,recorder=null,retiring=null,generation=0,revision=0,target=null,pending=null,pendingTimer,retryTimer,retries=0,wanted=preferences.startMic,paused=false,locked=false,suspended=false,state='idle',disposed=false,utteranceRevision=0;
   let button,status,preview,options,help,root,autoSendTimer;
   const cancelAutoSend=()=>{clearTimeout(autoSendTimer);autoSendTimer=null;};
   function scheduleAutoSend(){
@@ -44,7 +44,7 @@ window.OaclisVoice=(()=>{
     if(preferences.autoSend&&wanted&&!paused&&!document.hidden&&!blocked()&&!pending&&valid(field)&&adapter?.compose===field&&adapter?.chatId===chat&&field.value===value)action(()=>adapter.send());
    },preferences.waitFive?5000:3000);
   }
-  const blocked=()=>locked||adapter?.sending?.();
+  const blocked=()=>suspended||locked||adapter?.sending?.();
   const valid=field=>field?.isConnected&&!field.disabled&&!field.readOnly&&adapter?.fields().includes(field)&&['textarea','input'].includes(field.localName)&&field.type!=='password';
   const feedback=text=>{if(status)status.textContent=locale.text(text);};
   const paint=()=>{
@@ -185,7 +185,7 @@ window.OaclisVoice=(()=>{
    const delay=[500,1000,2000][retries++];retryTimer=setTimeout(()=>{retryTimer=null;start();},delay);
   }
   function start(){
-   if(!Recognition||!window.isSecureContext||disposed||!wanted||document.hidden||blocked()||recognition||retiring)return;
+   if(!Recognition||!window.isSecureContext||disposed||!wanted||!adapter||document.hidden||blocked()||recognition||retiring)return;
    clearTimeout(retryTimer);retryTimer=null;const current=++generation,session=(recorder??=new Recognition());let consumed=-1,sessionError=null,commandsOnly=false,finalTranscript='';recognition=session;
    session.lang=locale.speechLanguage;session.continuous=true;session.interimResults=false;session.maxAlternatives=1;
    state='starting';paint();utteranceRevision=revision;
@@ -194,7 +194,7 @@ window.OaclisVoice=(()=>{
    session.onspeechstart=()=>{if(fresh()){cancelAutoSend();commandsOnly=adapter?.commandOnly?.()===true;utteranceRevision=revision;state='listening';paint();}};
    session.onspeechend=()=>{if(fresh()){state='processing';paint();}};
    session.onresult=event=>{
-    if(!fresh()||blocked()||utteranceRevision!==revision)return;
+    if(!fresh()||!adapter||blocked()||utteranceRevision!==revision)return;
     state='processing';paint();
     const interim=[];
     for(let i=event.resultIndex;i<event.results.length;i++){
@@ -233,16 +233,15 @@ window.OaclisVoice=(()=>{
   function focus(event){
    if(valid(event.target)&&target!==event.target){
     cancelAutoSend();target=event.target;revision++;clearPending();
-    if(recognition){invalidate();if(wanted&&!blocked()&&!button.disabled)retryTimer=setTimeout(()=>{retryTimer=null;start();},0);}
    }
   }
   function input(event){
    if(event.target===adapter?.compose)cancelAutoSend();
   }
-  function hidden(){if(document.hidden)stop();}
+  function hidden(){if(document.hidden){cancelAutoSend();clearPending();}else if(wanted&&!retryTimer)start();}
   function bind(next,host){
    cancelAutoSend();
-   root?.remove();button?.remove();invalidate();clearPending();revision++;target=null;adapter=next;
+   root?.remove();button?.remove();clearPending();revision++;target=null;adapter=next;suspended=false;
    root=document.createElement('section');root.className='voice-panel';root.setAttribute('aria-label',locale.text('Controlli vocali'));
    status=document.createElement('span');status.className='voice-sr';status.setAttribute('aria-live','polite');status.setAttribute('role','status');
    preview=document.createElement('span');preview.className='voice-preview voice-sr';preview.setAttribute('aria-hidden','true');
@@ -254,16 +253,16 @@ window.OaclisVoice=(()=>{
    button.onclick=()=>{if(wanted)stop(false);else{window.OaclisReadAloud?.feedback();wanted=true;paused=false;retries=0;start();}};
    if(!Recognition||!window.isSecureContext){button.disabled=true;feedback('Voce non disponibile in questo browser.');}
    paint();
-   if(wanted&&!blocked())retryTimer=setTimeout(()=>{retryTimer=null;start();},0);
+   if(wanted&&!blocked()&&!recognition&&!retryTimer)retryTimer=setTimeout(()=>{retryTimer=null;start();},0);
   }
-  function leave(){cancelAutoSend();invalidate();clearPending();revision++;target=null;adapter=null;root=null;button=null;status=null;preview=null;options=null;help=null;}
+  function leave(){cancelAutoSend();clearPending();suspended=true;revision++;target=null;adapter=null;root=null;button=null;status=null;preview=null;options=null;help=null;}
   function ready(){if(adapter?.compose&&valid(adapter.compose)&&!target)target=adapter.compose;}
   function afterSend(){
    if(preferences.pauseAfterSend&&wanted&&!paused){cancelAutoSend();paused=true;paint();}
   }
   function destroy(){stop();disposed=true;leave();recorder=null;document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
   document.addEventListener('focusin',focus);document.addEventListener('input',input);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',stop);
-  return {bind,leave,ready,stop,destroy,showHelp,afterSend,pause:()=>{cancelAutoSend();clearPending();invalidate();},resume:()=>{if(wanted&&!blocked()&&!retryTimer)start();}};
+  return {bind,leave,ready,stop,destroy,showHelp,afterSend,pause:()=>{cancelAutoSend();clearPending();suspended=true;revision++;paint();},resume:()=>{suspended=false;if(wanted&&!blocked()&&!retryTimer)start();}};
  }
  return {create,parse,resolve,commands,normalize,number,preferences};
 })();
