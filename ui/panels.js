@@ -1,4 +1,4 @@
-// panels.js v3.143.2875
+// panels.js v3.143.2880
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -513,7 +513,10 @@ function editChat(entry, anchor, origin = sourceId || "master", connection = nul
   const save = async value => {
     const key = "chat:" + entry.id;
     const access=panel.querySelector('[name="console_access"]').value;
-    await api("appearance",{key,value,source_device_id:origin,console_access:access});data.appearance??={};data.appearance[key]=value;
+    const button=panel.querySelector('.primary');button.disabled=true;button.textContent=OaclisSettings.text('Salvataggio…');
+    try{await api("appearance",{key,value,source_device_id:origin,console_access:access});}
+    finally{button.disabled=false;button.textContent=OaclisSettings.text('Salva');}
+    data.appearance??={};data.appearance[key]=value;
     data.chat_settings??={};data.chat_settings[entry.id]={...data.chat_settings[entry.id],console_access:access};
     if (value.label) for (const chat of [entry, ...(data.chats || []), ...visibleChats, ...chatLinks.map(link => link.entry)]) {
       if (chat.id === entry.id) chat.name = value.label;

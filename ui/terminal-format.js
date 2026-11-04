@@ -1,4 +1,4 @@
-// terminal-format.js v1.40.254
+// terminal-format.js v1.40.277
 "use strict";
 const OaclisTerminal = (() => {
   const palette=['#000000','#cd3131','#0dbc79','#e5e510','#2472c8','#bc3fbc','#11a8cd','#e5e5e5','#666666','#f14c4c','#23d18b','#f5f543','#3b8eea','#d670d6','#29b8db','#ffffff'];
@@ -8,11 +8,12 @@ const OaclisTerminal = (() => {
     const gray=8+(index-232)*10;return `rgb(${gray},${gray},${gray})`;
   }
   function parse(ansi) {
-    const runs=[];let state={},position=0,cursor=0;
-    const pattern=/\x1b\[([0-9;:]*)m|\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
-    const push = text => {if(text){runs.push({text,start:position,end:position+text.length,style:{...state}});position+=text.length;}};
+    const runs=[];let state={},href=null,position=0,cursor=0;
+    const pattern=/\x1b\[([0-9;:]*)m|\x1b\]8;[^;\x07\x1b]*;([^\x07\x1b]*)(?:\x07|\x1b\\)|\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+    const push = text => {if(text){runs.push({text,start:position,end:position+text.length,style:{...state},href});position+=text.length;}};
     for(const match of ansi.matchAll(pattern)){
       push(ansi.slice(cursor,match.index));cursor=match.index+match[0].length;
+      if(match[2]!==undefined){href=/^https?:\/\//i.test(match[2])?match[2]:null;continue;}
       if(match[1]===undefined)continue;
       const values=(match[1]||'0').replaceAll(':',';').split(';').map(Number);
       for(let i=0;i<values.length;i++){
@@ -48,7 +49,7 @@ const OaclisTerminal = (() => {
     push(ansi.slice(cursor));return runs;
   }
   function render(element,text,ansi) {
-    text=String(text??'');ansi=typeof ansi==='string'?ansi:'';
+    text=String(text??'').replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g,'');ansi=typeof ansi==='string'?ansi:'';
     if(element.terminalText===text&&element.terminalAnsi===ansi&&element.textContent===text)return;
     const runs=ansi?parse(ansi):[{text,start:0,end:text.length,style:{}}],plain=runs.map(run=>run.text).join('');
     const ranges=[];let cursor=0,valid=true;
@@ -65,7 +66,7 @@ const OaclisTerminal = (() => {
         if(range.newline){chunks.push({text:'\n',style:{}});continue;}
         while(index<runs.length&&runs[index].end<=range.start)index++;
         for(let j=index;j<runs.length&&runs[j].start<range.end;j++){
-          const run=runs[j];chunks.push({text:run.text.slice(Math.max(0,range.start-run.start),range.end-run.start),style:run.style});
+          const run=runs[j];chunks.push({text:run.text.slice(Math.max(0,range.start-run.start),range.end-run.start),style:run.style,href:run.href});
         }
       }
     }else chunks.push({text,style:{}});
@@ -76,7 +77,17 @@ const OaclisTerminal = (() => {
       if(style.inverse){delete style.inverse;const fg=style.color||'var(--text, var(--ink))';style.color=style.backgroundColor||'var(--bg)';style.backgroundColor=fg;}
       const signature=JSON.stringify(style);
       if(span.dataset.sgr!==signature){span.removeAttribute('style');Object.assign(span.style,style);span.dataset.sgr=signature;}
-      if(span.textContent!==chunk.text){if(span.firstChild?.nodeType===3&&chunk.text.startsWith(span.textContent))span.firstChild.appendData(chunk.text.slice(span.textContent.length));else span.textContent=chunk.text;}
+      if(span.textContent!==chunk.text||span.dataset.href!==(chunk.href||'')){
+        if(!chunk.href&&!/https?:\/\//i.test(chunk.text)&&span.firstChild?.nodeType===3&&chunk.text.startsWith(span.textContent)){span.firstChild.appendData(chunk.text.slice(span.textContent.length));continue;}
+        span.replaceChildren();span.dataset.href=chunk.href||'';
+        const links=chunk.href?[{index:0,0:chunk.text,href:chunk.href}]:[...chunk.text.matchAll(/https?:\/\/[^\s<>"\x00-\x20]+/gi)];let cursor=0;
+        for(const match of links){
+          const label=match.href?match[0]:match[0].replace(/[.,;:!?)\]]+$/,'');
+          span.append(document.createTextNode(chunk.text.slice(cursor,match.index)));
+          const link=document.createElement('a');link.href=match.href||label;link.target='_blank';link.rel='noopener noreferrer';link.textContent=label;span.append(link);cursor=match.index+label.length;
+        }
+        span.append(document.createTextNode(chunk.text.slice(cursor)));
+      }
     }
     while(element.childNodes.length>chunks.length)element.lastChild.remove();
     element.terminalText=text;element.terminalAnsi=ansi;

@@ -1,4 +1,4 @@
-// locale.js v1.3.523
+// locale.js v1.3.524
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -225,6 +225,7 @@ window.OaclisSettings=(()=>{
   "Usata solo per questa operazione, senza salvarla.": "Used only for this operation, without saving it.",
   "Creare il percorso e assegnare la sola cartella finale all’utente indicato. Le cartelle esistenti mantengono proprietario e permessi.": "Create the path and assign only the final folder to the specified user. Existing folders keep their ownership and permissions.",
   "Annulla autorizzazione": "Cancel authorization",
+  "Salvataggio…": "Saving…",
   "Salvataggio non riuscito. Riprova.": "Save failed. Try again.",
   "Conferma non riuscita. Riprova.": "Confirmation failed. Try again.",
   "Operazione non riuscita": "Operation failed",
