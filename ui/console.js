@@ -1,4 +1,4 @@
-// console.js v3.140.2406
+// console.js v3.140.2421
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -273,13 +273,13 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   };
   let terminalPolling=false;
   const pollTerminal = async () => {
-    if (document.hidden || terminalPolling || !panel.isConnected || !ready) return;
+    if (document.hidden || terminalPolling || !panel.isConnected) return;
     terminalPolling=true;
-    try { await send({ action: "read" }); }
-    catch { /* send() already displays the read error; keep observing the session. */ }
+    try { await send({ action: ready ? "read" : "open" }); }
+    catch { /* send() already displays the connection error; keep observing the session. */ }
     finally {
       terminalPolling=false;clearTimeout(panel.terminalTimer);
-      if (panel.isConnected && ready && !document.hidden) panel.terminalTimer=setTimeout(pollTerminal,1500);
+      if (panel.isConnected && !document.hidden) panel.terminalTimer=setTimeout(pollTerminal,1500);
     }
   };
   panel.terminalVisibility=()=>{clearTimeout(panel.terminalTimer);if(!document.hidden)pollTerminal();};
@@ -317,10 +317,9 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   };
   panel.openTerminal=async()=>{
     if(ready||busy)return;
-    if(await send({action:'open'})){
-      if(!panel.isConnected)return;
-      form.elements.text.focus();pollTerminal();
-    }
+    try{if(await send({action:'open'}))form.elements.text.focus();}
+    catch { /* send() displays the connection error; polling retries the opening. */ }
+    finally{pollTerminal();}
   };
   window.OaclisLocalVoice?.activate(panel);
   try{if(!embedded&&!document.documentElement.dataset.consoleWindow&&localStorage.getItem('oaclis-console-mode:'+windowKey)==='window')panel.querySelector('.console-detach').click();}catch{}
