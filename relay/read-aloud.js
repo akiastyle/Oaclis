@@ -1,4 +1,4 @@
-// read-aloud.js v1.22.288
+// read-aloud.js v1.23.300
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -27,7 +27,7 @@ window.OaclisReadAloud=(()=>{
   engine?.getVoices?.();
   button.type='button';button.className='read-aloud secondary';
   button.innerHTML=OaclisIcon('volume');
-  let enabled=false,cursor=null,queue=[],speaking=false,current=null,generation=0,disposed=false,currentItem=null,echoUntil=0,quietUntil=0,playTimer=null,speechTimer=null,recoverSpeech=null,lastSpeechProgress=0,lastActivity='',lastActivityId=null,lastActivityAt=0;
+  let enabled=false,cursor=null,queue=[],speaking=false,current=null,generation=0,disposed=false,currentItem=null,quietUntil=0,playTimer=null,speechTimer=null,recoverSpeech=null,lastSpeechProgress=0,lastActivity='',lastActivityId=null,lastActivityAt=0;
   const items=new Map(),ignored=new Set();
   const paint=()=>{button.setAttribute('aria-pressed',String(enabled));button.title=OaclisSettings.text(enabled?(button.dataset.ready==='false'?'Lettura in collegamento':'Disattiva lettura'):'Attiva lettura');button.setAttribute('aria-label',button.title);};
   function play(){
@@ -40,7 +40,7 @@ window.OaclisReadAloud=(()=>{
    const language=utterance.lang.toLowerCase(),voices=(engine.getVoices?.()||[]).filter(voice=>voice.lang.toLowerCase().split('-')[0]===language.split('-')[0]);
    utterance.voice=voices.find(voice=>/^Google\b/i.test(voice.name)&&voice.lang.toLowerCase()===language)||voices.find(voice=>/^Google\b/i.test(voice.name))||voices.find(voice=>voice.lang.toLowerCase()===language)||voices[0]||null;
    speaking=true;current=utterance;lastSpeechProgress=Date.now();let started=false;
-   const done=()=>{if(version!==generation||disposed||current!==utterance)return;clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;if(queue.length)play();};
+   const done=()=>{if(version!==generation||disposed||current!==utterance)return;clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;speaking=false;current=null;currentItem=null;if(queue.length)play();};
    const recover=()=>{
     speechTimer=null;
     if(version!==generation||disposed||current!==utterance)return;
@@ -66,7 +66,7 @@ window.OaclisReadAloud=(()=>{
    lastActivity='';lastActivityId=null;lastActivityAt=0;
    if(!preserve)desired=false;
    if(enabled&&!silent)feedback();
-   generation++;enabled=false;cursor=null;queue=[];items.clear();ignored.clear();speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;
+   generation++;enabled=false;cursor=null;queue=[];items.clear();ignored.clear();speaking=false;current=null;currentItem=null;
    engine?.cancel();paint();
   }
   function enable(silent=false){
@@ -79,7 +79,7 @@ window.OaclisReadAloud=(()=>{
    if(!id)return;
    if(ignored.size>=16)ignored.delete(ignored.values().next().value);
    ignored.add(id);items.delete(id);queue=queue.filter(part=>part.id!==id);
-   clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;generation++;speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;
+   clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;generation++;speaking=false;current=null;currentItem=null;
    engine?.cancel();if(queue.length)play();
   }
   function flush(item,complete){
@@ -95,7 +95,7 @@ window.OaclisReadAloud=(()=>{
   function update(data,version=generation,input=false){
    if(version!==generation||!enabled||!data||!Array.isArray(data.events))return;
    if(input)defer(2000);
-   if(data.reset){clearTimeout(playTimer);playTimer=null;clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;generation++;queue=[];items.clear();speaking=false;current=null;currentItem=null;echoUntil=Date.now()+1000;engine.cancel();}
+   if(data.reset){clearTimeout(playTimer);playTimer=null;clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;generation++;queue=[];items.clear();speaking=false;current=null;currentItem=null;engine.cancel();}
    let activity=cursor===null||data.reset?data.activity:null,activityId='working-status';
    for(const event of data.events){
     if(!Number.isSafeInteger(event.seq)||event.seq<0||typeof event.item!=='string'||(cursor!==null&&event.seq<=cursor))continue;
@@ -123,7 +123,7 @@ window.OaclisReadAloud=(()=>{
   button.onclick=()=>{if(enabled)stop();else enable();};
   if(!engine||!window.SpeechSynthesisUtterance){button.disabled=true;button.title=OaclisSettings.text('Lettura non disponibile');}else paint();
   const hidden=()=>{if(!enabled)return;if(document.hidden){clearTimeout(speechTimer);speechTimer=null;engine.pause?.();}else{lastSpeechProgress=Date.now();engine.resume?.();if(recoverSpeech&&!speechTimer)speechTimer=setTimeout(recoverSpeech,1500);play();}};document.addEventListener('visibilitychange',hidden);host.append(button);if(desired)enable(true);
-  return {reset:(active=true)=>{stop(true,true);echoUntil=0;if(active&&desired)enable(true);},enable,disable:stop,skip,commandOnly:()=>speaking||Date.now()<echoUntil,stamp:()=>generation,request:()=>({speech:enabled,speech_cursor:cursor}),update,speaking:()=>speaking,stop,destroy:()=>{stop(true,true);disposed=true;document.removeEventListener('visibilitychange',hidden);button.remove();}};
+  return {reset:(active=true)=>{stop(true,true);if(active&&desired)enable(true);},enable,disable:stop,skip,stamp:()=>generation,request:()=>({speech:enabled,speech_cursor:cursor}),update,speaking:()=>speaking,stop,destroy:()=>{stop(true,true);disposed=true;document.removeEventListener('visibilitychange',hidden);button.remove();}};
  }
  return {create,spokenText,feedback};
 })();

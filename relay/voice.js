@@ -1,4 +1,4 @@
-// voice.js v1.48.878
+// voice.js v1.48.891
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -30,7 +30,7 @@ window.OaclisVoice=(()=>{
  function create(){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   const session=Recognition&&window.isSecureContext?new Recognition():null;
-  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,consumed=-1,commandsOnly=false,finalTranscript='';
+  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,consumed=-1,finalTranscript='';
   let button,status,preview,options,help,root,autoSendTimer,reader=null,controls=null,info=null;
   const cancelAutoSend=()=>{clearTimeout(autoSendTimer);autoSendTimer=null;};
   function scheduleAutoSend(){
@@ -134,13 +134,10 @@ window.OaclisVoice=(()=>{
    if(!choice.items[index]){feedback('Scegli un numero tra quelli mostrati.');return;}
    const chat=choice.items[index];clearPending();return openChat(chat,choice.method);
   }
-  async function route(segment,commandsOnly=false){
+  async function route(segment){
    const result=parse(segment);
    const audio=result.type==='command'&&['readOn','readOff','readStop','selectPane'].includes(result.id);
    const media=result.type==='command'&&['takePhoto','pickImage','removeImage'].includes(result.id);
-   const navigation=result.type==='command'&&['selectChat','splitChat'].includes(result.id);
-   const recording=result.type==='command'&&['pauseRec','resumeRec','stop','help'].includes(result.id);
-   if(commandsOnly&&!audio&&!media&&!navigation&&!recording)return;
    if(result.type==='command'){
     cancelAutoSend();
     if(result.id==='stop'){stop(false);return;}
@@ -180,7 +177,7 @@ window.OaclisVoice=(()=>{
    session.lang=locale.speechLanguage;session.continuous=true;session.interimResults=true;session.maxAlternatives=1;
    const fresh=()=>wanted&&!disposed;
    session.onstart=()=>{if(fresh()){state='listening';paint();}};
-   session.onspeechstart=()=>{if(fresh()){cancelAutoSend();commandsOnly=reader?.commandOnly()===true;utteranceRevision=revision;state='listening';paint();}};
+   session.onspeechstart=()=>{if(fresh()){cancelAutoSend();utteranceRevision=revision;state='listening';paint();}};
    session.onspeechend=()=>{if(fresh()){state='processing';paint();}};
    session.onresult=event=>{
     if(!fresh()||!adapter||utteranceRevision!==revision)return;
@@ -200,11 +197,11 @@ window.OaclisVoice=(()=>{
        }
       }
       finalTranscript=dictation?result[0].transcript:'';
-      if(transcript)route(transcript,commandsOnly);
+      if(transcript)route(transcript);
      }
      else {cancelAutoSend();interim.push(result[0].transcript);}
     }
-    if(fresh()){preview.textContent=paused||commandsOnly||reader?.commandOnly()?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
+    if(fresh()){preview.textContent=paused?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
    };
    session.onerror=event=>{
     if(!fresh())return;
