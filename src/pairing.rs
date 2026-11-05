@@ -1,4 +1,4 @@
-// pairing.rs v1.53.718
+// pairing.rs v1.54.733
 //! Signed discovery and mutually approved SSH; persistent identities stay unchanged.
 use crate::{invalid, ssh_settings as ssh};
 use serde_json::{Value, json};
@@ -121,7 +121,7 @@ fn windows_network(ip: Ipv4Addr) -> io::Result<(String,bool)> {
     private_address(&address)?; Ok((address,value["ready"]==true))
 }
 fn prepare(config: &Path) -> io::Result<Value> {
-    let (_,key)=identity(config)?;
+    let (_,key)={let _lock=ssh::lock(config)?;identity(config)?};
     let host_key=match fs::read_to_string("/etc/ssh/ssh_host_ed25519_key.pub") {
         Ok(text)=>Some(public_key(&text.split_whitespace().take(2).collect::<Vec<_>>().join(" "))?.to_owned()),
         Err(e) if e.kind()==io::ErrorKind::NotFound=>None, Err(e)=>return Err(e),
@@ -143,7 +143,7 @@ fn prepare(config: &Path) -> io::Result<Value> {
         "setup_kind":if wsl && address!=primary {Some("wsl-nat")} else {None},"wsl":wsl,"wsl_ip":primary,"distro":env::var("WSL_DISTRO_NAME").unwrap_or_default()}))
 }
 fn sign(config: &Path, card: &Value) -> io::Result<Value> {
-    let (key,_)=identity(config)?;let saved=state(config)?;
+    let (key,saved)={let _lock=ssh::lock(config)?;let (key,_)=identity(config)?;(key,state(config)?)};
     let mut card=card.clone();
     if !card.is_object() { return Err(invalid("Annuncio non valido")); }
     card["name"]=json!(label(config)?);card["time"]=json!(now()?);card["approved"]=json!(saved["approved"].as_object().unwrap().keys().collect::<Vec<_>>());validate(&card)?;
@@ -277,7 +277,8 @@ fn commit(home: &Path, config: &Path, card: &Value) -> io::Result<Value> {
 pub(crate) fn request(home: &Path, operation: &str, value: &Value) -> io::Result<Value> {
     if operation=="verify" { return verify(value); }
     if operation=="neighbors" { return neighbors(); }
-    let config=home.join(".config/oaclis");let _lock=ssh::lock(&config)?;
+    let config=home.join(".config/oaclis");
+    let _lock=if matches!(operation,"prepare"|"sign"|"state"){None}else{Some(ssh::lock(&config)?)};
     match operation {
         "prepare"=>prepare(&config),"sign"=>sign(&config,value),"state"=>state(&config),
         "approve"=>approve(&config,&value["peer"],value["accept"].as_bool().ok_or_else(||invalid("Conferma richiesta"))?),
@@ -298,6 +299,14 @@ mod tests {
     fn card(config: &Path, index: u16) -> Value {
         let (_,key)=identity(config).unwrap();
         json!({"id":identifier(&key).unwrap(),"public_key":key,"name":format!("Device {index}"),"role":if index==0 {"master"} else {"client"},"ssh":{"address":"127.0.0.1","port":2200+index,"user":"root","host_key":key},"approved":[],"time":now().unwrap()})
+    }
+    #[test]
+    fn reading_pairing_state_does_not_wait_for_configuration_writes() {
+        let root=fixture("state-lock");let home=root.0.join("home");let config=home.join(".config/oaclis");fs::create_dir_all(&config).unwrap();
+        let held=ssh::lock(&config).unwrap();let (send,receive)=std::sync::mpsc::channel();
+        let reader=std::thread::spawn(move||{send.send(request(&home,"state",&Value::Null)).unwrap();});
+        let result=receive.recv_timeout(Duration::from_millis(500));drop(held);reader.join().unwrap();
+        assert_eq!(result.unwrap().unwrap(),json!({"approved":{},"ignored":[]}));
     }
     #[test]
     fn step3_pairing_requires_mutual_approval_and_preserves_existing_access() {
