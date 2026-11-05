@@ -1,4 +1,4 @@
-// console.js v3.140.2398
+// console.js v3.140.2406
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -178,7 +178,10 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   const close=document.createElement('button');close.type='button';close.className='icon-button popover-close';close.setAttribute('aria-label',OaclisSettings.text('Chiudi chat'));close.innerHTML=OaclisIcon('close');panel.querySelector('h2').append(close);
   document.body.append(panel);
   panel.showPopover();
-  if(document.documentElement.dataset.consoleWindow)panel.classList.add('context-popover','resizable-panel');
+  if(document.documentElement.dataset.consoleWindow){
+    panel.classList.add('context-popover','resizable-panel');
+    if(window.opener&&innerWidth===858)window.resizeBy(28,0);
+  }
   else {
   bindPanelDrag(panel);
   positionContext(panel, anchor);
@@ -273,10 +276,11 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     if (document.hidden || terminalPolling || !panel.isConnected || !ready) return;
     terminalPolling=true;
     try { await send({ action: "read" }); }
+    catch { /* send() already displays the read error; keep observing the session. */ }
     finally {
       terminalPolling=false;clearTimeout(panel.terminalTimer);
+      if (panel.isConnected && ready && !document.hidden) panel.terminalTimer=setTimeout(pollTerminal,1500);
     }
-    if (panel.isConnected && ready && !document.hidden) panel.terminalTimer=setTimeout(pollTerminal,1500);
   };
   panel.terminalVisibility=()=>{clearTimeout(panel.terminalTimer);if(!document.hidden)pollTerminal();};
   document.addEventListener('visibilitychange',panel.terminalVisibility);
