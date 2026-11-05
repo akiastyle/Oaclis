@@ -1,4 +1,4 @@
-// voice.js v1.51.962
+// voice.js v2.52.1090
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -29,8 +29,8 @@ window.OaclisVoice=(()=>{
  }
  function create(){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-  const session=Recognition&&window.isSecureContext?new Recognition():null;
-  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,consumed=-1,finalTranscript='',recognitionIssue=null;
+  let session=null,restartTimer=null,retries=0;
+  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,recognitionIssue=null;
   let button,status,preview,options,help,root,autoSendTimer,reader=null,controls=null,info=null;
   const events=[];
   function trace(event,detail={}){events.push({time:new Date().toISOString(),event,...detail});if(events.length>100)events.shift();}
@@ -56,18 +56,75 @@ window.OaclisVoice=(()=>{
    button.setAttribute('aria-label',button.title);
   };
   const clearPending=()=>{clearTimeout(pendingTimer);pending=null;if(options){if(options.open)options.close();options.replaceChildren();}};
+  function scheduleRecognition(hadResult){
+   if(!wanted||disposed)return;
+   if(!hadResult)retries++;
+   if(retries>8){state='error';feedback('Microfono non avviato.');paint();return;}
+   const delay=Math.min(400*2**Math.min(retries,4),6000);
+   state='starting';trace('recognition:scheduled',{delay,retries});paint();
+   restartTimer=setTimeout(()=>{restartTimer=null;if(wanted&&!disposed&&!session)startRecognition('end');},delay);
+  }
   function startRecognition(reason){
-   consumed=-1;finalTranscript='';recognitionIssue=null;utteranceRevision=revision;state='starting';
-   trace('call:start',{reason});session.start();
+   const current=session=new Recognition();let consumed=-1,finalTranscript='',hadResult=false;
+   recognitionIssue=null;utteranceRevision=revision;state='starting';
+   current.lang=locale.speechLanguage;current.continuous=true;current.interimResults=true;current.maxAlternatives=1;
+   trace('recognition:config',{continuous:current.continuous,interimResults:current.interimResults,language:current.lang});
+   const fresh=()=>wanted&&!disposed&&session===current;
+   current.onstart=()=>{trace('recognition:start');if(fresh()){state='listening';paint();}};
+   current.onspeechstart=()=>{trace('recognition:speechstart');if(fresh()){cancelAutoSend();utteranceRevision=revision;state='listening';paint();}};
+   current.onspeechend=()=>{trace('recognition:speechend');if(fresh()){state='processing';paint();}};
+   for(const name of ['audiostart','audioend','soundstart','soundend'])current['on'+name]=()=>trace('recognition:'+name);
+   current.onresult=event=>{
+    if(!fresh()||!adapter||utteranceRevision!==revision){trace('recognition:result-ignored',{wanted,revision,utteranceRevision});return;}
+    hadResult=true;retries=0;state='processing';paint();
+    const interim=[];
+    for(let i=event.resultIndex;i<event.results.length;i++){
+     if(!fresh())break;
+     const result=event.results[i];
+     if(result.isFinal){
+      trace('recognition:final',{index:i,text:result[0].transcript.slice(0,200)});
+      if(i<=consumed)continue;consumed=i;preview.textContent='';
+      let transcript=result[0].transcript;
+      const dictation=parse(transcript).type==='dictation';
+      if(dictation&&finalTranscript){
+       const previous=normalize(finalTranscript).split(' '),words=transcript.trim().split(/\s+/);
+       for(let overlap=Math.min(previous.length,words.length);overlap>0;overlap--){
+        if(normalize(words.slice(0,overlap).join(' '))===previous.slice(-overlap).join(' ')){transcript=words.slice(overlap).join(' ');break;}
+       }
+      }
+      finalTranscript=dictation?result[0].transcript:'';
+      if(transcript)route(transcript);
+     }
+     else {cancelAutoSend();interim.push(result[0].transcript);}
+    }
+    if(fresh()){preview.textContent=paused?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
+   };
+   current.onerror=event=>{
+    trace('recognition:error',{error:event.error,message:event.message,wanted});
+    if(!fresh())return;
+    recognitionIssue={event:'error',error:event.error,message:event.message||''};
+    const messages={'no-speech':'In attesa della voce','not-allowed':'Microfono non autorizzato.','service-not-allowed':'Servizio vocale non consentito.','audio-capture':'Microfono non disponibile.','network':'Rete vocale non disponibile.','language-not-supported':'Italiano non disponibile.'};
+    state='error';feedback(locale.text(messages[event.error]||'Ascolto interrotto.')+' ['+event.error+']');paint();
+   };
+   current.onend=()=>{
+    trace('recognition:end',{wanted,state,paused,chat:adapter?.chatId});
+    if(session!==current)return;
+    session=null;
+    if(!wanted||disposed){state='idle';paint();return;}
+    if(['not-allowed','service-not-allowed','audio-capture','language-not-supported'].includes(recognitionIssue?.error)){state='error';paint();return;}
+    scheduleRecognition(hadResult);
+   };
+   try{trace('call:start',{reason});current.start();}
+   catch(error){session=null;recognitionIssue={event:'exception',error:error.name,message:error.message};trace('recognition:exception',recognitionIssue);scheduleRecognition(false);}
   }
   function setListening(on,silent=true){
-   if(on===wanted||disposed||!session)return;
-   wanted=on;paused=false;cancelAutoSend();clearPending();
+   if(on===wanted||disposed||!Recognition||!window.isSecureContext)return;
+   wanted=on;paused=false;clearTimeout(restartTimer);restartTimer=null;cancelAutoSend();clearPending();
    if(!silent)OaclisReadAloud.feedback();
    if(preview)preview.textContent='';
    try{
-    if(on)startRecognition('user');
-    else{trace('call:abort',{caller:new Error().stack.split('\n').slice(1,5).join(' | ')});state='idle';session.abort();}
+    if(on){retries=0;startRecognition('user');}
+    else{state='idle';const previous=session;session=null;if(previous){trace('call:abort',{caller:new Error().stack.split('\n').slice(1,5).join(' | ')});previous.abort();}}
    }catch(error){trace('recognition:exception',{name:error.name,message:error.message});state='error';feedback('Microfono non avviato.');paint();throw error;}
    paint();
   }
@@ -186,59 +243,6 @@ window.OaclisVoice=(()=>{
     default:await action(()=>adapter[id](args));
    }
   }
-  if(session){
-   session.lang=locale.speechLanguage;session.continuous=true;session.interimResults=false;session.maxAlternatives=1;
-   trace('recognition:config',{continuous:session.continuous,interimResults:session.interimResults,language:session.lang});
-   const fresh=()=>wanted&&!disposed;
-   session.onstart=()=>{trace('recognition:start');if(fresh()){state='listening';paint();}};
-   session.onspeechstart=()=>{trace('recognition:speechstart');if(fresh()){cancelAutoSend();utteranceRevision=revision;state='listening';paint();}};
-   session.onspeechend=()=>{trace('recognition:speechend');if(fresh()){state='processing';paint();}};
-   for(const name of ['audiostart','audioend','soundstart','soundend'])session['on'+name]=()=>trace('recognition:'+name);
-   session.onresult=event=>{
-    if(!fresh()||!adapter||utteranceRevision!==revision){trace('recognition:result-ignored',{wanted,revision,utteranceRevision});return;}
-    state='processing';paint();
-    const interim=[];
-    for(let i=event.resultIndex;i<event.results.length;i++){
-     if(!fresh())break;
-     const result=event.results[i];
-     if(result.isFinal){
-      trace('recognition:final',{index:i,text:result[0].transcript.slice(0,200)});
-      if(i<=consumed)continue;consumed=i;preview.textContent='';
-      let transcript=result[0].transcript;
-      const dictation=parse(transcript).type==='dictation';
-      if(dictation&&finalTranscript){
-       const previous=normalize(finalTranscript).split(' '),words=transcript.trim().split(/\s+/);
-       for(let overlap=Math.min(previous.length,words.length);overlap>0;overlap--){
-        if(normalize(words.slice(0,overlap).join(' '))===previous.slice(-overlap).join(' ')){transcript=words.slice(overlap).join(' ');break;}
-       }
-      }
-      finalTranscript=dictation?result[0].transcript:'';
-      if(transcript)route(transcript);
-     }
-     else {cancelAutoSend();interim.push(result[0].transcript);}
-    }
-    if(fresh()){preview.textContent=paused?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
-   };
-   session.onerror=event=>{
-    trace('recognition:error',{error:event.error,message:event.message,wanted});
-    if(!fresh())return;
-    recognitionIssue={event:'error',error:event.error,message:event.message||''};
-    const messages={'no-speech':'In attesa della voce','not-allowed':'Microfono non autorizzato.','service-not-allowed':'Servizio vocale non consentito.','audio-capture':'Microfono non disponibile.','network':'Rete vocale non disponibile.','language-not-supported':'Italiano non disponibile.'};
-    state='error';feedback(locale.text(messages[event.error]||'Ascolto interrotto.')+' ['+event.error+']');paint();
-   };
-   session.onend=()=>{
-    trace('recognition:end',{wanted,state,paused,chat:adapter?.chatId});
-    if(wanted&&!disposed&&(!recognitionIssue?.error||recognitionIssue.error==='no-speech')){
-     try{startRecognition('end');}catch(error){recognitionIssue={event:'exception',error:error.name,message:error.message};trace('recognition:exception',recognitionIssue);state='error';}
-     paint();return;
-    }
-    if(wanted&&!recognitionIssue)recognitionIssue={event:'end',error:null};
-    if(wanted&&state!=='error')feedback('Ascolto terminato senza segnalazione di errore.');
-    state=wanted?'error':'idle';
-    if(preview)preview.textContent='';
-    paint();
-   };
-  }
   function focus(event){
    if(valid(event.target)&&target!==event.target){
     cancelAutoSend();target=event.target;revision++;clearPending();
@@ -262,7 +266,7 @@ window.OaclisVoice=(()=>{
     root.append(status,preview,options,help);
     button=document.createElement('button');button.type='button';button.className='voice-mic secondary icon-button';button.dataset.voiceAction='microphone';button.innerHTML=OaclisIcon('microphone');controls.append(button);
     button.onclick=()=>setListening(!wanted,false);
-    if(!session){button.disabled=true;feedback('Voce non disponibile in questo browser.');}
+    if(!Recognition||!window.isSecureContext){button.disabled=true;feedback('Voce non disponibile in questo browser.');}
     info=document.createElement('button');info.type='button';info.className='voice-info secondary icon-button';info.dataset.voiceAction='commands';info.title=locale.text('Comandi vocali');info.setAttribute('aria-label',info.title);info.innerHTML=OaclisIcon('info');info.onclick=showHelp;controls.append(info);
    }else if(host!==controls){host.replaceWith(controls);}
    if(next.chatId&&!reader){
