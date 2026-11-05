@@ -1,4 +1,4 @@
-// voice.js v1.50.947
+// voice.js v1.51.960
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -56,15 +56,18 @@ window.OaclisVoice=(()=>{
    button.setAttribute('aria-label',button.title);
   };
   const clearPending=()=>{clearTimeout(pendingTimer);pending=null;if(options){if(options.open)options.close();options.replaceChildren();}};
+  function startRecognition(reason){
+   consumed=-1;finalTranscript='';recognitionIssue=null;utteranceRevision=revision;state='starting';
+   trace('call:start',{reason});session.start();
+  }
   function setListening(on,silent=true){
    if(on===wanted||disposed||!session)return;
    wanted=on;paused=false;cancelAutoSend();clearPending();
    if(!silent)OaclisReadAloud.feedback();
    if(preview)preview.textContent='';
    try{
-    trace(on?'call:start':'call:abort',{caller:new Error().stack.split('\n').slice(1,5).join(' | ')});
-    if(on){consumed=-1;finalTranscript='';recognitionIssue=null;utteranceRevision=revision;state='starting';session.start();}
-    else{state='idle';session.abort();}
+    if(on)startRecognition('user');
+    else{trace('call:abort',{caller:new Error().stack.split('\n').slice(1,5).join(' | ')});state='idle';session.abort();}
    }catch(error){trace('recognition:exception',{name:error.name,message:error.message});state='error';feedback('Microfono non avviato.');paint();throw error;}
    paint();
   }
@@ -225,6 +228,10 @@ window.OaclisVoice=(()=>{
    };
    session.onend=()=>{
     trace('recognition:end',{wanted,state,paused,chat:adapter?.chatId});
+    if(wanted&&!disposed&&(!recognitionIssue?.error||recognitionIssue.error==='no-speech')){
+     try{startRecognition('end');}catch(error){recognitionIssue={event:'exception',error:error.name,message:error.message};trace('recognition:exception',recognitionIssue);state='error';}
+     paint();return;
+    }
     if(wanted&&!recognitionIssue)recognitionIssue={event:'end',error:null};
     if(wanted&&state!=='error')feedback('Ascolto terminato senza segnalazione di errore.');
     state=wanted?'error':'idle';
