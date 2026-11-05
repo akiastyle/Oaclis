@@ -1,4 +1,4 @@
-/* style.css v2.0.1595 */
+/* style.css v2.0.1597 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1010,7 +1010,7 @@ select {
   pointer-events: none;
 }
 
-.chat-terminal.context-popover { width: min(calc(800px + 2 * var(--space-20) + 2 * var(--border-width)), calc(100vw - 16px)); }
+.chat-terminal.context-popover { width: min(calc(800px + 2 * var(--space-12) + 4px + 2 * var(--space-20) + 2 * var(--border-width)), calc(100vw - 16px)); }
 
 .terminal-destinations { display: flex; flex-direction: column; gap: var(--space-8); }
 
