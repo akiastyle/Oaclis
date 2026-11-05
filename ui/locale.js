@@ -1,4 +1,4 @@
-// locale.js v1.3.525
+// locale.js v1.3.527
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -355,6 +355,8 @@ window.OaclisSettings=(()=>{
   "Attesa di 5 secondi (altrimenti 3)": "Wait 5 seconds (otherwise 3)",
   "Pausa dettatura dopo invio": "Pause dictation after sending",
   "Comandi vocali": "Voice commands",
+  "Diagnostica vocale": "Voice diagnostics",
+  "Copia log": "Copy log",
   "Attiva lettura": "Enable read aloud",
   "Disattiva lettura": "Disable read aloud",
   "Lettura in collegamento": "Connecting read aloud",

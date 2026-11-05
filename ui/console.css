@@ -1,4 +1,4 @@
-/* console.css v2.0.1641 */
+/* console.css v2.0.1643 */
 .oaclis-console,.voice-controls,.voice-dialog{--console-ink:var(--ink,var(--text));--console-line:var(--line,#ffffff26);--console-soft:var(--soft,#394247);--console-accent:var(--accent,var(--ink));color:var(--console-ink)}
 .oaclis-console[popover]:not(:popover-open){display:none}
 .oaclis-console{display:grid;grid-template-rows:minmax(0,1fr) auto auto;gap:8px;min-width:0;min-height:0;overflow:hidden}
@@ -76,3 +76,5 @@
 @media(max-width:600px){.terminal-input textarea{font-size:16px}.voice-dialog{width:100%;height:100dvh;max-height:none;margin:0;border:0;border-radius:0}}
 @media(prefers-reduced-motion:reduce){.voice-controls .voice-mic[data-mode="busy"]{animation:none}.voice-settings summary svg:last-child{transition:none}}
 .voice-controls>button[hidden]{display:none}
+
+.voice-trace pre{max-height:32dvh;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.5 monospace}

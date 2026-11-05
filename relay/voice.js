@@ -1,4 +1,4 @@
-// voice.js v1.48.909
+// voice.js v1.50.947
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -32,6 +32,8 @@ window.OaclisVoice=(()=>{
   const session=Recognition&&window.isSecureContext?new Recognition():null;
   let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,consumed=-1,finalTranscript='',recognitionIssue=null;
   let button,status,preview,options,help,root,autoSendTimer,reader=null,controls=null,info=null;
+  const events=[];
+  function trace(event,detail={}){events.push({time:new Date().toISOString(),event,...detail});if(events.length>100)events.shift();}
   const cancelAutoSend=()=>{clearTimeout(autoSendTimer);autoSendTimer=null;};
   function scheduleAutoSend(){
    cancelAutoSend();
@@ -44,7 +46,7 @@ window.OaclisVoice=(()=>{
    },preferences.waitFive?5000:3000);
   }
   const valid=field=>field?.isConnected&&!field.disabled&&!field.readOnly&&adapter?.fields().includes(field)&&['textarea','input'].includes(field.localName)&&field.type!=='password';
-  const feedback=text=>{if(status)status.textContent=locale.text(text);};
+  const feedback=text=>{trace('feedback',{text});if(status)status.textContent=locale.text(text);};
   const paint=()=>{
    if(!button)return;
    if(button.disabled){button.dataset.mode='off';button.setAttribute('aria-pressed','false');button.title=locale.text('Voce non disponibile in questo browser.');button.setAttribute('aria-label',button.title);return;}
@@ -60,9 +62,10 @@ window.OaclisVoice=(()=>{
    if(!silent)OaclisReadAloud.feedback();
    if(preview)preview.textContent='';
    try{
+    trace(on?'call:start':'call:abort',{caller:new Error().stack.split('\n').slice(1,5).join(' | ')});
     if(on){consumed=-1;finalTranscript='';recognitionIssue=null;utteranceRevision=revision;state='starting';session.start();}
     else{state='idle';session.abort();}
-   }catch(error){state='error';feedback('Microfono non avviato.');paint();throw error;}
+   }catch(error){trace('recognition:exception',{name:error.name,message:error.message});state='error';feedback('Microfono non avviato.');paint();throw error;}
    paint();
   }
   const stop=(silent=true)=>setListening(false,silent);
@@ -101,7 +104,11 @@ window.OaclisVoice=(()=>{
    for(const command of commands.filter(command=>command.id==='clearDraft'||available(command.id))){const item=document.createElement('li'),name=document.createElement('strong'),detail=document.createElement('span');name.textContent=command.aliases?.join(' / ')||command.label;detail.textContent=grammar.descriptions[command.id]||'';item.append(name,detail);list.append(item);}
    help.append(header);
    if(recognitionIssue){const error=document.createElement('p');error.setAttribute('role','alert');error.textContent=JSON.stringify(recognitionIssue);help.append(error);}
-   help.append(settings,list);help.showModal();
+   const diagnostic=document.createElement('details');diagnostic.className='voice-trace';
+   const diagnosticTitle=document.createElement('summary');diagnosticTitle.textContent=locale.text('Diagnostica vocale');
+   const log=document.createElement('pre');log.textContent=events.map(event=>JSON.stringify(event)).join('\n');
+   const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent=locale.text('Copia log');copy.onclick=()=>navigator.clipboard.writeText(log.textContent);
+   diagnostic.append(diagnosticTitle,log,copy);help.append(diagnostic,settings,list);help.showModal();
   }
   function available(id){
    if(['stop','help','pauseRec','resumeRec','selectChat'].includes(id))return true;
@@ -138,6 +145,7 @@ window.OaclisVoice=(()=>{
   }
   async function route(segment){
    const result=parse(segment);
+   trace('route:'+result.type,{command:result.id,args:result.args});
    const audio=result.type==='command'&&['readOn','readOff','readStop','selectPane'].includes(result.id);
    const media=result.type==='command'&&['takePhoto','pickImage','removeImage'].includes(result.id);
    if(result.type==='command'){
@@ -177,18 +185,21 @@ window.OaclisVoice=(()=>{
   }
   if(session){
    session.lang=locale.speechLanguage;session.continuous=true;session.interimResults=true;session.maxAlternatives=1;
+   trace('recognition:config',{continuous:session.continuous,interimResults:session.interimResults,language:session.lang});
    const fresh=()=>wanted&&!disposed;
-   session.onstart=()=>{if(fresh()){state='listening';paint();}};
-   session.onspeechstart=()=>{if(fresh()){cancelAutoSend();utteranceRevision=revision;state='listening';paint();}};
-   session.onspeechend=()=>{if(fresh()){state='processing';paint();}};
+   session.onstart=()=>{trace('recognition:start');if(fresh()){state='listening';paint();}};
+   session.onspeechstart=()=>{trace('recognition:speechstart');if(fresh()){cancelAutoSend();utteranceRevision=revision;state='listening';paint();}};
+   session.onspeechend=()=>{trace('recognition:speechend');if(fresh()){state='processing';paint();}};
+   for(const name of ['audiostart','audioend','soundstart','soundend'])session['on'+name]=()=>trace('recognition:'+name);
    session.onresult=event=>{
-    if(!fresh()||!adapter||utteranceRevision!==revision)return;
+    if(!fresh()||!adapter||utteranceRevision!==revision){trace('recognition:result-ignored',{wanted,revision,utteranceRevision});return;}
     state='processing';paint();
     const interim=[];
     for(let i=event.resultIndex;i<event.results.length;i++){
      if(!fresh())break;
      const result=event.results[i];
      if(result.isFinal){
+      trace('recognition:final',{index:i,text:result[0].transcript.slice(0,200)});
       if(i<=consumed)continue;consumed=i;preview.textContent='';
       let transcript=result[0].transcript;
       const dictation=parse(transcript).type==='dictation';
@@ -206,12 +217,14 @@ window.OaclisVoice=(()=>{
     if(fresh()){preview.textContent=paused?'':interim.join(' ');state=interim.length?'processing':'listening';paint();}
    };
    session.onerror=event=>{
+    trace('recognition:error',{error:event.error,message:event.message,wanted});
     if(!fresh())return;
     recognitionIssue={event:'error',error:event.error,message:event.message||''};
     const messages={'no-speech':'In attesa della voce','not-allowed':'Microfono non autorizzato.','service-not-allowed':'Servizio vocale non consentito.','audio-capture':'Microfono non disponibile.','network':'Rete vocale non disponibile.','language-not-supported':'Italiano non disponibile.'};
     state='error';feedback(locale.text(messages[event.error]||'Ascolto interrotto.')+' ['+event.error+']');paint();
    };
    session.onend=()=>{
+    trace('recognition:end',{wanted,state,paused,chat:adapter?.chatId});
     if(wanted&&!recognitionIssue)recognitionIssue={event:'end',error:null};
     if(wanted&&state!=='error')feedback('Ascolto terminato senza segnalazione di errore.');
     state=wanted?'error':'idle';
@@ -227,10 +240,10 @@ window.OaclisVoice=(()=>{
   function input(event){
    if(event.target===adapter?.compose)cancelAutoSend();
   }
-  function hidden(){if(document.hidden){cancelAutoSend();clearPending();}}
+  function hidden(){trace('page:visibility',{state:document.visibilityState});if(document.hidden){cancelAutoSend();clearPending();}}
   function bind(next,host){
    const changed=!adapter||adapter.chatId!==next.chatId||adapter.compose!==next.compose;
-   if(changed){cancelAutoSend();clearPending();revision++;target=next.compose||next.fields()[0];}
+   if(changed){trace('target',{chat:next.chatId});cancelAutoSend();clearPending();revision++;target=next.compose||next.fields()[0];}
    adapter=next;
    if(!button){
     controls=host;controls.classList.add('voice-controls');
@@ -246,17 +259,18 @@ window.OaclisVoice=(()=>{
     info=document.createElement('button');info.type='button';info.className='voice-info secondary icon-button';info.dataset.voiceAction='commands';info.title=locale.text('Comandi vocali');info.setAttribute('aria-label',info.title);info.innerHTML=OaclisIcon('info');info.onclick=showHelp;controls.append(info);
    }else if(host!==controls){host.replaceWith(controls);}
    if(next.chatId&&!reader){
-    reader=OaclisReadAloud.create(controls);const read=controls.querySelector('.read-aloud');read.dataset.voiceAction='read';read.classList.add('icon-button');controls.insertBefore(read,info);
+    reader=OaclisReadAloud.create(controls,trace);const read=controls.querySelector('.read-aloud');read.dataset.voiceAction='read';read.classList.add('icon-button');controls.insertBefore(read,info);
    }else if(changed)reader?.reset(!!next.chatId);
    const read=controls.querySelector('.read-aloud');if(read)read.hidden=!next.chatId;
    (document.getElementById('app')||document.body).append(root);paint();
    if(!initialized){initialized=true;if(preferences.startMic)setListening(true);}
   }
-  function leave(){cancelAutoSend();clearPending();reader?.reset(false);revision++;target=null;adapter=null;root?.remove();}
+  function leave(){trace('target:leave');cancelAutoSend();clearPending();reader?.reset(false);revision++;target=null;adapter=null;root?.remove();}
   function afterSend(){
+   trace('after-send',{pause:preferences.pauseAfterSend});
    if(preferences.pauseAfterSend&&wanted&&!paused){cancelAutoSend();paused=true;paint();}
   }
-  function destroy(){stop();disposed=true;leave();reader?.destroy();controls?.remove();if(session)for(const name of ['onstart','onspeechstart','onspeechend','onresult','onerror','onend'])session[name]=null;document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
+  function destroy(){stop();disposed=true;leave();reader?.destroy();controls?.remove();if(session)for(const name of ['onstart','onspeechstart','onspeechend','onresult','onerror','onend','onaudiostart','onaudioend','onsoundstart','onsoundend'])session[name]=null;document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}
   document.addEventListener('focusin',focus);document.addEventListener('input',input);document.addEventListener('visibilitychange',hidden);window.addEventListener('pagehide',stop);
   return {bind,leave,stop,destroy,showHelp,afterSend,get reader(){return reader;}};
  }

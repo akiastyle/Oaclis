@@ -1,4 +1,4 @@
-// read-aloud.js v1.23.300
+// read-aloud.js v1.23.316
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -22,7 +22,7 @@ window.OaclisReadAloud=(()=>{
  function feedback(){
   try{audio.pause();audio.currentTime=0;audio.play().catch(()=>{});}catch{}
  }
- function create(host){
+ function create(host,trace=()=>{}){
   const engine=window.speechSynthesis,button=document.createElement('button');
   engine?.getVoices?.();
   button.type='button';button.className='read-aloud secondary';
@@ -40,7 +40,7 @@ window.OaclisReadAloud=(()=>{
    const language=utterance.lang.toLowerCase(),voices=(engine.getVoices?.()||[]).filter(voice=>voice.lang.toLowerCase().split('-')[0]===language.split('-')[0]);
    utterance.voice=voices.find(voice=>/^Google\b/i.test(voice.name)&&voice.lang.toLowerCase()===language)||voices.find(voice=>/^Google\b/i.test(voice.name))||voices.find(voice=>voice.lang.toLowerCase()===language)||voices[0]||null;
    speaking=true;current=utterance;lastSpeechProgress=Date.now();let started=false;
-   const done=()=>{if(version!==generation||disposed||current!==utterance)return;clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;speaking=false;current=null;currentItem=null;if(queue.length)play();};
+   const done=event=>{if(version!==generation||disposed||current!==utterance)return;trace('speech:'+(event?.type||'complete'));clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;speaking=false;current=null;currentItem=null;if(queue.length)play();};
    const recover=()=>{
     speechTimer=null;
     if(version!==generation||disposed||current!==utterance)return;
@@ -49,14 +49,14 @@ window.OaclisReadAloud=(()=>{
     if((engine.speaking===false&&engine.pending!==true)||Date.now()-lastSpeechProgress>90000){
      utterance.onend=utterance.onerror=null;
      if(!retried&&!started)queue.unshift({text,id,activity,retried:true});
-     quietUntil=Math.max(quietUntil,Date.now()+250);engine.cancel();done();return;
+     quietUntil=Math.max(quietUntil,Date.now()+250);trace('call:speech-cancel',{reason:'recovery'});engine.cancel();done();return;
     }
     speechTimer=setTimeout(recover,1500);
    };
    recoverSpeech=recover;
-   utterance.onstart=utterance.onboundary=()=>{if(current===utterance){started=true;lastSpeechProgress=Date.now();}};
+   utterance.onstart=utterance.onboundary=event=>{if(event?.type==='start')trace('speech:start');if(current===utterance){started=true;lastSpeechProgress=Date.now();}};
    speechTimer=setTimeout(recover,1500);
-   utterance.onend=done;utterance.onerror=event=>{if(version!==generation||disposed||current!==utterance)return;if(['interrupted','canceled','audio-busy','network','synthesis-failed'].includes(event.error)){if(!retried)queue.unshift({text,id,activity,retried:true});quietUntil=Math.max(quietUntil,Date.now()+500);done();return;}stop(false,true);button.title=OaclisSettings.text('Lettura non disponibile');button.setAttribute('aria-label',button.title);};try{engine.speak(utterance);}catch{utterance.onerror({error:'synthesis-failed'});}
+   utterance.onend=done;utterance.onerror=event=>{trace('speech:error',{error:event.error});if(version!==generation||disposed||current!==utterance)return;if(['interrupted','canceled','audio-busy','network','synthesis-failed'].includes(event.error)){if(!retried)queue.unshift({text,id,activity,retried:true});quietUntil=Math.max(quietUntil,Date.now()+500);done();return;}stop(false,true);button.title=OaclisSettings.text('Lettura non disponibile');button.setAttribute('aria-label',button.title);};try{trace('call:speak',{text:text.slice(0,200)});engine.speak(utterance);}catch{utterance.onerror({error:'synthesis-failed'});}
   }
   function defer(milliseconds=2000){
    quietUntil=Date.now()+milliseconds;clearTimeout(playTimer);playTimer=null;play();
@@ -67,7 +67,7 @@ window.OaclisReadAloud=(()=>{
    if(!preserve)desired=false;
    if(enabled&&!silent)feedback();
    generation++;enabled=false;cursor=null;queue=[];items.clear();ignored.clear();speaking=false;current=null;currentItem=null;
-   engine?.cancel();paint();
+   trace('call:speech-cancel',{reason:'stop',preserve});engine?.cancel();paint();
   }
   function enable(silent=false){
    if(disposed||!engine||!window.SpeechSynthesisUtterance)return false;
@@ -80,7 +80,7 @@ window.OaclisReadAloud=(()=>{
    if(ignored.size>=16)ignored.delete(ignored.values().next().value);
    ignored.add(id);items.delete(id);queue=queue.filter(part=>part.id!==id);
    clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;generation++;speaking=false;current=null;currentItem=null;
-   engine?.cancel();if(queue.length)play();
+   trace('call:speech-cancel',{reason:'skip'});engine?.cancel();if(queue.length)play();
   }
   function flush(item,complete){
    const clean=spokenText(item.raw);
@@ -95,7 +95,7 @@ window.OaclisReadAloud=(()=>{
   function update(data,version=generation,input=false){
    if(version!==generation||!enabled||!data||!Array.isArray(data.events))return;
    if(input)defer(2000);
-   if(data.reset){clearTimeout(playTimer);playTimer=null;clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;generation++;queue=[];items.clear();speaking=false;current=null;currentItem=null;engine.cancel();}
+   if(data.reset){clearTimeout(playTimer);playTimer=null;clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;generation++;queue=[];items.clear();speaking=false;current=null;currentItem=null;trace('call:speech-cancel',{reason:'reset'});engine.cancel();}
    let activity=cursor===null||data.reset?data.activity:null,activityId='working-status';
    for(const event of data.events){
     if(!Number.isSafeInteger(event.seq)||event.seq<0||typeof event.item!=='string'||(cursor!==null&&event.seq<=cursor))continue;
