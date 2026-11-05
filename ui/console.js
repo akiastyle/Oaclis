@@ -1,4 +1,4 @@
-// console.js v3.140.2395
+// console.js v3.140.2398
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -190,7 +190,8 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     const saved=JSON.parse(localStorage.getItem(geometryKey)||'null');
     if(saved&&['left','top','width','height'].every(key=>Number.isFinite(saved[key]))&&saved.width>0&&saved.height>0){
       panel.style.maxWidth='calc(100vw - 16px)';panel.style.maxHeight='calc(100dvh - 16px)';
-      panel.style.width=Math.min(innerWidth-16,Math.max(280,saved.width))+'px';
+      const width=!saved.snap&&saved.width===842?panel.offsetWidth:saved.width;
+      panel.style.width=Math.min(innerWidth-16,Math.max(280,width))+'px';
       panel.style.height=Math.min(innerHeight-16,Math.max(320,saved.height))+'px';
       panel.style.left=Math.max(8,Math.min(saved.left,innerWidth-panel.offsetWidth-8))+'px';
       panel.style.top=Math.max(8,Math.min(saved.top,innerHeight-panel.offsetHeight-8))+'px';panel.dataset.moved='true';
