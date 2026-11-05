@@ -1,4 +1,4 @@
-// voice.js v1.51.960
+// voice.js v1.51.962
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -187,7 +187,7 @@ window.OaclisVoice=(()=>{
    }
   }
   if(session){
-   session.lang=locale.speechLanguage;session.continuous=true;session.interimResults=true;session.maxAlternatives=1;
+   session.lang=locale.speechLanguage;session.continuous=true;session.interimResults=false;session.maxAlternatives=1;
    trace('recognition:config',{continuous:session.continuous,interimResults:session.interimResults,language:session.lang});
    const fresh=()=>wanted&&!disposed;
    session.onstart=()=>{trace('recognition:start');if(fresh()){state='listening';paint();}};
