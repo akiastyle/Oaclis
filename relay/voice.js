@@ -1,4 +1,4 @@
-// voice.js v1.48.897
+// voice.js v1.48.901
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -208,10 +208,10 @@ window.OaclisVoice=(()=>{
    session.onerror=event=>{
     if(!fresh())return;
     const messages={'no-speech':'In attesa della voce','not-allowed':'Microfono non autorizzato.','service-not-allowed':'Servizio vocale non consentito.','audio-capture':'Microfono non disponibile.','network':'Rete vocale non disponibile.','language-not-supported':'Italiano non disponibile.'};
-    state='error';feedback(messages[event.error]||'Ascolto interrotto.');paint();
+    state='error';feedback(locale.text(messages[event.error]||'Ascolto interrotto.')+' ['+event.error+']');paint();
    };
    session.onend=()=>{
-    if(wanted&&state!=='error')feedback('Ascolto interrotto.');
+    if(wanted&&state!=='error')feedback('Ascolto terminato senza segnalazione di errore.');
     state=wanted?'error':'idle';
     if(preview)preview.textContent='';
     paint();

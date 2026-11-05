@@ -1,4 +1,4 @@
-// locale.js v1.3.524
+// locale.js v1.3.525
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -325,6 +325,7 @@ window.OaclisSettings=(()=>{
   "Collegamento o elaborazione vocale · clic per spegnere": "Voice connecting or processing · click to turn off",
   "Ascolto disattivato": "Listening off",
   "Ascolto interrotto.": "Listening interrupted.",
+  "Ascolto terminato senza segnalazione di errore.": "Listening ended without a reported error.",
   "Ascolto interrotto. Tocca il microfono per riprovare.": "Listening interrupted. Tap the microphone to try again.",
   "In attesa della voce": "Waiting for speech",
   "Microfono non autorizzato.": "Microphone permission denied.",
