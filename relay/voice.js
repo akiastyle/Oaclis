@@ -1,4 +1,4 @@
-// voice.js v1.48.876
+// voice.js v1.48.878
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -140,7 +140,7 @@ window.OaclisVoice=(()=>{
    const media=result.type==='command'&&['takePhoto','pickImage','removeImage'].includes(result.id);
    const navigation=result.type==='command'&&['selectChat','splitChat'].includes(result.id);
    const recording=result.type==='command'&&['pauseRec','resumeRec','stop','help'].includes(result.id);
-   if((commandsOnly||reader?.commandOnly())&&!audio&&!media&&!navigation&&!recording)return;
+   if(commandsOnly&&!audio&&!media&&!navigation&&!recording)return;
    if(result.type==='command'){
     cancelAutoSend();
     if(result.id==='stop'){stop(false);return;}
