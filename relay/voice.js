@@ -1,4 +1,4 @@
-// voice.js v2.52.1090
+// voice.js v2.52.1105
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -29,7 +29,7 @@ window.OaclisVoice=(()=>{
  }
  function create(){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
-  let session=null,restartTimer=null,retries=0;
+  let session=null,restartTimer=null,retries=0,microphoneStream=null,microphoneRequest=null;
   let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,recognitionIssue=null;
   let button,status,preview,options,help,root,autoSendTimer,reader=null,controls=null,info=null;
   const events=[];
@@ -117,15 +117,20 @@ window.OaclisVoice=(()=>{
    try{trace('call:start',{reason});current.start();}
    catch(error){session=null;recognitionIssue={event:'exception',error:error.name,message:error.message};trace('recognition:exception',recognitionIssue);scheduleRecognition(false);}
   }
-  function setListening(on,silent=true){
+  async function setListening(on,silent=true){
    if(on===wanted||disposed||!Recognition||!window.isSecureContext)return;
    wanted=on;paused=false;clearTimeout(restartTimer);restartTimer=null;cancelAutoSend();clearPending();
    if(!silent)OaclisReadAloud.feedback();
    if(preview)preview.textContent='';
    try{
-    if(on){retries=0;startRecognition('user');}
-    else{state='idle';const previous=session;session=null;if(previous){trace('call:abort',{caller:new Error().stack.split('\n').slice(1,5).join(' | ')});previous.abort();}}
-   }catch(error){trace('recognition:exception',{name:error.name,message:error.message});state='error';feedback('Microfono non avviato.');paint();throw error;}
+    if(on){
+     state='starting';paint();const request=microphoneRequest={};
+     const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+     if(!wanted||disposed||microphoneRequest!==request){stream.getTracks().forEach(track=>track.stop());return;}
+     microphoneStream=stream;trace('microphone:held');retries=0;startRecognition('user');
+    }
+    else{microphoneRequest=null;microphoneStream?.getTracks().forEach(track=>track.stop());microphoneStream=null;trace('microphone:released');state='idle';const previous=session;session=null;if(previous){trace('call:abort',{caller:new Error().stack.split('\n').slice(1,5).join(' | ')});previous.abort();}}
+   }catch(error){trace('recognition:exception',{name:error.name,message:error.message});state='error';feedback('Microfono non avviato.');paint();}
    paint();
   }
   const stop=(silent=true)=>setListening(false,silent);
