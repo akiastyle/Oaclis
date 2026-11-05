@@ -1,4 +1,4 @@
-// read-aloud.js v1.23.316
+// read-aloud.js v1.23.327
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -17,9 +17,10 @@ window.OaclisReadAloud=(()=>{
   return lines.join('\n');
  }
  const activityHeaders=new Set(['Running','Ran','Exploring','Explored','Calling','Called','Failed','Browsing the web','Searching the web','Searched the web','Opening','Opened','Opening page','Opened page','Searching for','Searched for','Searching page','Searched page','Added','Deleted','Edited','Failed to apply patch','Viewed image','Updated Plan']);
- const audio=new Audio('/feedback.mp3');audio.preload='auto';audio.volume=1;
+ const sounds=[],audio=new Audio('/feedback.mp3');audio.preload='auto';audio.volume=1;
  let desired=window.OaclisVoice?.preferences?.startVoice===true;
  function feedback(){
+  sounds.push({time:new Date().toISOString(),event:'sound:feedback',caller:new Error().stack.split('\n').slice(2,5).join(' | ')});if(sounds.length>20)sounds.shift();
   try{audio.pause();audio.currentTime=0;audio.play().catch(()=>{});}catch{}
  }
  function create(host,trace=()=>{}){
@@ -61,7 +62,7 @@ window.OaclisReadAloud=(()=>{
   function defer(milliseconds=2000){
    quietUntil=Date.now()+milliseconds;clearTimeout(playTimer);playTimer=null;play();
   }
-  function stop(preserve=false,silent=false){
+  function stop(preserve=false,silent=true){
    clearTimeout(playTimer);playTimer=null;clearTimeout(speechTimer);speechTimer=null;recoverSpeech=null;quietUntil=0;
    lastActivity='';lastActivityId=null;lastActivityAt=0;
    if(!preserve)desired=false;
@@ -69,7 +70,7 @@ window.OaclisReadAloud=(()=>{
    generation++;enabled=false;cursor=null;queue=[];items.clear();ignored.clear();speaking=false;current=null;currentItem=null;
    trace('call:speech-cancel',{reason:'stop',preserve});engine?.cancel();paint();
   }
-  function enable(silent=false){
+  function enable(silent=true){
    if(disposed||!engine||!window.SpeechSynthesisUtterance)return false;
    if(enabled)return true;
    if(!silent)feedback();desired=true;enabled=true;cursor=null;button.dataset.ready='false';paint();return true;
@@ -120,10 +121,10 @@ window.OaclisReadAloud=(()=>{
    button.dataset.ready=String(data.ready===true);
    paint();
   }
-  button.onclick=()=>{if(enabled)stop();else enable();};
+  button.onclick=()=>{if(enabled)stop(false,false);else enable(false);};
   if(!engine||!window.SpeechSynthesisUtterance){button.disabled=true;button.title=OaclisSettings.text('Lettura non disponibile');}else paint();
   const hidden=()=>{if(!enabled)return;if(document.hidden){clearTimeout(speechTimer);speechTimer=null;engine.pause?.();}else{lastSpeechProgress=Date.now();engine.resume?.();if(recoverSpeech&&!speechTimer)speechTimer=setTimeout(recoverSpeech,1500);play();}};document.addEventListener('visibilitychange',hidden);host.append(button);if(desired)enable(true);
   return {reset:(active=true)=>{stop(true,true);if(active&&desired)enable(true);},enable,disable:stop,skip,stamp:()=>generation,request:()=>({speech:enabled,speech_cursor:cursor}),update,speaking:()=>speaking,stop,destroy:()=>{stop(true,true);disposed=true;document.removeEventListener('visibilitychange',hidden);button.remove();}};
  }
- return {create,spokenText,feedback};
+ return {create,spokenText,feedback,sounds};
 })();

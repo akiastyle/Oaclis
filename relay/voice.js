@@ -1,4 +1,4 @@
-// voice.js v2.52.1120
+// voice.js v2.52.1132
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -166,7 +166,7 @@ window.OaclisVoice=(()=>{
    if(recognitionIssue){const error=document.createElement('p');error.setAttribute('role','alert');error.textContent=JSON.stringify(recognitionIssue);help.append(error);}
    const diagnostic=document.createElement('details');diagnostic.className='voice-trace';
    const diagnosticTitle=document.createElement('summary');diagnosticTitle.textContent=locale.text('Diagnostica vocale');
-   const log=document.createElement('pre');log.textContent=events.map(event=>JSON.stringify(event)).join('\n');
+   const log=document.createElement('pre');log.textContent=[...events,...OaclisReadAloud.sounds].sort((a,b)=>a.time.localeCompare(b.time)).map(event=>JSON.stringify(event)).join('\n');
    const copy=document.createElement('button');copy.type='button';copy.className='secondary';copy.textContent=locale.text('Copia log');copy.onclick=()=>navigator.clipboard.writeText(log.textContent);
    diagnostic.append(diagnosticTitle,log,copy);help.append(diagnostic,settings,list);help.showModal();
   }
@@ -215,7 +215,15 @@ window.OaclisVoice=(()=>{
     if(result.id==='resumeRec'){if(paused)OaclisReadAloud.feedback();paused=false;paint();return;}
     if(result.id==='help'){if(help.open)help.close();else showHelp();return;}
    }
-   if(audio){if(available(result.id)){if(['readOn','readOff','readStop'].includes(result.id))reader[{readOn:'enable',readOff:'disable',readStop:'skip'}[result.id]]();else adapter[result.id](result.args);}return;}
+   if(audio){
+    if(available(result.id)){
+     if(result.id==='readOn')reader.enable(false);
+     else if(result.id==='readOff')reader.disable(false,false);
+     else if(result.id==='readStop')reader.skip();
+     else adapter[result.id](result.args);
+    }
+    return;
+   }
    if(media){await action(()=>adapter.view.command(result.id));return;}
    if(paused)return;
    if(pending){
