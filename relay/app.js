@@ -1,4 +1,4 @@
-// app.js v2.128.1233
+// app.js v2.128.1237
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -211,8 +211,8 @@ async function openConsole(chat,adjacent=false){
  async function poll(){
   if(closed||polling)return;polling=true;
   try{if(!document.hidden&&!inputBusy){for(const pane of [active,...panes.filter(pane=>pane!==active)]){if(closed||inputBusy)break;if(pane&&!pane.closed)await send(pane,pane.ready?'read':'open');}}}
-  finally{polling=false;}
-  schedulePoll();
+  catch { /* send() already reports the failure and marks the pane for reconnection. */ }
+  finally{polling=false;schedulePoll();}
  }
  async function runInput(task){
   inputBusy=true;clearTimeout(pollTimer);reading?.abort();
