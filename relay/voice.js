@@ -1,4 +1,4 @@
-// voice.js v1.48.891
+// voice.js v1.48.897
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -99,7 +99,9 @@ window.OaclisVoice=(()=>{
    }
    const list=document.createElement('ul');list.className='voice-command-list';
    for(const command of commands.filter(command=>command.id==='clearDraft'||available(command.id))){const item=document.createElement('li'),name=document.createElement('strong'),detail=document.createElement('span');name.textContent=command.aliases?.join(' / ')||command.label;detail.textContent=grammar.descriptions[command.id]||'';item.append(name,detail);list.append(item);}
-   help.append(header,settings,list);help.showModal();
+   help.append(header);
+   if(state==='error'){const error=document.createElement('p');error.setAttribute('role','alert');error.textContent=status.textContent;help.append(error);}
+   help.append(settings,list);help.showModal();
   }
   function available(id){
    if(['stop','help','pauseRec','resumeRec','selectChat'].includes(id))return true;
@@ -209,9 +211,9 @@ window.OaclisVoice=(()=>{
     state='error';feedback(messages[event.error]||'Ascolto interrotto.');paint();
    };
    session.onend=()=>{
+    if(wanted&&state!=='error')feedback('Ascolto interrotto.');
     state=wanted?'error':'idle';
     if(preview)preview.textContent='';
-    if(wanted)feedback('Ascolto interrotto. Tocca il microfono per riprovare.');
     paint();
    };
   }
