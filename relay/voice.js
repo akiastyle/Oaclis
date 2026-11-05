@@ -1,4 +1,4 @@
-// voice.js v1.48.901
+// voice.js v1.48.909
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -30,7 +30,7 @@ window.OaclisVoice=(()=>{
  function create(){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   const session=Recognition&&window.isSecureContext?new Recognition():null;
-  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,consumed=-1,finalTranscript='';
+  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,consumed=-1,finalTranscript='',recognitionIssue=null;
   let button,status,preview,options,help,root,autoSendTimer,reader=null,controls=null,info=null;
   const cancelAutoSend=()=>{clearTimeout(autoSendTimer);autoSendTimer=null;};
   function scheduleAutoSend(){
@@ -60,7 +60,7 @@ window.OaclisVoice=(()=>{
    if(!silent)OaclisReadAloud.feedback();
    if(preview)preview.textContent='';
    try{
-    if(on){consumed=-1;finalTranscript='';utteranceRevision=revision;state='starting';session.start();}
+    if(on){consumed=-1;finalTranscript='';recognitionIssue=null;utteranceRevision=revision;state='starting';session.start();}
     else{state='idle';session.abort();}
    }catch(error){state='error';feedback('Microfono non avviato.');paint();throw error;}
    paint();
@@ -100,7 +100,7 @@ window.OaclisVoice=(()=>{
    const list=document.createElement('ul');list.className='voice-command-list';
    for(const command of commands.filter(command=>command.id==='clearDraft'||available(command.id))){const item=document.createElement('li'),name=document.createElement('strong'),detail=document.createElement('span');name.textContent=command.aliases?.join(' / ')||command.label;detail.textContent=grammar.descriptions[command.id]||'';item.append(name,detail);list.append(item);}
    help.append(header);
-   if(state==='error'){const error=document.createElement('p');error.setAttribute('role','alert');error.textContent=status.textContent;help.append(error);}
+   if(recognitionIssue){const error=document.createElement('p');error.setAttribute('role','alert');error.textContent=JSON.stringify(recognitionIssue);help.append(error);}
    help.append(settings,list);help.showModal();
   }
   function available(id){
@@ -207,10 +207,12 @@ window.OaclisVoice=(()=>{
    };
    session.onerror=event=>{
     if(!fresh())return;
+    recognitionIssue={event:'error',error:event.error,message:event.message||''};
     const messages={'no-speech':'In attesa della voce','not-allowed':'Microfono non autorizzato.','service-not-allowed':'Servizio vocale non consentito.','audio-capture':'Microfono non disponibile.','network':'Rete vocale non disponibile.','language-not-supported':'Italiano non disponibile.'};
     state='error';feedback(locale.text(messages[event.error]||'Ascolto interrotto.')+' ['+event.error+']');paint();
    };
    session.onend=()=>{
+    if(wanted&&!recognitionIssue)recognitionIssue={event:'end',error:null};
     if(wanted&&state!=='error')feedback('Ascolto terminato senza segnalazione di errore.');
     state=wanted?'error':'idle';
     if(preview)preview.textContent='';
