@@ -1,4 +1,4 @@
-// map.js v4.133.3481
+// map.js v4.133.3488
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -1012,8 +1012,11 @@ function openAccessChats(marker) {
 
 function renderAccessBadges(path, group, keep, markers) {
   if(path.accessCurve&&path.getAttribute('d')!==path.accessCurve)path.setAttribute('d',path.accessCurve);
-  const grouped=group.entries.length>5;
-  const entries=grouped?[{id:'access-group',name:group.name||deviceName(group.target)}]:group.entries;
+  const style=getComputedStyle($('#nodes')),length=path.getTotalLength(),count=group.entries.length;
+  const spacing=parseFloat(style.getPropertyValue('--link-badge-size'))+parseFloat(style.getPropertyValue('--space-18'))+parseFloat(style.getPropertyValue('--space-12'));
+  const points=count>1&&length>=spacing*(count+1)?group.entries.map((_,index)=>path.getPointAtLength(length*(index+1)/(count+1))):[];
+  const grouped=count>1&&(points.length===0||points.some((point,index)=>points.slice(0,index).some(other=>Math.abs(point.x-other.x)<spacing&&Math.abs(point.y-other.y)<spacing)));
+  const entries=grouped?[{id:'access-group',name:group.name||deviceName(group.target)}]:OaclisTerminal.sortChats(group.entries,chatLabel);
   entries.forEach((entry,index) => {
     const key=[entry.id,...[group.source,group.target].sort()].join(':');
     keep.add(key);
