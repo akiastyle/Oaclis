@@ -1,4 +1,4 @@
-// scene.js v1.12.192
+// scene.js v1.12.194
 import * as THREE from 'three';
 import {OrbitControls} from './vendor/OrbitControls.js';
 import {RoundedBoxGeometry} from './vendor/RoundedBoxGeometry.js';
@@ -59,7 +59,7 @@ for(const device of devices){
  }
  const ring=new THREE.Mesh(new THREE.RingGeometry(1.65,1.665,64),new THREE.MeshBasicMaterial({color:device.color,transparent:true,opacity:.65,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.005;group.add(ring);
  device.ports={};for(const role of roles){const ghost=createGhost(device,role);group.add(ghost);device.ports[role.id]=ghost;}
- const label=device.label=document.createElement('button');label.type='button';label.className='device-label';label.dataset.device=device.id;label.setAttribute('aria-expanded','false');label.innerHTML='<span class="status-dot"'+(device.online?'':' style="background:#89969e"')+'></span><strong>'+device.name+'</strong><small>'+device.type+'</small>';label.onclick=()=>openPanel(device);label.onkeydown=event=>{if(event.code==='Space'){event.preventDefault();device.body.height=3;releaseBody(device.body);startPhysics();}};labels.append(label);
+ const label=device.label=document.createElement('button');label.type='button';label.className='device-label';label.dataset.device=device.id;label.setAttribute('aria-expanded','false');label.innerHTML='<strong>'+device.name+'</strong><small>'+device.type.split(' · ')[0]+'</small>';label.onclick=()=>openPanel(device);label.onkeydown=event=>{if(event.code==='Space'){event.preventDefault();device.body.height=3;releaseBody(device.body);startPhysics();}};labels.append(label);
 }
 for(const connection of connections){
  const role=roles.find(r=>r.id===connection.role);connection.material=new THREE.MeshStandardMaterial({color:role.color,metalness:.3,roughness:.45,transparent:true,opacity:.65,emissive:role.color,emissiveIntensity:.12});
