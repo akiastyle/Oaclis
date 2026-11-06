@@ -12,15 +12,19 @@ Aprire **http://localhost:23234/**. Il server ascolta solo su `127.0.0.1`.
 
 Servono Node.js e un browser moderno con WebGL 2 abilitato; non occorre installare pacchetti npm per avviare la bozza.
 
-- Trascinare lo sfondo per ruotare; rotella/pinch per lo zoom; tasto destro o due dita per traslare.
+- Il pulsante “2D” passa alla mappa planare e diventa “3D” per tornare allo spazio. La transizione di camera e dissolvenza dura 700 ms; con movimento ridotto richiesto dal browser il cambio è immediato. Il passaggio interrompe la simulazione del flusso.
+- In 3D, trascinare lo sfondo per ruotare; rotella/pinch per lo zoom; tasto destro o due dita per traslare.
+- In 2D, trascinare un device per spostarlo sul piano, lo sfondo per traslare la mappa e usare la rotella per lo zoom. Le frecce della tastiera spostano il device selezionato. Device, canali e chat aprono lo stesso pannello contestuale usato in 3D, mantenendo la selezione nel passaggio.
 - Cliccare un cubo o la sua etichetta per aprire il pannello; cliccare un fantasmino per i dettagli del canale o una sfera sugli archi per il menu della chat condivisa. I canali sono accessibili anche come pulsanti nel pannello del device.
 - Afferrare direttamente un cubo e trascinarlo nello spazio 3D, senza selezionare modalità. Usare la rotella mentre lo si tiene afferrato per cambiarne la profondità. Archi, fantasmini e sfere seguono la posizione.
 - Rilasciare un cubo sollevato per farlo cadere: gravità, rimbalzi più accentuati e una breve deformazione lo riportano a riposo. I cubi sono solidi fra loro anche durante il trascinamento: si può appoggiarli e impilarli; togliendo un supporto, quelli sopra ricadono. Un clic breve sul cubo apre il menu. Con la tastiera, premere Spazio sull’etichetta di un device per sollevarlo e lasciarlo cadere.
 - “Inquadra” ripristina la vista iniziale; “Vista dall’alto” mostra il piano.
-- Il pulsante con il fulmine (“Anima i fantasmini”) attiva o ferma il galleggiamento e l’ondulazione del bordo dei fantasmini. L’animazione continua mentre la pagina è visibile, con aggiornamenti limitati a 30 fps; parte disattivata se il browser richiede movimento ridotto.
+- Il pulsante con il fulmine (“Anima i fantasmini”) attiva o ferma il galleggiamento e l’ondulazione del bordo dei fantasmini. L’animazione continua nella vista 3D mentre la pagina è visibile, con aggiornamenti limitati a 30 fps; parte disattivata se il browser richiede movimento ridotto.
 - “Simula passaggio dati” riproduce un flusso dimostrativo finito; un secondo clic lo ferma. Con l’animazione dei fantasmini disattivata e fisica, hover e flusso terminati, non esiste un ciclo di rendering continuo a riposo.
 
 La scena contiene ROG, KJ, KDell e S24, quattro fantasmini 3D in stile Pac-Man per device e archi con sfere delle chat condivise. Le sfere sono opache, illuminate fisicamente, proiettano e ricevono ombre; la loro icona resta sulla superficie frontale rivolta alla camera. I fantasmini, in rosso, arancione, ciano e rosa vivaci, mantengono l’ordine Sincronizzazione, Invio, Ricezione, Console remota su un arco rivolto alla camera. Gli occhi seguono il puntatore rispetto alla posizione di ciascun fantasmino, anche sopra i menu; il passaggio del mouse aggiunge un breve movimento. I cubi hanno bordi smussati, luce, ombre e la stessa icona sulle sei facce; il piano non ha griglia. La fisica torna completamente a riposo dopo i rimbalzi. Stati, nomi delle chat e numeri sono fittizi: non indicano lo stato corrente della rete.
+
+Le due viste condividono le coordinate planari dei device: uno spostamento in 2D resta valido tornando in 3D. In 2D il rendering WebGL, la fisica e l’animazione dei fantasmini sono sospesi; il flusso dimostrativo usa elementi SVG. L’altezza dei cubi resta in memoria e la fisica riprende da quella quota al ritorno in 3D. Posizioni e altezze sono volatili: ricaricare la pagina ripristina i dati iniziali.
 
 ## Asset e dipendenze
 
@@ -38,5 +42,7 @@ Test locale `prototypes/device-space3d/test.cjs`: WebGL reale in Chromium, sei f
 Eseguire `node prototypes/device-space3d/physics.test.mjs` per verificare senza browser gravità, rimbalzi decrescenti, contatto col piano e fra cubi, impilamento, rimozione del supporto, trascinamento senza attraversamenti, deformazione, sospensione durante il trascinamento e arresto completo.
 
 Con il server avviato, eseguire `node prototypes/device-space3d/test.cjs`. Il test usa l’installazione Playwright in `/root/google-images-local/node_modules/playwright` e Chromium in `/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome`: questi percorsi sono specifici dell’ambiente di verifica e vanno adattati su un altro computer.
+
+Sempre con il server avviato, `node prototypes/device-space3d/view.test.cjs` verifica il passaggio animato 2D/3D, le coordinate condivise dopo il drag, il mantenimento del pannello e della selezione, i comandi dei canali, il flusso 2D senza rendering WebGL, la sospensione del motore 3D e della fisica e il ridimensionamento su viewport stretta. Usa gli stessi percorsi Playwright e Chromium del test precedente.
 
 Il sistema visivo di produzione (`DESIGN.md`) non è stato modificato. La bozza usa i suoi controlli essenziali e le icone del progetto; materiali e luci 3D sono specifici di questa esplorazione.
