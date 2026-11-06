@@ -1,4 +1,4 @@
-// flat-view.js v1.0.0
+// flat-view.js v1.0.3
 import * as THREE from 'three';
 export function createFlatView({root,camera,devices,roles,connections,onOpen,onMove,onDismiss,afterRender}){
  const ns='http://www.w3.org/2000/svg',svg=document.createElementNS(ns,'svg'),ray=new THREE.Raycaster(),pointer=new THREE.Vector2(),floor=new THREE.Plane(new THREE.Vector3(0,1,0),0);let gesture=null;
@@ -12,8 +12,9 @@ export function createFlatView({root,camera,devices,roles,connections,onOpen,onM
   roles.forEach((role,index)=>{const port=document.createElement('button');port.type='button';port.className='flat-port';port.dataset.index=index;port.style.color=role.color;port.title=role.name;port.setAttribute('aria-label',device.name+' · '+role.name);port.innerHTML=OaclisIcon(role.icon);port.onclick=()=>onOpen(device,role);device.ports[role.id].userData.flatElement=port;node.append(port);});root.append(node);
  }
  for(const connection of connections){
+  if(connection.role==='console'&&connection.chats.some(({chat})=>chat.active)){for(const [id,role]of [[connection.from,connection.role],[connection.to,connection.targetRole]]){const port=devices.find(d=>d.id===id).ports[role].userData.flatElement;port.classList.add('chat-active');port.style.removeProperty('color');}}
   connection.flatPath=document.createElementNS(ns,'path');connection.flatPath.style.stroke=connection.material.color.getStyle();svg.append(connection.flatPath);
-  for(const {chat,ball}of connection.chats){const button=document.createElement('button');button.type='button';button.className='flat-chat';button.title=chat.name;button.setAttribute('aria-label',chat.name);button.innerHTML=OaclisIcon(chat.icon);button.onclick=()=>onOpen(ball.userData.device,null,chat,ball);ball.userData.flatElement=button;root.append(button);}
+  for(const {chat,ball}of connection.chats){const button=document.createElement('button');button.type='button';button.className='flat-chat';button.classList.toggle('chat-active',Boolean(chat.active));button.title=chat.name+(chat.active?' · Sessione aperta':'');button.setAttribute('aria-label',chat.name);button.innerHTML=OaclisIcon(chat.icon);button.onclick=()=>onOpen(ball.userData.device,null,chat,ball);ball.userData.flatElement=button;root.append(button);}
  }
  function portPoint(device,role){const box=device.ports[role].userData.flatElement.getBoundingClientRect(),index=roles.findIndex(r=>r.id===role),right=index===1||index===2,bottom=index>=2;return {x:box.x+box.width/2,y:box.y+box.height/2,nx:right?1:-1,ny:bottom?1:-1};}
  function render(){

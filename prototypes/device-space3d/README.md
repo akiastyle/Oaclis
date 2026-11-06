@@ -46,3 +46,5 @@ Con il server avviato, eseguire `node prototypes/device-space3d/test.cjs`. Il te
 Sempre con il server avviato, `node prototypes/device-space3d/view.test.cjs` verifica il passaggio animato 2D/3D, le coordinate condivise dopo il drag, il mantenimento del pannello e della selezione, i comandi dei canali, il flusso 2D senza rendering WebGL, la sospensione del motore 3D e della fisica e il ridimensionamento su viewport stretta. Usa gli stessi percorsi Playwright e Chromium del test precedente.
 
 Il sistema visivo di produzione (`DESIGN.md`) non è stato modificato. La bozza usa i suoi controlli essenziali e le icone del progetto; materiali e luci 3D sono specifici di questa esplorazione.
+
+In vista 2D, i badge delle chat con sessione aperta e le icone console sono verdi. Per il confronto statico, Oaclis e Vulcano sono attive, 3D i-vector è inattiva; non sono stati interrogati device reali.

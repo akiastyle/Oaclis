@@ -1,4 +1,4 @@
-// scene.js v1.19.269
+// scene.js v1.19.273
 import * as THREE from 'three';
 import {OrbitControls} from './vendor/OrbitControls.js';
 import {RoundedBoxGeometry} from './vendor/RoundedBoxGeometry.js';
@@ -9,7 +9,7 @@ import {createFlatView} from './flat-view.js';
 const host=document.querySelector('#scene'),panel=document.querySelector('#panel'),labels=document.querySelector('#labels');
 const roles=[{id:'sync',name:'Sincronizzazione',icon:'sync',color:'#ff3048'},{id:'send',name:'Invio',icon:'send',color:'#ffa71b'},{id:'receive',name:'Ricezione',icon:'receive',color:'#10d8ef'},{id:'console',name:'Console remota',icon:'square-stop',color:'#ff63c5'}];
 const devices=[
- {id:'rog',name:'ROG',type:'Master',icon:'desktop',color:'#51777b',x:-1,z:1,online:true,chats:[{number:4,name:'Oaclis',icon:'code'},{number:7,name:'Vulcano',icon:'image'},{number:9,name:'3D i-vector',icon:'box'}]},
+ {id:'rog',name:'ROG',type:'Master',icon:'desktop',color:'#51777b',x:-1,z:1,online:true,chats:[{number:4,name:'Oaclis',icon:'code',active:true},{number:7,name:'Vulcano',icon:'image',active:true},{number:9,name:'3D i-vector',icon:'box'}]},
  {id:'kj',name:'KJ',type:'Linux · Jetson',icon:'cpu',color:'#7c8176',x:4,z:-4,online:true,chats:[{number:4,name:'Oaclis',icon:'code'},{number:9,name:'3D i-vector',icon:'box'}]},
  {id:'kdell',name:'KDell',type:'Linux · WSL',icon:'laptop',color:'#6c798d',x:-7,z:-3,online:false,chats:[{number:4,name:'Oaclis',icon:'code'},{number:7,name:'Vulcano',icon:'image'}]},
  {id:'s24',name:'S24',type:'Android · PWA',icon:'mobile',color:'#929e9e',x:5.8,z:4.4,online:true,chats:[{number:4,name:'Oaclis',icon:'code'},{number:7,name:'Vulcano',icon:'image'},{number:9,name:'3D i-vector',icon:'box'}]},
@@ -132,7 +132,7 @@ function openPanel(device,role=null,chat=null,object=null){
  selection={device,role,chat,object};panel.hidden=false;devices.forEach(d=>d.label.setAttribute('aria-expanded',String(d===device)));
  document.querySelector('#panel-kind').textContent=chat?'Chat '+chat.number+' · '+device.name:role?device.name+' · collegamento':device.type;
  document.querySelector('#panel-title').textContent=chat?chat.name:role?role.name:device.name;
- document.querySelector('#panel-body').innerHTML='<div class="summary"><span>Stato dimostrativo</span><strong class="state">'+(device.online?'Collegato':'Non raggiungibile')+'</strong></div>'+(chat?[chat]:device.chats).map(chat=>'<div class="chat-row">'+OaclisIcon(chat.icon)+'<div><strong>'+chat.name+'</strong><small>Chat '+chat.number+'</small></div><button type="button" aria-label="Apri console '+chat.name+'" title="Apri console">'+OaclisIcon('terminal')+'</button></div>').join('')+(role||chat?'':'<div class="port-legend">'+roles.map(r=>'<button type="button" data-role="'+r.id+'">'+OaclisIcon(r.icon)+'<span>'+r.name+'</span></button>').join('')+'</div>')+'<p class="panel-note">Bozza con dati statici. Le console sono simulate.</p>';
+ document.querySelector('#panel-body').innerHTML='<div class="summary"><span>Stato dimostrativo</span><strong class="state">'+(device.online?'Collegato':'Non raggiungibile')+'</strong></div>'+(chat?[chat]:device.chats).map(chat=>'<div class="chat-row">'+OaclisIcon(chat.icon)+'<div><strong>'+chat.name+'</strong><small>Chat '+chat.number+'</small></div><button type="button" class="'+(chat.active?'chat-active':'')+'" aria-label="Apri console '+chat.name+'" title="Apri console">'+OaclisIcon('terminal')+'</button></div>').join('')+(role||chat?'':'<div class="port-legend">'+roles.map(r=>'<button type="button" data-role="'+r.id+'">'+OaclisIcon(r.icon)+'<span>'+r.name+'</span></button>').join('')+'</div>')+'<p class="panel-note">Bozza con dati statici. Le console sono simulate.</p>';
  panel.querySelectorAll('[data-role]').forEach(button=>button.onclick=()=>openPanel(device,roles.find(role=>role.id===button.dataset.role)));
  panel.querySelectorAll('.chat-row button').forEach(button=>button.onclick=()=>notice('Console dimostrativa · nessuna sessione reale aperta'));
  requestRender();
