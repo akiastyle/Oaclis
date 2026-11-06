@@ -13,12 +13,13 @@ Aprire **http://localhost:23234/**. Il server ascolta solo su `127.0.0.1`.
 Servono Node.js e un browser moderno con WebGL 2 abilitato; non occorre installare pacchetti npm per avviare la bozza.
 
 - Trascinare lo sfondo per ruotare; rotella/pinch per lo zoom; tasto destro o due dita per traslare.
-- Cliccare un cubo o la sua etichetta per aprire il pannello; cliccare una sfera per i dettagli del canale. I canali sono accessibili anche come pulsanti nel pannello del device.
-- Attivare il comando “Sposta i dispositivi” e trascinare un cubo sul piano: archi e sfere seguono la posizione.
+- Cliccare un cubo o la sua etichetta per aprire il pannello; cliccare un fantasmino per i dettagli del canale o una sfera sugli archi per il menu della chat condivisa. I canali sono accessibili anche come pulsanti nel pannello del device.
+- Attivare il comando “Sposta i dispositivi” e trascinare un cubo sul piano: archi, fantasmini e sfere seguono la posizione.
+- Attivare “Solleva e lascia cadere i cubi” (freccia verso l’alto), trascinare un cubo verso l’alto e rilasciarlo: gravità, rimbalzi smorzati e una breve deformazione lo riportano a riposo. Con la tastiera, premere Spazio sull’etichetta di un device per sollevarlo e lasciarlo cadere.
 - “Inquadra” ripristina la vista iniziale; “Vista dall’alto” mostra il piano.
 - “Simula passaggio dati” riproduce un flusso dimostrativo finito; un secondo clic lo ferma. A riposo non esiste un ciclo di rendering continuo.
 
-La scena contiene ROG, KJ, KDell e S24, quattro sfere per device e archi 3D. I cubi hanno bordi smussati, luce, ombre e la stessa icona sulle sei facce. Stati, nomi delle chat e numeri sono fittizi: non indicano lo stato corrente della rete.
+La scena contiene ROG, KJ, KDell e S24, quattro fantasmini 3D in stile Pac-Man per device e archi con sfere delle chat condivise, ciascuna con la propria icona. I fantasmini mantengono l’ordine Sincronizzazione, Invio, Ricezione, Console remota su un arco rivolto alla camera; gli occhi seguono il puntatore e il passaggio del mouse provoca un breve movimento. I cubi hanno bordi smussati, luce, ombre e la stessa icona sulle sei facce; il piano non ha griglia. Fisica e movimenti si fermano completamente a riposo. Stati, nomi delle chat e numeri sono fittizi: non indicano lo stato corrente della rete.
 
 ## Asset e dipendenze
 
@@ -27,11 +28,13 @@ Tutto viene servito localmente, senza CDN o chiamate esterne:
 - Three.js **0.180.0**, distribuzione ufficiale npm `https://registry.npmjs.org/three/-/three-0.180.0.tgz`; moduli utilizzati e licenza MIT in `vendor/`.
 - Icone dal catalogo Lucide già incluso in `ui/icons.js`, con la sua licenza esistente. `move.svg` proviene da `https://github.com/lucide-icons/lucide/blob/1.66.0/icons/move.svg` e segue la licenza Lucide in `ui/assets/LUCIDE-LICENSE.txt`.
 - Logo esistente `ui/assets/oaclis-particles.png`, servito in sola lettura dal server della bozza.
-- Nessuna nuova immagine generata; cubi, sfere, corone e archi sono geometrie native della scena. Le icone sono texture SVG del catalogo esistente.
+- Nessuna nuova immagine generata; cubi, fantasmini, sfere, corone e archi sono geometrie native della scena. Le icone sono texture SVG del catalogo esistente. La fisica locale in `physics.js` non aggiunge dipendenze.
 
 ## Verifica
 
-Test locale `prototypes/device-space3d/test.cjs`: WebGL reale in Chromium, sei facce e quattro porte per device, menu e richiamo, accesso da tastiera ai canali, drag sul piano, simulazione interrompibile, rendering fermo a riposo, desktop e viewport stretta. Il test non misura prestazioni su hardware remoto.
+Test locale `prototypes/device-space3d/test.cjs`: WebGL reale in Chromium, sei facce e quattro fantasmini per device, ordine sul lato della camera, sfere delle chat condivise, assenza della griglia, sollevamento e ritorno a riposo, menu e richiamo, accesso da tastiera ai canali, drag sul piano, simulazione interrompibile, rendering fermo a riposo, desktop e viewport stretta. Il test non misura prestazioni su hardware remoto.
+
+Eseguire `node prototypes/device-space3d/physics.test.mjs` per verificare senza browser gravità, rimbalzi decrescenti, contatto col piano, deformazione, sospensione durante il trascinamento e arresto completo.
 
 Con il server avviato, eseguire `node prototypes/device-space3d/test.cjs`. Il test usa l’installazione Playwright in `/root/google-images-local/node_modules/playwright` e Chromium in `/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome`: questi percorsi sono specifici dell’ambiente di verifica e vanno adattati su un altro computer.
 
