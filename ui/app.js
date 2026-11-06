@@ -1,4 +1,4 @@
-// app.js v4.166.3188
+// app.js v4.167.3204
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -261,6 +261,16 @@ async function openDevice(id) {
   window.OaclisLocalVoice?.library();
   if (sourceId === id && !$("#panel").hidden) $("#search").focus();
 }
+async function numberCatalog(result){
+  result.chats=result.chats.filter(chat=>!(data.deleted_chats||[]).includes(chat.id));
+  const missing=result.chats.filter(chat=>!data.chat_settings?.[chat.id]?.number);
+  if(missing.length){
+    const {numbers}=await api('chat/numbers',{chats:missing.map(chat=>({id:chat.id,name:chatLabel(chat).slice(0,160)}))});
+    data.chat_settings??={};for(const [id,number]of Object.entries(numbers))(data.chat_settings[id]??={}).number=number;
+  }
+  for(const chat of result.chats)chat.number=data.chat_settings[chat.id].number;
+  return result;
+}
 async function loadChats() {
   if (!sourceId) return;
   const request = ++catalogRequest;
@@ -273,7 +283,7 @@ async function loadChats() {
   $("#library-list").innerHTML = OaclisSettings.html('<p class="muted">Caricamento…</p>');
   catalogLoading++;lastCatalog=Date.now();
   try {
-    const result = await api("catalog", { device_id: id });
+    const result = await numberCatalog(await api("catalog", { device_id: id }));
     if (request !== catalogRequest || sourceId !== id) return;
     visibleChats = result.chats;
     if (id === "master") data.codex_root = result.root;
@@ -409,7 +419,7 @@ async function refreshCatalog() {
   const id = sourceId,
     version = catalogRequest;
   try {
-    const result = await api("catalog", { device_id: id });
+    const result = await numberCatalog(await api("catalog", { device_id: id }));
     if (sourceId !== id || version !== catalogRequest) return;
     for (const editor of document.querySelectorAll(".chat-editor")) {
       if (editor.dataset.sourceDevice !== id) continue;
@@ -446,7 +456,7 @@ guard(async () => {
     sourceId=consoleWindow.device;visibleChats=data.chats||[];
     const entry=visibleChats.find(chat=>chat.id===consoleWindow.id)||{id:consoleWindow.id,name:typeof consoleWindow.name==='string'?consoleWindow.name.slice(0,160):'Chat'};
     openChatTerminal({entry},null,sourceId);
-    if(sourceId!=='master')api('catalog',{device_id:sourceId}).then(result=>{visibleChats=result.chats||[entry];}).catch(()=>{});
+    if(sourceId!=='master')api('catalog',{device_id:sourceId}).then(numberCatalog).then(result=>{visibleChats=result.chats||[entry];}).catch(()=>{});
     return;
   }
   if(!data.engines?.configured&&!data.chats?.length&&!data.devices?.length&&!data.mobile_devices?.length)openEngineSettings($('#toolbar-toggle'));

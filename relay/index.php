@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.630
+// index.php v1.8.634
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -128,7 +128,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!is_array($chat) || !is_string($chat['id']??null) || !preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,159}$/D',$chat['id']) || !is_string($chat['name']??null) || trim($chat['name'])==='' || mb_strlen($chat['name'])>320 || preg_match('/[\x00-\x1f\x7f]/u',$chat['name']) || isset($allowed[$chat['id']])) throw new RuntimeException();
                 $icon=$chat['icon']??''; $color=$chat['color']??'';
                 if (!is_string($icon) || strlen($icon)>48000 || ($icon!=='' && !preg_match('/^(?:[a-z]+|data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+\/=]*)$/D',$icon)) || !is_string($color) || ($color!=='' && !preg_match('/^#[a-f0-9]{6}$/iD',$color))) throw new RuntimeException();
-                $allowed[$chat['id']]=['id'=>$chat['id'],'name'=>$chat['name'],'icon'=>$icon,'color'=>$color];
+                $number=$chat['number']??null;
+                if ($number!==null && (!is_int($number) || $number<1 || $number>9007199254740991)) throw new RuntimeException();
+                $allowed[$chat['id']]=['id'=>$chat['id'],'name'=>$chat['name'],'icon'=>$icon,'color'=>$color,'number'=>$number];
             }
             $state['devices'][$target]['chats']=array_values($allowed);
             if (isset($state['devices'][$target]['console']) && !isset($allowed[$state['devices'][$target]['console']['chat_id']])) unset($state['devices'][$target]['console']);

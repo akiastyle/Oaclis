@@ -1,4 +1,4 @@
-// mobile.rs v1.22.592
+// mobile.rs v1.22.597
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -271,7 +271,8 @@ fn chat_choices(config: &Path, codex: &Path, existing: &Value) -> io::Result<std
             .unwrap_or_else(|| entry["name"].as_str().unwrap_or("Senza titolo"));
         let value=state.appearance.get(&format!("chat:{id}"));
         choices.insert(id.into(), json!({"id":id,"name":label.chars().filter(|c| !c.is_control()).take(320).collect::<String>(),
-            "icon":value.and_then(|record|record.value["icon"].as_str()).unwrap_or(""),"color":value.and_then(|record|record.value["color"].as_str()).unwrap_or("")}));
+            "icon":value.and_then(|record|record.value["icon"].as_str()).unwrap_or(""),"color":value.and_then(|record|record.value["color"].as_str()).unwrap_or(""),
+            "number":value.and_then(|record|record.sync["chat_number"].as_u64())}));
     }
     Ok(choices)
 }
@@ -336,7 +337,7 @@ mod tests {
         assert_eq!(choices["saved-chat"]["name"],"Salvata");
         assert_eq!(choices[id]["icon"],"code");
         assert_eq!(choices[id]["color"],"#12ab34");
-        assert!(choices.values().all(|v|v.as_object().unwrap().len()==4 && v.get("paths").is_none()));
+        assert!(choices.values().all(|v|v.as_object().unwrap().len()==5 && v.get("paths").is_none()));
         std::fs::remove_dir_all(&root).unwrap();
     }
     #[test]

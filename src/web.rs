@@ -1,4 +1,4 @@
-// web.rs v2.29.1917
+// web.rs v2.29.1931
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -161,6 +161,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
             }
         }
     }
+    crate::catalog::number_chats(&config,&catalog(&codex)?)?;
     let job = Arc::new(Mutex::new(json!({"status":"idle"})));
     crate::chat_deletion::start(home.clone(),config.clone(),codex.clone(),job.clone());
     let connections = Arc::new(Mutex::new(json!({})));
@@ -312,6 +313,15 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Post, "/api/peers/approve") => crate::peers::approve(&peers, &home, &body(&mut request)?),
                 (&Method::Post, "/api/peers/network") => crate::peers::network(&peers),
                 (&Method::Post, "/api/peers/restore") => crate::peers::restore(&peers, &home),
+                (&Method::Post, "/api/chat/numbers") => {
+                    let value=body(&mut request)?;
+                    let chats=value["chats"].as_array().ok_or_else(||invalid("Elenco chat richiesto"))?;
+                    if chats.iter().any(|chat|chat["id"].as_str().is_none_or(|id|id.len()>160||!devices::identifier(id)) || chat["name"].as_str().is_none_or(|name|name.chars().count()>320||name.chars().any(char::is_control))) {return Err(invalid("Chat non valida"));}
+                    crate::catalog::number_chats(&config,chats)?;
+                    let state=crate::state_store::snapshot(&config)?;
+                    let numbers:serde_json::Map<String,Value>=chats.iter().filter_map(|chat|{let id=chat["id"].as_str().unwrap();state.appearance.get(&format!("chat:{id}")).map(|record|(id.to_owned(),record.sync["chat_number"].clone()))}).collect();
+                    Ok(json!({"numbers":numbers}))
+                }
                 (&Method::Post, "/api/chat/create") => {
                     let mut value=body(&mut request)?;
                     let id=value["device_id"].as_str().unwrap_or("master");
@@ -480,7 +490,9 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                         .into_iter()
                         .find(|d| d.id == value["device_id"])
                         .ok_or_else(|| invalid("Dispositivo non trovato"))?;
-                    let result = remote_catalog(&device)?;
+                    let mut result = remote_catalog(&device)?;
+                    let numbered=crate::state_store::snapshot(&config)?;
+                    if let Some(chats)=result["chats"].as_array_mut(){for chat in chats{chat["number"]=numbered.appearance.get(&format!("chat:{}",chat["id"].as_str().unwrap())).map(|r|r.sync["chat_number"].clone()).unwrap_or(Value::Null);}}
                     if let Some(chats) = result["chats"].as_array() {
                         for chat in chats {
                             if chat["analysis"].is_object() {

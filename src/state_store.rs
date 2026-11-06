@@ -1,4 +1,4 @@
-// state_store.rs v2.40.1411
+// state_store.rs v2.40.1412
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -378,6 +378,7 @@ fn preferences(state: &State) -> Value {
         .filter_map(|(key, record)| {
             key.strip_prefix("chat:").map(|id| {
                 let mut value=json!({"hidden":record.hidden,"scopes":scopes(record)});
+                if let Some(number)=record.sync.get("chat_number"){value["number"]=number.clone();}
                 if let Some(access)=record.sync.get("console_access") { value["console_access"]=access.clone(); }
                 if let Some(model)=record.sync.get("console_model") { value["console_model"]=model.clone(); }
                 (id.to_owned(),value)

@@ -1,4 +1,4 @@
-// terminal.rs v1.33.569
+// terminal.rs v1.33.576
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -192,13 +192,16 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         let cwd=value["cwd"].as_str().filter(|v|!v.is_empty()).map(PathBuf::from).map(Ok).unwrap_or_else(||working_directory(&home,&root,chat))?;
         let name=value["text"].as_str().unwrap_or("").trim();
         let default_model=crate::engines::creation(&home,value)?;
-        let entry=crate::catalog::create(&home,&root,&cwd,name,value["model"].as_str().filter(|v|!v.is_empty()).unwrap_or(&default_model))?;let id=entry["id"].as_str().unwrap();
+        let mut entry=crate::catalog::create(&home,&root,&cwd,name,value["model"].as_str().filter(|v|!v.is_empty()).unwrap_or(&default_model))?;
         let config=home.join(".config/oaclis");
+        crate::catalog::number_chats(&config,std::slice::from_ref(&entry))?;
+        entry["number"]=crate::state_store::snapshot(&config)?.appearance[&format!("chat:{}",entry["id"].as_str().unwrap())].sync["chat_number"].clone();
+        let id=entry["id"].as_str().unwrap();
         let appearance=crate::appearance::Appearance{label:name.into(),icon:value["icon"].as_str().unwrap_or("").into(),color:value["color"].as_str().unwrap_or("").into(),..Default::default()};
         let preferences=crate::state_store::database(&config,"","preferences-get",None)?;
         let access=value["access"].as_str().or_else(||preferences["preferences"][chat]["console_access"].as_str()).unwrap_or("default");
         crate::state_store::database(&config,id,"chat-settings",Some(&json!({"value":appearance,"console_access":access,"console_model":entry["model"]})))?;
-        return Ok(json!({"new_chat":{"id":id,"name":name,"icon":value["icon"].as_str().unwrap_or(""),"color":value["color"].as_str().unwrap_or(""),"console_access":access,"model":entry["model"]}}));
+        return Ok(json!({"new_chat":{"id":id,"number":entry["number"],"name":name,"icon":value["icon"].as_str().unwrap_or(""),"color":value["color"].as_str().unwrap_or(""),"console_access":access,"model":entry["model"]}}));
     }
     let session_lock = session_lock(chat)?;
     let mut capture = session_lock.lock().map_err(|_|io::Error::other("Console non disponibile"))?;

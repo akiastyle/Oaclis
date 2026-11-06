@@ -1,4 +1,4 @@
-// voice.js v2.52.1132
+// voice.js v2.52.1134
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -241,7 +241,7 @@ window.OaclisVoice=(()=>{
     case 'clearDraft':clearPending();adapter.view.command('clearDraft');feedback('Messaggio svuotato');break;
     case 'selectChat':case 'splitChat':{
      const n=number(normalize(args));
-     if(n>0){const chat=adapter.list()[n-1];if(!chat){feedback('Numero fuori elenco.');break;}await openChat(chat,id);break;}
+     if(n>0){const chat=adapter.chats().find(chat=>chat.number===n);if(!chat){feedback('Numero fuori elenco.');break;}await openChat(chat,id);break;}
      const matches=resolve(adapter.chats(),args);
      if(!matches.length){feedback('Chat non trovata.');break;}
      if(matches.length===1)await openChat(matches[0],id);else{choices(matches.slice(0,20),id);feedback('Più chat corrispondono. Scegli un numero.');}break;

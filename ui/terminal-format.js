@@ -1,6 +1,8 @@
-// terminal-format.js v1.40.277
+// terminal-format.js v1.41.281
 "use strict";
 const OaclisTerminal = (() => {
+  const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
+  function sortChats(chats,label=chat=>chat.name){return [...chats].sort((a,b)=>chatOrder.compare(label(a),label(b))||a.id.localeCompare(b.id));}
   const palette=['#000000','#cd3131','#0dbc79','#e5e510','#2472c8','#bc3fbc','#11a8cd','#e5e5e5','#666666','#f14c4c','#23d18b','#f5f543','#3b8eea','#d670d6','#29b8db','#ffffff'];
   function color(index) {
     if(index<16)return palette[index];
@@ -240,5 +242,5 @@ function consoleScreen(value){
    };
    return pane;
   }
-  return {render,renderConsole,parse,consoleScreen,imageData,attachImages,attachSendMenu,chatIcon,createConsole,createPane};
+  return {sortChats,render,renderConsole,parse,consoleScreen,imageData,attachImages,attachSendMenu,chatIcon,createConsole,createPane};
 })();

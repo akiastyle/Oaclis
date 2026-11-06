@@ -1,4 +1,4 @@
-// app.js v2.128.1237
+// app.js v2.130.1257
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -15,14 +15,14 @@ if(invite)sessionStorage.setItem('oaclis-test-invite',invite);
 let timer,screenWakeLock=null,wakePending=false;
 const voice=OaclisVoice.create(),drafts=new Map();
 let authorizedJobs=[],chatJobIndicators=new Map();
-let authorizedChats=[],visibleChatList=[],closeConsole=null,consoleWorkspace=null;
+let authorizedChats=[],closeConsole=null,consoleWorkspace=null;
 const consolePositions=new Map(),imageDrafts=new Map();
 function saveDraft(chatId,value){if(value)drafts.set(chatId,value);else drafts.delete(chatId);}
 function bindVoice(chat=null){
  const compose=document.querySelector('#console-input textarea'),search=document.getElementById('chat-search');
  let host=document.querySelector('.oaclis-console .voice-controls')||document.querySelector('#chat-tools .voice-controls');
  if(!host){const tools=document.getElementById('chat-tools');if(!tools)return;host=document.createElement('span');host.className='voice-controls';tools.append(host);}
- voice.bind({chatId:chat?.id,compose,fields:()=>[compose,search].filter(Boolean),chats:()=>authorizedChats,list:()=>consoleWorkspace?.list()||visibleChatList,
+ voice.bind({chatId:chat?.id,compose,fields:()=>[compose,search].filter(Boolean),chats:()=>authorizedChats,
   view:chat?compose.closest('.oaclis-console'):null,selectChat:selected=>openConsole(selected),
   ...(chat?{splitChat:selected=>openConsole(selected,true),...(consoleWorkspace.split()?{selectPane:position=>consoleWorkspace.selectPane(position)}:{})}:{}),
  },host);
@@ -99,23 +99,23 @@ function renderAuthorizedChats(chats){
  const create=document.getElementById('new-chat');if(create)create.disabled=!authorizedChats.length;
  const list=document.getElementById('authorized-chats');
  if(!list)return;
+ chats=OaclisTerminal.sortChats(chats);
  const signature=JSON.stringify(chats);
  if(list.dataset.signature===signature){updateListJobs();return;}
  clearListJobs();list.dataset.signature=signature;list.replaceChildren();
- visibleChatList=chats.slice();
  if(!chats.length){const p=document.createElement('p');p.textContent=OaclisSettings.text('Nessuna chat autorizzata dal master.');list.append(p);return;}
  const ul=document.createElement('ul');
- for(const [index,chat] of chats.entries()){
+ for(const chat of chats){
   const li=document.createElement('li');li.className='authorized-row';
   const progress=document.createElement('span');progress.className='authorized-progress';
   chatJobIndicators.set(chat.id,OaclisJobs.inline(progress));
-  li.append(chatButton(chat,index,()=>openConsole(chat)),progress);ul.append(li);
+  li.append(chatButton(chat,()=>openConsole(chat)),progress);ul.append(li);
  }
  list.append(ul);updateListJobs();
 }
-function chatButton(chat,index,select){
- const button=document.createElement('button');button.className='secondary authorized-chat';button.dataset.active=String(chat.active===true);button.setAttribute('aria-label',String(index+1)+'. '+chat.name);
-  const number=document.createElement('span');number.className='authorized-number';number.textContent=String(index+1);
+function chatButton(chat,select){
+ const button=document.createElement('button');button.className='secondary authorized-chat';button.dataset.active=String(chat.active===true);button.setAttribute('aria-label',String(chat.number??'')+'. '+chat.name);
+  const number=document.createElement('span');number.className='authorized-number';number.textContent=String(chat.number??'');
   const icon=OaclisTerminal.chatIcon(chat);
   const name=document.createElement('span');name.className='authorized-name';name.textContent=chat.name;
   const play=document.createElement('span');play.className='authorized-play';play.setAttribute('aria-hidden','true');play.innerHTML=OaclisIcon('play');
@@ -239,7 +239,7 @@ async function openConsole(chat,adjacent=false){
  function toggleSplit(){
   if(panes.length===2){remove(panes.find(pane=>pane!==active));layout();bindVoice(active.chat);return;}
   picker.replaceChildren();const heading=document.createElement('h1');heading.textContent=OaclisSettings.text('Affianca chat');const close=document.createElement('button');close.type='button';close.className='voice-close secondary';close.setAttribute('aria-label',OaclisSettings.text('Annulla'));close.innerHTML=OaclisIcon('close');close.onclick=()=>picker.close();picker.append(heading,close);
-  for(const [index,selected]of authorizedChats.entries()){const button=chatButton(selected,index,()=>openConsole(selected,true));button.disabled=panes.some(pane=>pane.chat.id===selected.id);picker.append(button);}picker.showModal();
+  for(const selected of OaclisTerminal.sortChats(authorizedChats)){const button=chatButton(selected,()=>openConsole(selected,true));button.disabled=panes.some(pane=>pane.chat.id===selected.id);picker.append(button);}picker.showModal();
  }
  consoleWorkspace={get active(){return active.console;},open,query:async operation=>{
   if(inputBusy||!active?.ready)throw Error(OaclisSettings.text('Attendi il completamento della richiesta.'));
@@ -247,7 +247,7 @@ async function openConsole(chat,adjacent=false){
  },create:async(text,icon,model,engine)=>{
   if(inputBusy||!active?.ready)return false;
   return runInput(()=>send(active,'create',{text,icon,model,engine,key:''}));
- },split:()=>panes.length===2,selectPane:position=>activate(panes[['sotto','bottom'].includes(OaclisVoice.normalize(position))?1:0]),list:()=>picker.open?authorizedChats:visibleChatList};
+ },split:()=>panes.length===2,selectPane:position=>activate(panes[['sotto','bottom'].includes(OaclisVoice.normalize(position))?1:0])};
  closeConsole=()=>{if(closed)return;files.destroy();reading?.abort();if(active)saveDraft(active.chat.id,text.value);for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleWorkspace=null;closeConsole=null;};
  text.addEventListener('input',()=>{if(active)saveDraft(active.chat.id,text.value);});
  document.getElementById('back').onclick=()=>protectedView().catch(()=>location.replace('/auth'));

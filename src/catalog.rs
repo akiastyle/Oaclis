@@ -1,4 +1,4 @@
-// catalog.rs v2.39.1825
+// catalog.rs v2.41.1864
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -42,6 +42,25 @@ pub(crate) fn expire() {
     if let Some(indexes)=INDEXES.get() {
         indexes.lock().unwrap().retain(|_,index|std::sync::Arc::strong_count(index)>1 || index.try_lock().map(|index|index.touched.is_some_and(|time|time.elapsed().as_secs()<3600)).unwrap_or(true));
     }
+}
+pub(crate) fn number_chats(config: &Path, chats: &[Value]) -> io::Result<()> {
+    let snapshot=state_store::snapshot(config)?;
+    let mut entries: BTreeMap<String,String>=chats.iter().chain(snapshot.links.values().filter_map(|link|link.get("entry")))
+        .filter_map(|chat|chat["id"].as_str().map(|id|(id.to_owned(),chat["name"].as_str().unwrap_or("").to_owned()))).collect();
+    entries.retain(|id,_|snapshot.shared["deletions"].get(id).is_none() && snapshot.appearance.get(&format!("chat:{id}")).is_none_or(|record|record.sync["chat_number"].as_u64().is_none()));
+    if entries.is_empty(){return Ok(());}
+    let mut entries:Vec<_>=entries.into_iter().collect();
+    entries.sort_by_key(|(id,name)|(snapshot.appearance.get(&format!("chat:{id}")).and_then(|r|r.value["label"].as_str()).filter(|s|!s.is_empty()).unwrap_or(name).to_lowercase(),id.clone()));
+    state_store::change(config,|state|{
+        let mut next=state.appearance.values().filter_map(|record|record.sync["chat_number"].as_u64().or(record.sync["next_chat_number"].as_u64())).max().unwrap_or(0);
+        for (id,_) in entries {
+            let record=state_store::chat_record(state,&id);
+            if record.sync["chat_number"].as_u64().is_none(){next+=1;record.sync["chat_number"]=json!(next);}
+        }
+        let counter=std::sync::Arc::make_mut(&mut state.appearance).entry("device:master".into()).or_default();
+        std::sync::Arc::make_mut(counter).sync["next_chat_number"]=json!(next);
+        Ok(())
+    })
 }
 pub(crate) fn local(root: &Path) -> io::Result<Vec<Value>> {
     let home = std::env::var_os("HOME").ok_or_else(|| crate::invalid("HOME non definita"))?;
@@ -151,6 +170,7 @@ pub(crate) fn local_at(root: &Path, config: &Path) -> io::Result<Vec<Value>> {
         }
         state_store::strip_entries(&mut data);
         chat["sync_data"] = data;
+        chat["number"] = state.appearance.get(&format!("chat:{chat_id}")).map(|r|r.sync["chat_number"].clone()).unwrap_or(Value::Null);
     }
     chats.retain(|chat| state.shared["deletions"].get(chat["id"].as_str().unwrap_or("")).is_none());
     chats.sort_by(|a, b| b["path"].as_str().cmp(&a["path"].as_str()));
@@ -320,6 +340,25 @@ pub(crate) fn remote(device: &Device) -> io::Result<Value> {
 mod tests {
     use super::*;
     use std::fs;
+    #[test]
+    fn chat_numbers_survive_renaming_filtering_and_deletion() {
+        let root=std::env::temp_dir().join(format!("oaclis-chat-numbers-{}",std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        let chats=vec![json!({"id":"b","name":"Zeta"}),json!({"id":"a","name":"Alfa"})];
+        number_chats(&root,&chats).unwrap();
+        assert_eq!(state_store::snapshot(&root).unwrap().appearance["chat:a"].sync["chat_number"],1);
+        assert_eq!(state_store::snapshot(&root).unwrap().appearance["chat:b"].sync["chat_number"],2);
+        number_chats(&root,&[json!({"id":"b","name":"A nuova posizione"}),json!({"id":"c","name":"AAA"})]).unwrap();
+        assert_eq!(state_store::snapshot(&root).unwrap().appearance["chat:b"].sync["chat_number"],2);
+        assert_eq!(state_store::snapshot(&root).unwrap().appearance["chat:c"].sync["chat_number"],3);
+        state_store::change(&root,|state|{std::sync::Arc::make_mut(&mut state.appearance).remove("chat:c");Ok(())}).unwrap();
+        number_chats(&root,&[json!({"id":"d","name":"Nuova"})]).unwrap();
+        assert_eq!(state_store::snapshot(&root).unwrap().appearance["chat:d"].sync["chat_number"],4);
+        let preferences=state_store::database(&root,"","preferences-get",None).unwrap();
+        assert_eq!(preferences["preferences"]["a"]["number"],1);
+        assert_eq!(preferences["preferences"]["b"]["number"],2);
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn expiry_releases_idle_catalog_but_never_an_in_use_index() {
         use std::sync::{Arc,Mutex};

@@ -1,4 +1,4 @@
-/* style.css v2.0.1597 */
+/* style.css v2.0.1599 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1356,3 +1356,5 @@ html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: va
 .access-chat-row .icon-button { flex-shrink: 0; }
 
 .chat-terminal h2{cursor:move;touch-action:none}
+
+.library-number{min-width:2ch;flex-shrink:0;font-size:var(--font-brand);font-weight:700;text-align:right;font-variant-numeric:tabular-nums;line-height:1.2}

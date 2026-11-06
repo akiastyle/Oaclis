@@ -1,4 +1,4 @@
-// initial_inventory.rs v2.24.1275
+// initial_inventory.rs v2.24.1276
 //! One initial inventory per local chat; saved results remain cached.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid};
 use serde_json::{Value,json};
@@ -16,6 +16,7 @@ fn reserve(active: &Mutex<std::collections::HashSet<String>>, key: &str) -> io::
 pub(crate) fn start(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::collections::HashSet<String>>>) {
     thread::spawn(move || loop {
         if let Ok(chats) = catalog(&codex) {
+            if let Err(error)=crate::catalog::number_chats(&config,&chats){eprintln!("Oaclis: numerazione chat: {error}");}
             for chat in chats {
                 let Some(id) = chat["id"].as_str() else { continue; };
                 let Ok(key) = environment::key("master", id) else { continue; };

@@ -1,4 +1,4 @@
-// panels.js v3.143.2880
+// panels.js v3.143.2882
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -827,7 +827,7 @@ async function openMobileChats(device, anchor) {
     const result = await api('mobile/chats', {id:device.id});
     if (!panel.isConnected) return;
     const selected = new Set(result.selected || []);
-    const chats = [...result.chats].sort((a,b) => a.name.localeCompare(b.name));
+    const chats = OaclisTerminal.sortChats(result.chats);
     content.innerHTML = OaclisSettings.html('<form><label class="search"><input type="search" aria-label="Cerca chat" placeholder="Cerca chat"></label><div class="mobile-chat-options">') + (chats.length ? chats.map(chat => '<label class="mobile-chat-option"><input type="checkbox" value="' + esc(chat.id) + '" ' + (selected.has(chat.id) ? 'checked' : '') + '><span>' + esc(chat.name) + '</span></label>').join('') : OaclisSettings.html('<p>Nessuna chat disponibile.</p>')) + OaclisSettings.html('</div><p class="mobile-chat-status" role="status"></p><button type="submit" class="primary">Salva</button></form>');
     const search = content.querySelector('input[type="search"]');
     search.oninput = () => { const term = search.value.trim().toLocaleLowerCase(); content.querySelectorAll('.mobile-chat-option').forEach(row => row.hidden = !row.textContent.toLocaleLowerCase().includes(term)); };

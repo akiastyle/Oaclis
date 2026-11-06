@@ -1,4 +1,4 @@
-// map.js v4.133.3447
+// map.js v4.133.3455
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -429,12 +429,12 @@ function acceptsChatDrop(source, target, operation) {
 function renderLibrary() {
   const search = $("#search").value.toLocaleLowerCase();
   const focused = document.activeElement?.dataset.chatId;
-  const entries = visibleChats.filter(
+  const entries = OaclisTerminal.sortChats(visibleChats.filter(
     (c) => !(data.deleted_chats || []).includes(c.id) && (showHiddenChats || !data.chat_settings?.[c.id]?.hidden) && (
       chatLabel(c).toLocaleLowerCase().includes(search) ||
       c.name.toLocaleLowerCase().includes(search) ||
       c.id.toLocaleLowerCase().includes(search)),
-  );
+  ),chatLabel);
   $("#library-list").replaceChildren();
   if (!entries.length) {
     $("#library-list").innerHTML =
@@ -451,7 +451,7 @@ function renderLibrary() {
     button.dataset.chatId = entry.id;
     button.draggable = !data.chat_settings?.[entry.id]?.hidden;
     button.innerHTML =
-      badge(entry) +
+      '<span class="library-number">'+esc(data.chat_settings?.[entry.id]?.number??entry.number??'')+'</span>'+badge(entry) +
       "<span><strong>" +
       esc(chatLabel(entry)) +
       "</strong><small>" +
@@ -992,7 +992,7 @@ function openAccessChats(marker) {
   panel.className='access-chat-list';panel.setAttribute('popover','auto');panel.setAttribute('role','dialog');
   panel.setAttribute('aria-label',group.name||deviceName(group.target));
   panel.innerHTML='<button type="button" class="icon-button popover-close" aria-label="'+esc(OaclisSettings.text('Chiudi'))+'">'+OaclisIcon('close')+'</button><h2>'+esc(group.name||deviceName(group.target))+'</h2>';
-  for(const entry of group.entries){
+  for(const entry of OaclisTerminal.sortChats(group.entries,chatLabel)){
     const row=document.createElement('div');row.className='access-chat-row';
     row.innerHTML=badge(entry)+'<span class="access-chat-name">'+esc(chatLabel(entry))+'</span><button type="button" class="icon-button">'+OaclisIcon('terminal')+'</button>';
     row.querySelector('.chat-badge').style.color=appearance(entry).color||'var(--ink)';
