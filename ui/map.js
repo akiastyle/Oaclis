@@ -1,4 +1,4 @@
-// map.js v4.133.3455
+// map.js v4.133.3481
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -112,7 +112,7 @@ function positionConnectionPorts() {
     orbit.moving = false;
     const wrap = value => (value % orbit.length + orbit.length) % orbit.length;
     const delta = (a, b) => wrap(a - b + orbit.length / 2) - orbit.length / 2;
-    const reserved=[],drawn=[];
+    const reserved=[],layout=[];
     orbit.ports??={};
     const elapsed=1-Math.exp(-Math.min(40,Math.max(1,now-orbit.time))/85);
     for (const [index, operation] of ['sync', 'send', 'receive', 'console'].entries()) {
@@ -137,20 +137,24 @@ function positionConnectionPorts() {
       const target=candidates.find(candidate=>fits(candidate.point,reserved));
       if(!target)continue;
       reserved.push({x:target.point.x,y:target.point.y,width,height});
+      layout.push({operation,port,target,width,height,fits});
+    }
+    const anchor=layout[0]?.target.phase;
+    const ordered=layout.map(item=>item.target).sort((a,b)=>wrap(a.phase-anchor)-wrap(b.phase-anchor));
+    const origin=orbit.ports.sync?.phase??anchor,rotation=delta(anchor,origin);
+    let phases=layout.map(({operation},index)=>{
+      const phase=orbit.ports[operation]?.phase??ordered[index].phase,offset=wrap(phase-origin);
+      return reduced?ordered[index].phase:wrap(origin+rotation*elapsed+offset+(wrap(ordered[index].phase-anchor)-offset)*elapsed);
+    });
+    const frame=phases.map((phase,index)=>{const point=orbit.path.getPointAtLength(phase);return {x:point.x,y:point.y,width:layout[index].width,height:layout[index].height};});
+    if(frame.some((point,index)=>!layout[index].fits(point,frame.slice(0,index))))phases=ordered.map(target=>target.phase);
+    for(const [index,{operation,port}]of layout.entries()){
+      const target=ordered[index];
       const state=orbit.ports[operation]??={phase:target.phase,target:target.phase};
       state.target=target.phase;
-      const remaining=delta(state.target,state.phase);
-      let position=reduced||Math.abs(remaining)<=.1?state.target:wrap(state.phase+remaining*elapsed);
-      let point=orbit.path.getPointAtLength(position);
-      if(!fits(point,drawn)){
-        candidates.sort((a,b)=>Math.abs(delta(a.phase,state.target))-Math.abs(delta(b.phase,state.target)));
-        const safe=candidates.find(candidate=>fits(candidate.point,drawn));
-        if(!safe)continue;
-        position=safe.phase;point=safe.point;
-      }
+      const position=phases[index],point=orbit.path.getPointAtLength(position);
       state.phase=position;
       if(Math.abs(delta(state.target,position))>.1){moving=true;orbit.moving=true;}
-      drawn.push({x:point.x,y:point.y,width,height});
 
       const before = orbit.path.getPointAtLength(wrap(position - 0.5)), after = orbit.path.getPointAtLength(wrap(position + 0.5));
       const length = Math.hypot(after.x - before.x, after.y - before.y);
