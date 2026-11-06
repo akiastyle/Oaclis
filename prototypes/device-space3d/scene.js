@@ -1,4 +1,4 @@
-// scene.js v1.6.104
+// scene.js v1.10.159
 import * as THREE from 'three';
 import {OrbitControls} from './vendor/OrbitControls.js';
 import {RoundedBoxGeometry} from './vendor/RoundedBoxGeometry.js';
@@ -6,7 +6,7 @@ import {RoomEnvironment} from './vendor/RoomEnvironment.js';
 import {createBody,releaseBody,stepBody} from './physics.js';
 
 const host=document.querySelector('#scene'),panel=document.querySelector('#panel'),labels=document.querySelector('#labels');
-const roles=[{id:'sync',name:'Sincronizzazione',icon:'sync',color:'#94d9ca'},{id:'send',name:'Invio',icon:'send',color:'#d4b68e'},{id:'receive',name:'Ricezione',icon:'receive',color:'#b6c8db'},{id:'console',name:'Console remota',icon:'square-stop',color:'#b7b4d9'}];
+const roles=[{id:'sync',name:'Sincronizzazione',icon:'sync',color:'#ff3048'},{id:'send',name:'Invio',icon:'send',color:'#ffa71b'},{id:'receive',name:'Ricezione',icon:'receive',color:'#10d8ef'},{id:'console',name:'Console remota',icon:'square-stop',color:'#ff63c5'}];
 const devices=[
  {id:'rog',name:'ROG',type:'Master',icon:'desktop',color:'#51777b',x:-1,z:1,online:true,chats:[{number:4,name:'Oaclis',icon:'code'},{number:7,name:'Vulcano',icon:'image'},{number:9,name:'3D i-vector',icon:'box'}]},
  {id:'kj',name:'KJ',type:'Linux · Jetson',icon:'cpu',color:'#7c8176',x:4,z:-4,online:true,chats:[{number:4,name:'Oaclis',icon:'code'},{number:9,name:'3D i-vector',icon:'box'}]},
@@ -23,20 +23,22 @@ scene.add(new THREE.HemisphereLight('#dceaf3','#243037',1.4));
 const key=new THREE.DirectionalLight('#fff3dc',3.2);key.position.set(-7,15,9);key.castShadow=true;key.shadow.mapSize.set(2048,2048);Object.assign(key.shadow.camera,{left:-20,right:20,top:20,bottom:-20,near:1,far:60});key.shadow.normalBias=.04;key.shadow.bias=-.0001;scene.add(key);
 const rim=new THREE.DirectionalLight('#b9d5ed',1.8);rim.position.set(8,7,-10);scene.add(rim);
 const stage=new THREE.Mesh(new RoundedBoxGeometry(28,.22,21,2,.1),new THREE.MeshStandardMaterial({color:'#18282e',roughness:.75,metalness:.18}));stage.position.y=-.14;stage.receiveShadow=true;scene.add(stage);
-const pickables=[],linkMeshes=[],flowDots=[];let selection=null,moveMode=false,liftMode=false,drag=null,pointerDown=null,noticeTimer,flowFrame=0,renderFrame=0,frames=0,physicsFrame=0,lastPhysics=0,hoverGhost=null;
+const pickables=[],linkMeshes=[],flowDots=[];let selection=null,moveMode=false,liftMode=false,drag=null,pointerDown=null,noticeTimer,flowFrame=0,renderFrame=0,frames=0,physicsFrame=0,lastPhysics=0,hoverGhost=null,ambientFrame=0,lastAmbient=0;
+let ambientMotion=!matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cursor={x:innerWidth/2,y:innerHeight/2};
 const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2(),floor=new THREE.Plane(new THREE.Vector3(0,1,0),0),projected=new THREE.Vector3();
 const geometry=new RoundedBoxGeometry(2.2,2.2,2.2,4,.19);
 const ghostGeometry=new THREE.LatheGeometry([new THREE.Vector2(0,-.25),new THREE.Vector2(.31,-.25),new THREE.Vector2(.32,-.13),new THREE.Vector2(.30,.1),new THREE.Vector2(.285,.22),new THREE.Vector2(.23,.33),new THREE.Vector2(.13,.40),new THREE.Vector2(0,.43)],32);
-const ghostVertices=ghostGeometry.attributes.position;
+const ghostVertices=ghostGeometry.attributes.position,ghostBase=ghostVertices.array.slice();
 for(let i=0;i<ghostVertices.count;i++){const x=ghostVertices.getX(i),y=ghostVertices.getY(i),z=ghostVertices.getZ(i);if(y<-.12&&Math.hypot(x,z)>.1)ghostVertices.setY(i,y+Math.cos(Math.atan2(z,x)*6)*.055*(-.12-y)/.13);}
 ghostGeometry.computeVertexNormals();
 function createGhost(device,role){
- const pupils=[],ghost=new THREE.Group(),body=new THREE.Mesh(ghostGeometry,new THREE.MeshPhysicalMaterial({color:role.color,roughness:.25,metalness:.12,clearcoat:.7,emissive:role.color,emissiveIntensity:.12}));body.castShadow=true;body.userData={device,role};ghost.add(body);pickables.push(body);
+ const pupils=[],ghost=new THREE.Group(),visual=new THREE.Group(),body=new THREE.Mesh(ghostGeometry,new THREE.MeshStandardMaterial({color:role.color,roughness:.65,metalness:0,envMapIntensity:.12,emissive:role.color,emissiveIntensity:.3}));ghost.add(visual);body.castShadow=true;body.userData={device,role};visual.add(body);pickables.push(body);
  for(const side of [-1,1]){
-  const eye=new THREE.Mesh(new THREE.SphereGeometry(1,16,12),new THREE.MeshStandardMaterial({color:'#fffdf4',roughness:.4}));eye.position.set(side*.105,.16,.27);eye.scale.set(.078,.103,.034);ghost.add(eye);
-  const pupil=new THREE.Mesh(new THREE.SphereGeometry(1,12,8),new THREE.MeshBasicMaterial({color:'#203039'}));pupil.position.set(side*.105,.15,.303);pupil.scale.set(.032,.047,.016);ghost.add(pupil);pupils.push({pupil,side});
+  const eye=new THREE.Mesh(new THREE.SphereGeometry(1,16,12),new THREE.MeshStandardMaterial({color:'#fffdf4',roughness:.4}));eye.position.set(side*.105,.16,.27);eye.scale.set(.078,.103,.034);visual.add(eye);
+  const pupil=new THREE.Mesh(new THREE.SphereGeometry(1,12,8),new THREE.MeshBasicMaterial({color:'#203039'}));pupil.position.set(side*.105,.15,.303);pupil.scale.set(.032,.047,.016);visual.add(pupil);pupils.push({pupil,side});
  }
- const symbol=new THREE.Sprite(new THREE.SpriteMaterial({map:iconMaps.get(role.icon),transparent:true,depthWrite:false}));symbol.scale.set(.34,.34,1);symbol.position.y=.72;ghost.add(symbol);ghost.userData={device,role,pupils};return ghost;
+ const symbol=new THREE.Sprite(new THREE.SpriteMaterial({map:iconMaps.get(role.icon),transparent:true,depthWrite:false}));symbol.scale.set(.34,.34,1);symbol.position.y=.72;visual.add(symbol);ghost.userData={device,role,pupils,visual,phase:devices.indexOf(device)*1.1+roles.indexOf(role)*.9};return ghost;
 }
 
 async function iconTexture(name,color='#e9f3f3'){
@@ -64,15 +66,15 @@ for(const connection of connections){
  const mesh=connection.mesh=new THREE.Mesh(new THREE.BufferGeometry(),connection.material);scene.add(mesh);linkMeshes.push(mesh);
  const source=devices.find(device=>device.id===connection.from),target=devices.find(device=>device.id===connection.to);
  connection.chats=source.chats.filter(chat=>target.chats.some(other=>other.number===chat.number)).map(chat=>{
-  const ball=new THREE.Mesh(new THREE.SphereGeometry(.30,24,16),new THREE.MeshPhysicalMaterial({color:role.color,roughness:.12,metalness:.12,transparent:true,opacity:.55,depthWrite:false,clearcoat:1}));
-  const icon=new THREE.Sprite(new THREE.SpriteMaterial({map:iconMaps.get(chat.icon),transparent:true,depthWrite:false}));icon.scale.set(.43,.43,1);ball.add(icon);ball.userData={device:source,chat,connection,object:ball};scene.add(ball);pickables.push(ball);return {chat,ball};
+  const ball=new THREE.Mesh(new THREE.SphereGeometry(.36,32,24),new THREE.MeshPhysicalMaterial({color:'#466a7d',roughness:.26,metalness:.22,clearcoat:.85,clearcoatRoughness:.18}));
+  const icon=new THREE.Sprite(new THREE.SpriteMaterial({map:iconMaps.get(chat.icon),transparent:true,depthWrite:false}));icon.scale.set(.48,.48,1);icon.renderOrder=2;ball.castShadow=true;ball.receiveShadow=true;ball.add(icon);ball.userData={device:source,chat,connection,object:ball,icon};scene.add(ball);pickables.push(ball);return {chat,ball};
  });
  for(const reverse of connection.both?[false,true]:[false]){const dot=new THREE.Mesh(new THREE.SphereGeometry(.075,12,8),new THREE.MeshBasicMaterial({color:'#e4fff4'}));dot.visible=false;scene.add(dot);flowDots.push({connection,dot,reverse});}
 }
 function updateLinks(){
  for(const device of devices){
   const angle=Math.atan2(camera.position.x-device.group.position.x,camera.position.z-device.group.position.z);
-  roles.forEach((role,index)=>{const a=angle+(index-1.5)*.7,ghost=device.ports[role.id];ghost.position.set(Math.sin(a)*2.05,.9+(ghost.userData.bob||0),Math.cos(a)*2.05);ghost.rotation.y=angle;ghost.rotation.z=ghost.userData.wobble||0;});
+  roles.forEach((role,index)=>{const a=angle+(index-1.5)*.7,ghost=device.ports[role.id];ghost.position.set(Math.sin(a)*2.05,.9,Math.cos(a)*2.05);ghost.rotation.y=angle;});
  }
  scene.updateMatrixWorld(true);
  for(const connection of connections){
@@ -86,7 +88,9 @@ function updateLinks(){
 }
 function screenPoint(point){projected.copy(point).project(camera);return {x:(projected.x*.5+.5)*innerWidth,y:(-.5*projected.y+.5)*innerHeight,visible:projected.z<1};}
 function render(){
- renderFrame=0;frames++;renderer.render(scene,camera);
+ renderFrame=0;frames++;animateGhostVisuals(performance.now());
+ for(const connection of connections)for(const {ball}of connection.chats)ball.userData.icon.position.copy(camera.position).sub(ball.position).normalize().multiplyScalar(.372);
+ renderer.render(scene,camera);
  for(const device of devices){const p=screenPoint(device.cube.getWorldPosition(new THREE.Vector3())),bottom=Math.max(...Object.values(device.ports).map(ghost=>screenPoint(ghost.getWorldPosition(new THREE.Vector3())).y));device.label.style.left=p.x+'px';device.label.style.top=bottom+32+'px';device.label.hidden=!p.visible;}
  if(selection){
   const object=selection.object||(selection.role?selection.device.ports[selection.role.id]:selection.device.cube),p=screenPoint(object.getWorldPosition(new THREE.Vector3())),box=panel.getBoundingClientRect();
@@ -94,6 +98,26 @@ function render(){
   document.querySelector('#tether path').setAttribute('d',p.visible?'M'+p.x+' '+p.y+'Q'+(p.x+x)/2+' '+(p.y+y)/2+' '+x+' '+y:'');
  }
 }
+function animateGhostVisuals(now){
+ const time=ambientMotion?now/1000:0;
+ for(let i=0;i<ghostVertices.count;i++){
+  const x=ghostBase[i*3],y=ghostBase[i*3+1],z=ghostBase[i*3+2];
+  if(y<-.12&&Math.hypot(x,z)>.1)ghostVertices.setY(i,y+Math.cos(Math.atan2(z,x)*6+time*8)*.055*(-.12-y)/.13);
+ }
+ ghostVertices.needsUpdate=true;ghostGeometry.computeVertexNormals();
+ for(const device of devices)for(const ghost of Object.values(device.ports)){
+  const {visual,phase,pupils}=ghost.userData,t=(now-(ghost.userData.hoverAt??-1000))/900,hover=t>=0&&t<1;
+  visual.position.y=(ambientMotion?Math.sin(time*2.8+phase)*.07:0)+(hover?Math.sin(t*Math.PI)*.26:0);
+  visual.rotation.z=(ambientMotion?Math.sin(time*2.4+phase)*.04:0)+(hover?Math.sin(t*Math.PI*2)*.13*(1-t):0);
+  visual.scale.set(1,ambientMotion?1+Math.sin(time*4+phase)*.025:1,1);
+  const at=screenPoint(ghost.getWorldPosition(new THREE.Vector3())),dx=cursor.x-at.x,dy=cursor.y-at.y,length=Math.max(40,Math.hypot(dx,dy));
+  for(const {pupil,side}of pupils){pupil.position.x=side*.105+dx/length*.035;pupil.position.y=.15-dy/length*.038;}
+ }
+}
+function animateGhosts(now){ambientFrame=0;if(!ambientMotion||document.hidden)return;if(now-lastAmbient>=1000/30){lastAmbient=now;requestRender();}ambientFrame=requestAnimationFrame(animateGhosts);}
+function startAmbient(){if(ambientMotion&&!ambientFrame&&!document.hidden)ambientFrame=requestAnimationFrame(animateGhosts);}
+document.querySelector('#ghost-motion').onclick=()=>{ambientMotion=!ambientMotion;document.querySelector('#ghost-motion').setAttribute('aria-pressed',String(ambientMotion));cancelAnimationFrame(ambientFrame);ambientFrame=0;startAmbient();requestRender();};
+window.addEventListener('pointermove',event=>{cursor.x=event.clientX;cursor.y=event.clientY;requestRender();},{passive:true});
 function requestRender(){if(!renderFrame)renderFrame=requestAnimationFrame(render);}
 function notice(text){clearTimeout(noticeTimer);const box=document.querySelector('#notice');box.textContent=text;box.hidden=false;noticeTimer=setTimeout(()=>{box.hidden=true;},2400);}
 function openPanel(device,role=null,chat=null,object=null){
@@ -114,7 +138,7 @@ function advancePhysics(now){
  for(const device of devices){
   active=stepBody(device.body,elapsed)||active;device.group.position.y=device.body.height;
   const scale=device.body.scale;device.cube.scale.set(1/Math.sqrt(scale),scale,1/Math.sqrt(scale));device.cube.position.y=1.1*scale;
-  for(const ghost of Object.values(device.ports)){const t=(now-(ghost.userData.hoverAt??-1000))/900,hovering=t>=0&&t<1;ghost.userData.bob=hovering?Math.sin(t*Math.PI)*.26:0;ghost.userData.wobble=hovering?Math.sin(t*Math.PI*2)*.13*(1-t):0;active=hovering||active;}
+  for(const ghost of Object.values(device.ports)){const t=(now-(ghost.userData.hoverAt??-1000))/900;active=(t>=0&&t<1)||active;}
  }
  updateLinks();if(active&&!document.hidden)physicsFrame=requestAnimationFrame(advancePhysics);
 }
@@ -137,7 +161,6 @@ renderer.domElement.addEventListener('pointermove',event=>{
  }
  const hit=pick(event),ghost=hit?.role?hit.device.ports[hit.role.id]:null;
  if(ghost&&hoverGhost!==ghost){ghost.userData.hoverAt=performance.now();startPhysics();}hoverGhost=ghost;
- for(const device of devices)for(const port of Object.values(device.ports))for(const {pupil,side}of port.userData.pupils){pupil.position.x=side*.105+pointer.x*.02;pupil.position.y=.15+pointer.y*.02;}
  host.style.cursor=hit?(moveMode?'move':liftMode?'ns-resize':'pointer'):'grab';requestRender();
 });
 renderer.domElement.addEventListener('pointerup',event=>{
@@ -158,8 +181,8 @@ document.querySelector('#flow').onclick=()=>{
   flowDots.forEach(({connection,dot,reverse})=>{dot.visible=t<=1;if(t<=1)dot.position.copy(connection.curve.getPointAt(reverse?1-t:t));});requestRender();flowFrame=requestAnimationFrame(animate);
  };flowFrame=requestAnimationFrame(animate);
 };
-document.addEventListener('visibilitychange',()=>{if(document.hidden){stopFlow();cancelAnimationFrame(physicsFrame);physicsFrame=0;releaseDrag();}else{if(devices.some(d=>d.body.awake))startPhysics();requestRender();}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){stopFlow();cancelAnimationFrame(ambientFrame);ambientFrame=0;cancelAnimationFrame(physicsFrame);physicsFrame=0;releaseDrag();}else{startAmbient();if(devices.some(d=>d.body.awake))startPhysics();requestRender();}});
 window.addEventListener('keydown',event=>{if(event.key==='Escape')closePanel();});
 window.addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);requestRender();});
-window.Oaclis3DDemo={scene,devices,connections,roles,renderer,camera,controls,openPanel,updateLinks,screenPoint,startPhysics,get physicsRunning(){return physicsFrame!==0;},get frames(){return frames;}};
-resetCamera();updateLinks();document.querySelector('#loading').hidden=true;requestRender();
+window.Oaclis3DDemo={scene,devices,connections,roles,renderer,camera,controls,openPanel,updateLinks,screenPoint,startPhysics,get ambientMotion(){return ambientMotion;},get physicsRunning(){return physicsFrame!==0;},get frames(){return frames;}};
+resetCamera();updateLinks();document.querySelector('#loading').hidden=true;document.querySelector('#ghost-motion').setAttribute('aria-pressed',String(ambientMotion));startAmbient();requestRender();

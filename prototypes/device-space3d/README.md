@@ -17,9 +17,10 @@ Servono Node.js e un browser moderno con WebGL 2 abilitato; non occorre installa
 - Attivare il comando “Sposta i dispositivi” e trascinare un cubo sul piano: archi, fantasmini e sfere seguono la posizione.
 - Attivare “Solleva e lascia cadere i cubi” (freccia verso l’alto), trascinare un cubo verso l’alto e rilasciarlo: gravità, rimbalzi smorzati e una breve deformazione lo riportano a riposo. Con la tastiera, premere Spazio sull’etichetta di un device per sollevarlo e lasciarlo cadere.
 - “Inquadra” ripristina la vista iniziale; “Vista dall’alto” mostra il piano.
-- “Simula passaggio dati” riproduce un flusso dimostrativo finito; un secondo clic lo ferma. A riposo non esiste un ciclo di rendering continuo.
+- Il pulsante con il fulmine (“Anima i fantasmini”) attiva o ferma il galleggiamento e l’ondulazione del bordo dei fantasmini. L’animazione continua mentre la pagina è visibile, con aggiornamenti limitati a 30 fps; parte disattivata se il browser richiede movimento ridotto.
+- “Simula passaggio dati” riproduce un flusso dimostrativo finito; un secondo clic lo ferma. Con l’animazione dei fantasmini disattivata e fisica, hover e flusso terminati, non esiste un ciclo di rendering continuo a riposo.
 
-La scena contiene ROG, KJ, KDell e S24, quattro fantasmini 3D in stile Pac-Man per device e archi con sfere delle chat condivise, ciascuna con la propria icona. I fantasmini mantengono l’ordine Sincronizzazione, Invio, Ricezione, Console remota su un arco rivolto alla camera; gli occhi seguono il puntatore e il passaggio del mouse provoca un breve movimento. I cubi hanno bordi smussati, luce, ombre e la stessa icona sulle sei facce; il piano non ha griglia. Fisica e movimenti si fermano completamente a riposo. Stati, nomi delle chat e numeri sono fittizi: non indicano lo stato corrente della rete.
+La scena contiene ROG, KJ, KDell e S24, quattro fantasmini 3D in stile Pac-Man per device e archi con sfere delle chat condivise. Le sfere sono opache, illuminate fisicamente, proiettano e ricevono ombre; la loro icona resta sulla superficie frontale rivolta alla camera. I fantasmini, in rosso, arancione, ciano e rosa vivaci, mantengono l’ordine Sincronizzazione, Invio, Ricezione, Console remota su un arco rivolto alla camera. Gli occhi seguono il puntatore rispetto alla posizione di ciascun fantasmino, anche sopra i menu; il passaggio del mouse aggiunge un breve movimento. I cubi hanno bordi smussati, luce, ombre e la stessa icona sulle sei facce; il piano non ha griglia. La fisica torna completamente a riposo dopo i rimbalzi. Stati, nomi delle chat e numeri sono fittizi: non indicano lo stato corrente della rete.
 
 ## Asset e dipendenze
 
@@ -32,7 +33,7 @@ Tutto viene servito localmente, senza CDN o chiamate esterne:
 
 ## Verifica
 
-Test locale `prototypes/device-space3d/test.cjs`: WebGL reale in Chromium, sei facce e quattro fantasmini per device, ordine sul lato della camera, sfere delle chat condivise, assenza della griglia, sollevamento e ritorno a riposo, menu e richiamo, accesso da tastiera ai canali, drag sul piano, simulazione interrompibile, rendering fermo a riposo, desktop e viewport stretta. Il test non misura prestazioni su hardware remoto.
+Test locale `prototypes/device-space3d/test.cjs`: WebGL reale in Chromium, sei facce e quattro fantasmini per device, ordine sul lato della camera, sfere opache con ombre e icone frontali, ondulazione dei fantasmini, occhi che seguono il puntatore, pausa dell’animazione, assenza della griglia, sollevamento e ritorno a riposo, menu e richiamo, accesso da tastiera ai canali, drag sul piano, simulazione interrompibile, rendering fermo con animazione disattivata, desktop e viewport stretta. Il test non misura prestazioni su hardware remoto.
 
 Eseguire `node prototypes/device-space3d/physics.test.mjs` per verificare senza browser gravità, rimbalzi decrescenti, contatto col piano, deformazione, sospensione durante il trascinamento e arresto completo.
 
