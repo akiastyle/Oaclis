@@ -1,4 +1,4 @@
-/* style.css v2.0.1599 */
+/* style.css v2.0.1607 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1286,9 +1286,9 @@ select {
 .link-flow-trace, #mobile-links .link-flow-trace {
   stroke: currentColor;
   fill: none;
-  stroke-width: calc(var(--connection-width) + 1px);
+  stroke-width: calc(var(--connection-width) + 3px);
   stroke-linecap: round;
-  stroke-dasharray: 0.1 0.9;
+  stroke-dasharray: 0 1;
   filter: drop-shadow(0 0 4px currentColor);
   transition: none;
   animation: link-flow-forward 2.15s linear infinite both;
@@ -1300,9 +1300,9 @@ select {
   53.488372%, 100% { opacity: 0; stroke-dashoffset: -1; }
 }
 @keyframes link-flow-reverse {
-  0% { opacity: 0.28; stroke-dashoffset: 0.1; }
+  0% { opacity: 0.28; stroke-dashoffset: 0; }
   6.4186%, 41.7209% { opacity: 0.94; }
-  53.488372%, 100% { opacity: 0; stroke-dashoffset: 1.1; }
+  53.488372%, 100% { opacity: 0; stroke-dashoffset: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
   .link-flow-overlay { display: none; }
