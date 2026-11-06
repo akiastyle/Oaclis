@@ -15,7 +15,7 @@ Servono Node.js e un browser moderno con WebGL 2 abilitato; non occorre installa
 - Trascinare lo sfondo per ruotare; rotella/pinch per lo zoom; tasto destro o due dita per traslare.
 - Cliccare un cubo o la sua etichetta per aprire il pannello; cliccare un fantasmino per i dettagli del canale o una sfera sugli archi per il menu della chat condivisa. I canali sono accessibili anche come pulsanti nel pannello del device.
 - Afferrare direttamente un cubo e trascinarlo nello spazio 3D, senza selezionare modalità. Usare la rotella mentre lo si tiene afferrato per cambiarne la profondità. Archi, fantasmini e sfere seguono la posizione.
-- Rilasciare un cubo sollevato per farlo cadere: gravità, rimbalzi più accentuati e una breve deformazione lo riportano a riposo. Un clic breve sul cubo apre il menu. Con la tastiera, premere Spazio sull’etichetta di un device per sollevarlo e lasciarlo cadere.
+- Rilasciare un cubo sollevato per farlo cadere: gravità, rimbalzi più accentuati e una breve deformazione lo riportano a riposo. I cubi sono solidi fra loro anche durante il trascinamento: si può appoggiarli e impilarli; togliendo un supporto, quelli sopra ricadono. Un clic breve sul cubo apre il menu. Con la tastiera, premere Spazio sull’etichetta di un device per sollevarlo e lasciarlo cadere.
 - “Inquadra” ripristina la vista iniziale; “Vista dall’alto” mostra il piano.
 - Il pulsante con il fulmine (“Anima i fantasmini”) attiva o ferma il galleggiamento e l’ondulazione del bordo dei fantasmini. L’animazione continua mentre la pagina è visibile, con aggiornamenti limitati a 30 fps; parte disattivata se il browser richiede movimento ridotto.
 - “Simula passaggio dati” riproduce un flusso dimostrativo finito; un secondo clic lo ferma. Con l’animazione dei fantasmini disattivata e fisica, hover e flusso terminati, non esiste un ciclo di rendering continuo a riposo.
@@ -29,13 +29,13 @@ Tutto viene servito localmente, senza CDN o chiamate esterne:
 - Three.js **0.180.0**, distribuzione ufficiale npm `https://registry.npmjs.org/three/-/three-0.180.0.tgz`; moduli utilizzati e licenza MIT in `vendor/`.
 - Icone dal catalogo Lucide già incluso in `ui/icons.js`, con la sua licenza esistente.
 - Logo esistente `ui/assets/oaclis-particles.png`, servito in sola lettura dal server della bozza.
-- Nessuna nuova immagine generata; cubi, fantasmini, sfere, corone e archi sono geometrie native della scena. Le icone sono texture SVG del catalogo esistente. La fisica locale in `physics.js` non aggiunge dipendenze.
+- Nessuna nuova immagine generata; cubi, fantasmini, sfere, corone e archi sono geometrie native della scena. Le icone sono texture SVG del catalogo esistente. La fisica locale in `physics.js` non aggiunge dipendenze; gestisce cubi verticali con ingombri aggiornati durante la deformazione, collisioni durante la caduta e trascinamento a piccoli passi per impedire attraversamenti.
 
 ## Verifica
 
 Test locale `prototypes/device-space3d/test.cjs`: WebGL reale in Chromium, sei facce e quattro fantasmini per device, ordine sul lato della camera, sfere opache con ombre e icone frontali, ondulazione dei fantasmini, occhi che seguono il puntatore, pausa dell’animazione, assenza della griglia, trascinamento diretto 3D e profondità con rotella senza pulsanti di modalità, rimbalzo accentuato e ritorno a riposo, menu e richiamo, accesso da tastiera ai canali, drag sul piano, simulazione interrompibile, rendering fermo con animazione disattivata, desktop e viewport stretta. Il test non misura prestazioni su hardware remoto.
 
-Eseguire `node prototypes/device-space3d/physics.test.mjs` per verificare senza browser gravità, rimbalzi decrescenti, contatto col piano, deformazione, sospensione durante il trascinamento e arresto completo.
+Eseguire `node prototypes/device-space3d/physics.test.mjs` per verificare senza browser gravità, rimbalzi decrescenti, contatto col piano e fra cubi, impilamento, rimozione del supporto, trascinamento senza attraversamenti, deformazione, sospensione durante il trascinamento e arresto completo.
 
 Con il server avviato, eseguire `node prototypes/device-space3d/test.cjs`. Il test usa l’installazione Playwright in `/root/google-images-local/node_modules/playwright` e Chromium in `/root/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome`: questi percorsi sono specifici dell’ambiente di verifica e vanno adattati su un altro computer.
 

@@ -1,9 +1,9 @@
-// scene.js v1.12.194
+// scene.js v1.12.207
 import * as THREE from 'three';
 import {OrbitControls} from './vendor/OrbitControls.js';
 import {RoundedBoxGeometry} from './vendor/RoundedBoxGeometry.js';
 import {RoomEnvironment} from './vendor/RoomEnvironment.js';
-import {createBody,releaseBody,stepBody} from './physics.js';
+import {createBody,releaseBody,stepWorld,moveBody} from './physics.js';
 
 const host=document.querySelector('#scene'),panel=document.querySelector('#panel'),labels=document.querySelector('#labels');
 const roles=[{id:'sync',name:'Sincronizzazione',icon:'sync',color:'#ff3048'},{id:'send',name:'Invio',icon:'send',color:'#ffa71b'},{id:'receive',name:'Ricezione',icon:'receive',color:'#10d8ef'},{id:'console',name:'Console remota',icon:'square-stop',color:'#ff63c5'}];
@@ -47,7 +47,7 @@ async function iconTexture(name,color='#e9f3f3'){
 }
 const iconMaps=new Map(await Promise.all([...new Set([...devices.map(d=>d.icon),...roles.map(r=>r.icon),...devices.flatMap(d=>d.chats.map(chat=>chat.icon))])].map(async name=>[name,await iconTexture(name)])));
 for(const device of devices){
- device.body=createBody();
+ device.body=createBody(device.x,device.z);
  const group=device.group=new THREE.Group();group.position.set(device.x,0,device.z);scene.add(group);
  const cube=device.cube=new THREE.Mesh(geometry,new THREE.MeshPhysicalMaterial({color:device.color,roughness:.3,metalness:.32,clearcoat:.65,clearcoatRoughness:.3,envMapIntensity:.9}));cube.position.y=1.1;cube.castShadow=true;cube.receiveShadow=true;cube.userData={device};group.add(cube);pickables.push(cube);
  for(const [position,rotation]of [[[0,0,1.108],[0,0,0]],[[0,0,-1.108],[0,Math.PI,0]],[[1.108,0,0],[0,Math.PI/2,0]],[[-1.108,0,0],[0,-Math.PI/2,0]],[[0,1.108,0],[-Math.PI/2,0,0]],[[0,-1.108,0],[Math.PI/2,0,0]]]){
@@ -59,8 +59,9 @@ for(const device of devices){
  }
  const ring=new THREE.Mesh(new THREE.RingGeometry(1.65,1.665,64),new THREE.MeshBasicMaterial({color:device.color,transparent:true,opacity:.65,side:THREE.DoubleSide}));ring.rotation.x=-Math.PI/2;ring.position.y=.005;group.add(ring);
  device.ports={};for(const role of roles){const ghost=createGhost(device,role);group.add(ghost);device.ports[role.id]=ghost;}
- const label=device.label=document.createElement('button');label.type='button';label.className='device-label';label.dataset.device=device.id;label.setAttribute('aria-expanded','false');label.innerHTML='<strong>'+device.name+'</strong><small>'+device.type.split(' · ')[0]+'</small>';label.onclick=()=>openPanel(device);label.onkeydown=event=>{if(event.code==='Space'){event.preventDefault();device.body.height=3;releaseBody(device.body);startPhysics();}};labels.append(label);
+ const label=device.label=document.createElement('button');label.type='button';label.className='device-label';label.dataset.device=device.id;label.setAttribute('aria-expanded','false');label.innerHTML='<strong>'+device.name+'</strong><small>'+device.type.split(' · ')[0]+'</small>';label.onclick=()=>openPanel(device);label.onkeydown=event=>{if(event.code==='Space'){event.preventDefault();device.body.height=Math.min(9,device.body.height+3);releaseBody(device.body);startPhysics();}};labels.append(label);
 }
+const bodies=devices.map(device=>device.body);
 for(const connection of connections){
  const role=roles.find(r=>r.id===connection.role);connection.material=new THREE.MeshStandardMaterial({color:role.color,metalness:.3,roughness:.45,transparent:true,opacity:.65,emissive:role.color,emissiveIntensity:.12});
  const mesh=connection.mesh=new THREE.Mesh(new THREE.BufferGeometry(),connection.material);scene.add(mesh);linkMeshes.push(mesh);
@@ -134,9 +135,9 @@ function resetCamera(top=false){controls.target.set(-.2,.5,0);camera.position.se
 function pick(event){const box=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-box.left)/box.width*2-1,-(event.clientY-box.top)/box.height*2+1);raycaster.setFromCamera(pointer,camera);return raycaster.intersectObjects(pickables,false)[0]?.object.userData;}
 function startPhysics(){if(!physicsFrame&&!document.hidden){lastPhysics=performance.now();physicsFrame=requestAnimationFrame(advancePhysics);}}
 function advancePhysics(now){
- physicsFrame=0;const elapsed=(now-lastPhysics)/1000;lastPhysics=now;let active=false;
+ physicsFrame=0;const elapsed=(now-lastPhysics)/1000;lastPhysics=now;let active=stepWorld(bodies,elapsed);
  for(const device of devices){
-  active=stepBody(device.body,elapsed)||active;device.group.position.y=device.body.height;
+  device.group.position.set(device.body.x,device.body.height,device.body.z);
   const scale=device.body.scale;device.cube.scale.set(1/Math.sqrt(scale),scale,1/Math.sqrt(scale));device.cube.position.y=1.1*scale;
   for(const ghost of Object.values(device.ports)){const t=(now-(ghost.userData.hoverAt??-1000))/900;active=(t>=0&&t<1)||active;}
  }
@@ -148,7 +149,7 @@ function releaseDrag(){
 }
 function moveDragged(event){
  pick(event);const point=raycaster.ray.intersectPlane(drag.plane,new THREE.Vector3());
- if(point){point.add(drag.offset);drag.device.body.height=THREE.MathUtils.clamp(point.y,0,9);drag.device.group.position.set(THREE.MathUtils.clamp(point.x,-11.5,11.5),drag.device.body.height,THREE.MathUtils.clamp(point.z,-8,8));updateLinks();}
+ if(point){point.add(drag.offset);point.set(THREE.MathUtils.clamp(point.x,-11.5,11.5),THREE.MathUtils.clamp(point.y,0,9),THREE.MathUtils.clamp(point.z,-8,8));moveBody(drag.device.body,point,bodies);drag.device.group.position.set(drag.device.body.x,drag.device.body.height,drag.device.body.z);startPhysics();updateLinks();}
 }
 renderer.domElement.addEventListener('pointerdown',event=>{
  if(event.button!==0)return;
