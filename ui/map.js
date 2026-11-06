@@ -1,4 +1,4 @@
-// map.js v4.133.3488
+// map.js v4.134.3505
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -835,6 +835,7 @@ function renderMap(animate = false) {
 
 function renderConnections() {
   renderActiveLinkFlows();
+  updateAccessChatActivity();
   const root=$("#nodes");
   const graph=JSON.stringify([chatLinks,link,linkPositions,data.connections,data.appearance,data.chats?.map(chat=>[chat.id,chat.name]),data.deleted_chats,data.mobile_devices?.map(({id,active,chat_ids})=>[id,active,chat_ids])]);
   if(root.connectionLinksState!==graph){root.connectionLinksState=graph;renderLink();}
@@ -988,6 +989,7 @@ function renderMobileLinks() {
   }
   document.querySelectorAll('.access-chat').forEach(node=>{if(!badges.has(node.dataset.accessKey)){node.accessPanel?.remove();node.remove();}});
   for (const item of [...svg.querySelectorAll(':scope > path, defs > marker')]) if (!keep.has(item.dataset.id)) { item.flowOverlay?.remove(); item.remove(); }
+  updateAccessChatActivity();
 }
 
 function openAccessChats(marker) {
@@ -997,7 +999,7 @@ function openAccessChats(marker) {
   panel.setAttribute('aria-label',group.name||deviceName(group.target));
   panel.innerHTML='<button type="button" class="icon-button popover-close" aria-label="'+esc(OaclisSettings.text('Chiudi'))+'">'+OaclisIcon('close')+'</button><h2>'+esc(group.name||deviceName(group.target))+'</h2>';
   for(const entry of OaclisTerminal.sortChats(group.entries,chatLabel)){
-    const row=document.createElement('div');row.className='access-chat-row';
+    const row=document.createElement('div');row.className='access-chat-row';row.dataset.chatId=entry.id;
     row.innerHTML=badge(entry)+'<span class="access-chat-name">'+esc(chatLabel(entry))+'</span><button type="button" class="icon-button">'+OaclisIcon('terminal')+'</button>';
     row.querySelector('.chat-badge').style.color=appearance(entry).color||'var(--ink)';
     const open=row.querySelector('button');open.title=OaclisSettings.text('Apri console')+' · '+chatLabel(entry);open.setAttribute('aria-label',open.title);
@@ -1008,6 +1010,19 @@ function openAccessChats(marker) {
   panel.addEventListener('toggle',event=>{if(event.newState==='closed'){panel.remove();marker.querySelector('.link-main').setAttribute('aria-expanded','false');}});
   marker.accessPanel=panel;document.body.append(panel);panel.showPopover();positionContext(panel,marker);
   marker.querySelector('.link-main').setAttribute('aria-expanded','true');
+  updateAccessChatActivity();
+}
+
+function updateAccessChatActivity() {
+  for (const marker of document.querySelectorAll('.access-chat')) {
+    const {group,grouped,entry}=marker.accessState,active=data.device_runtime?.[group.source]?.active_chats || [];
+    const value=String(grouped?group.entries.some(chat=>active.includes(chat.id)):active.includes(entry.id));
+    if(marker.dataset.sessionOpen!==value)marker.dataset.sessionOpen=value;
+    for(const row of marker.accessPanel?.querySelectorAll('.access-chat-row') || []){
+      const value=String(active.includes(row.dataset.chatId));
+      if(row.dataset.sessionOpen!==value)row.dataset.sessionOpen=value;
+    }
+  }
 }
 
 function renderAccessBadges(path, group, keep, markers) {

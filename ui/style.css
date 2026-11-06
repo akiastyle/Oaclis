@@ -1,4 +1,4 @@
-/* style.css v2.0.1607 */
+/* style.css v2.0.1609 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1358,3 +1358,5 @@ html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: va
 .chat-terminal h2{cursor:move;touch-action:none}
 
 .library-number{min-width:2ch;flex-shrink:0;font-size:var(--font-brand);font-weight:700;text-align:right;font-variant-numeric:tabular-nums;line-height:1.2}
+
+.access-chat[data-session-open="true"] .chat-badge,.access-chat[data-session-open="true"] .link-open,.access-chat-row[data-session-open="true"] .chat-badge,.access-chat-row[data-session-open="true"] .icon-button { color: var(--status-online) !important; }
