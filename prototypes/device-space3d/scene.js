@@ -1,4 +1,4 @@
-// scene.js v1.10.159
+// scene.js v1.12.192
 import * as THREE from 'three';
 import {OrbitControls} from './vendor/OrbitControls.js';
 import {RoundedBoxGeometry} from './vendor/RoundedBoxGeometry.js';
@@ -23,10 +23,10 @@ scene.add(new THREE.HemisphereLight('#dceaf3','#243037',1.4));
 const key=new THREE.DirectionalLight('#fff3dc',3.2);key.position.set(-7,15,9);key.castShadow=true;key.shadow.mapSize.set(2048,2048);Object.assign(key.shadow.camera,{left:-20,right:20,top:20,bottom:-20,near:1,far:60});key.shadow.normalBias=.04;key.shadow.bias=-.0001;scene.add(key);
 const rim=new THREE.DirectionalLight('#b9d5ed',1.8);rim.position.set(8,7,-10);scene.add(rim);
 const stage=new THREE.Mesh(new RoundedBoxGeometry(28,.22,21,2,.1),new THREE.MeshStandardMaterial({color:'#18282e',roughness:.75,metalness:.18}));stage.position.y=-.14;stage.receiveShadow=true;scene.add(stage);
-const pickables=[],linkMeshes=[],flowDots=[];let selection=null,moveMode=false,liftMode=false,drag=null,pointerDown=null,noticeTimer,flowFrame=0,renderFrame=0,frames=0,physicsFrame=0,lastPhysics=0,hoverGhost=null,ambientFrame=0,lastAmbient=0;
+const pickables=[],linkMeshes=[],flowDots=[];let selection=null,drag=null,pointerDown=null,noticeTimer,flowFrame=0,renderFrame=0,frames=0,physicsFrame=0,lastPhysics=0,hoverGhost=null,ambientFrame=0,lastAmbient=0;
 let ambientMotion=!matchMedia('(prefers-reduced-motion: reduce)').matches;
 const cursor={x:innerWidth/2,y:innerHeight/2};
-const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2(),floor=new THREE.Plane(new THREE.Vector3(0,1,0),0),projected=new THREE.Vector3();
+const raycaster=new THREE.Raycaster(),pointer=new THREE.Vector2(),projected=new THREE.Vector3();
 const geometry=new RoundedBoxGeometry(2.2,2.2,2.2,4,.19);
 const ghostGeometry=new THREE.LatheGeometry([new THREE.Vector2(0,-.25),new THREE.Vector2(.31,-.25),new THREE.Vector2(.32,-.13),new THREE.Vector2(.30,.1),new THREE.Vector2(.285,.22),new THREE.Vector2(.23,.33),new THREE.Vector2(.13,.40),new THREE.Vector2(0,.43)],32);
 const ghostVertices=ghostGeometry.attributes.position,ghostBase=ghostVertices.array.slice();
@@ -143,36 +143,39 @@ function advancePhysics(now){
  updateLinks();if(active&&!document.hidden)physicsFrame=requestAnimationFrame(advancePhysics);
 }
 function releaseDrag(){
- if(drag){const {device,mode}=drag;device.body.held=false;if(mode==='lift'||device.body.height>0){releaseBody(device.body);startPhysics();}drag=null;}
+ if(drag){const {device}=drag;device.body.held=false;if(device.body.height>0){releaseBody(device.body);startPhysics();}drag=null;}
  controls.enabled=true;pointerDown=null;
 }
+function moveDragged(event){
+ pick(event);const point=raycaster.ray.intersectPlane(drag.plane,new THREE.Vector3());
+ if(point){point.add(drag.offset);drag.device.body.height=THREE.MathUtils.clamp(point.y,0,9);drag.device.group.position.set(THREE.MathUtils.clamp(point.x,-11.5,11.5),drag.device.body.height,THREE.MathUtils.clamp(point.z,-8,8));updateLinks();}
+}
 renderer.domElement.addEventListener('pointerdown',event=>{
+ if(event.button!==0)return;
  const hit=pick(event);pointerDown={x:event.clientX,y:event.clientY};
- if((moveMode||liftMode)&&hit&&!hit.role&&!hit.chat){
-  const point=raycaster.ray.intersectPlane(floor,new THREE.Vector3());
-  if(point){drag={device:hit.device,mode:liftMode?'lift':'plane',offset:hit.device.group.position.clone().sub(point),startY:event.clientY,height:hit.device.body.height,worldPerPixel:2*camera.position.distanceTo(hit.device.group.position)*Math.tan(THREE.MathUtils.degToRad(camera.fov/2))/innerHeight};hit.device.body.held=true;hit.device.body.awake=false;hit.device.body.velocity=0;controls.enabled=false;renderer.domElement.setPointerCapture(event.pointerId);}
+ if(hit&&!hit.role&&!hit.chat){
+  const plane=new THREE.Plane().setFromNormalAndCoplanarPoint(camera.getWorldDirection(new THREE.Vector3()),hit.device.group.position),point=raycaster.ray.intersectPlane(plane,new THREE.Vector3());
+  if(point){drag={device:hit.device,plane,offset:hit.device.group.position.clone().sub(point),moved:false};hit.device.body.held=true;hit.device.body.awake=false;hit.device.body.velocity=0;controls.enabled=false;renderer.domElement.setPointerCapture(event.pointerId);}
  }
 },true);
+renderer.domElement.addEventListener('wheel',event=>{
+ if(!drag)return;event.preventDefault();event.stopImmediatePropagation();drag.moved=true;
+ drag.offset.addScaledVector(camera.getWorldDirection(new THREE.Vector3()),event.deltaY*.01);moveDragged(event);
+},{capture:true,passive:false});
 renderer.domElement.addEventListener('pointermove',event=>{
- if(drag){
-  if(drag.mode==='lift'){drag.device.body.height=THREE.MathUtils.clamp(drag.height+(drag.startY-event.clientY)*drag.worldPerPixel,0,7);drag.device.group.position.y=drag.device.body.height;}
-  else{pick(event);const point=raycaster.ray.intersectPlane(floor,new THREE.Vector3());if(point){point.add(drag.offset);drag.device.group.position.set(THREE.MathUtils.clamp(point.x,-11.5,11.5),drag.device.body.height,THREE.MathUtils.clamp(point.z,-8,8));}}
-  updateLinks();return;
- }
+ if(drag){drag.moved||=Math.hypot(event.clientX-pointerDown.x,event.clientY-pointerDown.y)>=4;moveDragged(event);return;}
  const hit=pick(event),ghost=hit?.role?hit.device.ports[hit.role.id]:null;
  if(ghost&&hoverGhost!==ghost){ghost.userData.hoverAt=performance.now();startPhysics();}hoverGhost=ghost;
- host.style.cursor=hit?(moveMode?'move':liftMode?'ns-resize':'pointer'):'grab';requestRender();
+ host.style.cursor=hit?(hit.role||hit.chat?'pointer':'grab'):'grab';requestRender();
 });
 renderer.domElement.addEventListener('pointerup',event=>{
- if(drag){releaseDrag();if(renderer.domElement.hasPointerCapture(event.pointerId))renderer.domElement.releasePointerCapture(event.pointerId);return;}
+ if(drag){const {device,moved}=drag;releaseDrag();if(renderer.domElement.hasPointerCapture(event.pointerId))renderer.domElement.releasePointerCapture(event.pointerId);if(!moved)openPanel(device);return;}
  if(pointerDown&&Math.hypot(event.clientX-pointerDown.x,event.clientY-pointerDown.y)<5){const hit=pick(event);if(hit)openPanel(hit.device,hit.role,hit.chat,hit.object);else closePanel();}pointerDown=null;
 });
 renderer.domElement.addEventListener('pointercancel',releaseDrag);
 controls.addEventListener('change',updateLinks);
 document.querySelector('#close-panel').onclick=closePanel;
 document.querySelector('#reset').onclick=()=>resetCamera();document.querySelector('#top').onclick=()=>resetCamera(true);
-function setManipulation(mode){moveMode=mode==='move'&&!moveMode;liftMode=mode==='lift'&&!liftMode;document.querySelector('#move').setAttribute('aria-pressed',String(moveMode));document.querySelector('#lift').setAttribute('aria-pressed',String(liftMode));notice(liftMode?'Solleva un cubo trascinando verso l’alto, poi rilascialo':moveMode?'Trascina un cubo per spostarlo sul piano':'Trascina lo spazio per ruotare la vista');}
-document.querySelector('#move').onclick=()=>setManipulation('move');document.querySelector('#lift').onclick=()=>setManipulation('lift');
 function stopFlow(){cancelAnimationFrame(flowFrame);flowFrame=0;flowDots.forEach(({dot})=>{dot.visible=false;});document.querySelector('#flow').removeAttribute('aria-busy');requestRender();}
 document.querySelector('#flow').onclick=()=>{
  if(flowFrame){stopFlow();return;}

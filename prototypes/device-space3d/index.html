@@ -1,4 +1,4 @@
-<!-- index.html v1.0.4 -->
+<!-- index.html v1.0.10 -->
 <!doctype html>
 <html lang="it">
 <head>
@@ -9,13 +9,13 @@
 </head>
 <body>
 <main id="workspace" aria-label="Bozza della mappa dispositivi in tre dimensioni">
-<div id="scene" tabindex="0" aria-label="Scena 3D: trascina per ruotare, rotella per lo zoom"></div>
+<div id="scene" tabindex="0" aria-label="Scena 3D: trascina i cubi per spostarli, lo sfondo per ruotare; rotella durante il trascinamento per la profondità"></div>
 <div id="labels" aria-label="Dispositivi dimostrativi"></div>
 <svg id="tether" aria-hidden="true"><path/></svg>
 <header class="toolbar glass"><a class="brand" href="http://localhost:23232/" aria-label="Torna a Oaclis"><img src="/logo.png" alt="" width="30" height="30"><strong>aclis</strong></a><span class="divider"></span><span class="view-name">Spazio 3D</span><span class="draft">Bozza</span></header>
-<nav class="view-controls glass" aria-label="Controlli della vista"><button id="reset" type="button" aria-label="Inquadra tutti i dispositivi" title="Inquadra tutti i dispositivi"><svg data-icon="maximize"></svg></button><button id="top" type="button" aria-label="Vista dall’alto" title="Vista dall’alto"><svg data-icon="layers"></svg></button><button id="move" type="button" aria-label="Sposta i dispositivi" title="Sposta i dispositivi" aria-pressed="false"><img src="./move.svg" alt="" width="20" height="20"></button><button id="lift" type="button" aria-label="Solleva e lascia cadere i cubi" title="Solleva e lascia cadere i cubi" aria-pressed="false"><svg data-icon="arrowUp"></svg></button><button id="ghost-motion" type="button" aria-label="Anima i fantasmini" title="Anima i fantasmini" aria-pressed="true"><svg data-icon="bolt"></svg></button></nav>
+<nav class="view-controls glass" aria-label="Controlli della vista"><button id="reset" type="button" aria-label="Inquadra tutti i dispositivi" title="Inquadra tutti i dispositivi"><svg data-icon="maximize"></svg></button><button id="top" type="button" aria-label="Vista dall’alto" title="Vista dall’alto"><svg data-icon="layers"></svg></button><button id="ghost-motion" type="button" aria-label="Anima i fantasmini" title="Anima i fantasmini" aria-pressed="true"><svg data-icon="bolt"></svg></button></nav>
 <section id="panel" class="glass" role="dialog" aria-label="Dettagli dispositivo" hidden><header><div><h1 id="panel-title"></h1><small id="panel-kind"></small></div><button id="close-panel" type="button" aria-label="Chiudi pannello"><svg data-icon="close"></svg></button></header><div id="panel-body"></div></section>
-<footer><div class="instructions"><span>Trascina per ruotare</span><i></i><span>Rotella per lo zoom</span><i></i><span>Clic per aprire</span></div><button id="flow" class="glass" type="button"><svg data-icon="play"></svg><span>Simula passaggio dati</span></button><small class="static-note">Dati statici · nessuna operazione sui device</small></footer>
+<footer><div class="instructions"><span>Trascina lo spazio per ruotare</span><i></i><span>Afferra un cubo per spostarlo</span><i></i><span>Rotella: zoom / profondità</span></div><button id="flow" class="glass" type="button"><svg data-icon="play"></svg><span>Simula passaggio dati</span></button><small class="static-note">Dati statici · nessuna operazione sui device</small></footer>
 <div id="notice" role="status" hidden></div>
 <div id="loading" role="status">Preparazione dello spazio…</div>
 </main>
