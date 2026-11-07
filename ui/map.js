@@ -1,4 +1,4 @@
-// map.js v4.134.3505
+// map.js v4.134.3540
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -112,7 +112,7 @@ function positionConnectionPorts() {
     orbit.moving = false;
     const wrap = value => (value % orbit.length + orbit.length) % orbit.length;
     const delta = (a, b) => wrap(a - b + orbit.length / 2) - orbit.length / 2;
-    const reserved=[],layout=[];
+    const reserved=[],layout=[],channels=[];
     orbit.ports??={};
     const elapsed=1-Math.exp(-Math.min(40,Math.max(1,now-orbit.time))/85);
     for (const [index, operation] of ['sync', 'send', 'receive', 'console'].entries()) {
@@ -121,35 +121,28 @@ function positionConnectionPorts() {
       const linked=new Set(chatLinks.filter(value=>operation==='console'?value.operation==='console'&&(value.source===node.dataset.id||value.target===node.dataset.id):operation==='sync'?value.operation==='sync'&&(value.source===node.dataset.id||value.target===node.dataset.id):value.operation!=='sync'&&value.operation!=='console'&&(operation==='send'?value.source===node.dataset.id:value.target===node.dataset.id)).map(value=>value.source===node.dataset.id?value.target:value.source));
       if(operation==='console'&&node.dataset.id==='master')for(const phone of data.mobile_devices||[])linked.add(phone.id);
       const targets=peers.filter(peer=>linked.has(peer.dataset.id)).map(peer=>{const r=rectangles.get(peer);return {x:r.left+r.width/2,y:r.top+r.height/2};});
-      let ideal=index*orbit.length/4;
-      if(targets.length){
-        let best=Infinity;
-        for(let sample=0;sample<128;sample++){
-          const point=orbit.samples[sample];
-          const distance=targets.reduce((sum,peer)=>sum+Math.hypot(cx+point.x-peer.x,cy+point.y-peer.y),0);
-          if(distance<best){best=distance;ideal=sample*orbit.length/128;}
-        }
-      }
+      channels.push({index,operation,port,targets});
+    }
+    const linkedTargets=channels.flatMap(channel=>channel.targets);
+    channels.sort((a,b)=>Number(b.targets.length>0)-Number(a.targets.length>0));
+    for(const {index,operation,port,targets}of channels){
+      const ideal=orbit.ports[operation]?.target??index*orbit.length/4;
       const width=port.offsetWidth,height=port.offsetHeight;
       const fits=(point,occupied)=>occupied.every(other=>Math.abs(point.x-other.x)>=(width+other.width)/2+6||Math.abs(point.y-other.y)>=(height+other.height)/2+6);
-      const candidates=orbit.samples.slice(0,128).map((point,i)=>({point,phase:i*orbit.length/128}));
-      candidates.sort((a,b)=>Math.abs(delta(a.phase,ideal))-Math.abs(delta(b.phase,ideal)));
+      const candidates=orbit.samples.slice(0,128).map((point,i)=>({point,phase:i*orbit.length/128,distance:targets.length?targets.reduce((sum,peer)=>sum+Math.hypot(cx+point.x-peer.x,cy+point.y-peer.y),0):linkedTargets.length?-linkedTargets.reduce((sum,peer)=>sum+Math.hypot(cx+point.x-peer.x,cy+point.y-peer.y),0):Math.abs(delta(i*orbit.length/128,ideal))}));
+      candidates.sort((a,b)=>a.distance-b.distance||Math.abs(delta(a.phase,ideal))-Math.abs(delta(b.phase,ideal)));
       const target=candidates.find(candidate=>fits(candidate.point,reserved));
       if(!target)continue;
       reserved.push({x:target.point.x,y:target.point.y,width,height});
       layout.push({operation,port,target,width,height,fits});
     }
-    const anchor=layout[0]?.target.phase;
-    const ordered=layout.map(item=>item.target).sort((a,b)=>wrap(a.phase-anchor)-wrap(b.phase-anchor));
-    const origin=orbit.ports.sync?.phase??anchor,rotation=delta(anchor,origin);
-    let phases=layout.map(({operation},index)=>{
-      const phase=orbit.ports[operation]?.phase??ordered[index].phase,offset=wrap(phase-origin);
-      return reduced?ordered[index].phase:wrap(origin+rotation*elapsed+offset+(wrap(ordered[index].phase-anchor)-offset)*elapsed);
+    let phases=layout.map(({operation,target})=>{
+      const phase=orbit.ports[operation]?.phase??target.phase;
+      return reduced?target.phase:wrap(phase+delta(target.phase,phase)*elapsed);
     });
     const frame=phases.map((phase,index)=>{const point=orbit.path.getPointAtLength(phase);return {x:point.x,y:point.y,width:layout[index].width,height:layout[index].height};});
-    if(frame.some((point,index)=>!layout[index].fits(point,frame.slice(0,index))))phases=ordered.map(target=>target.phase);
-    for(const [index,{operation,port}]of layout.entries()){
-      const target=ordered[index];
+    if(frame.some((point,index)=>!layout[index].fits(point,frame.slice(0,index))))phases=layout.map(({target})=>target.phase);
+    for(const [index,{operation,port,target}]of layout.entries()){
       const state=orbit.ports[operation]??={phase:target.phase,target:target.phase};
       state.target=target.phase;
       const position=phases[index],point=orbit.path.getPointAtLength(position);
