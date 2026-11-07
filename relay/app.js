@@ -1,4 +1,4 @@
-// app.js v2.130.1257
+// app.js v2.130.1259
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -173,7 +173,7 @@ async function openConsole(chat,adjacent=false){
    if(panes.length)activate(panes[0]);else{active=null;await protectedView();}
    return true;
   }
-  if(request.operation==='input'&&typeof request.text==='string'&&(drafts.get(pane.chat.id)||'')===request.text){saveDraft(pane.chat.id,'');if(pane===active&&text.value===request.text)text.value='';}
+  if(request.operation==='input'&&typeof request.text==='string'){saveDraft(pane.chat.id,OaclisTerminal.remainingDraft(drafts.get(pane.chat.id)||'',request.text));if(pane===active)text.value=OaclisTerminal.remainingDraft(text.value,request.text);}
   if(request.image&&pane.console.image===request.image)files.set(null,pane.console);
   pane.reconnecting=false;if(pane.name.textContent!==pane.chat.name)pane.name.textContent=pane.chat.name;pane.jobsStatus.update(result.jobs);
   pane.console.render(result,request.operation,pane.saved);pane.saved=null;

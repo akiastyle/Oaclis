@@ -1,4 +1,4 @@
-// voice.js v2.52.1134
+// voice.js v2.52.1167
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -30,19 +30,19 @@ window.OaclisVoice=(()=>{
  function create(){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   let session=null,restartTimer=null,retries=0;
-  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,recognitionIssue=null;
+  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,recognitionIssue=null,speaking=false,dictated=false;
   let button,status,preview,options,help,root,autoSendTimer,reader=null,controls=null,info=null;
   const events=[];
   function trace(event,detail={}){events.push({time:new Date().toISOString(),event,...detail});if(events.length>100)events.shift();}
   const cancelAutoSend=()=>{clearTimeout(autoSendTimer);autoSendTimer=null;};
   function scheduleAutoSend(){
    cancelAutoSend();
-   if(!preferences.autoSend)return;
+   if(!preferences.autoSend||!dictated||speaking||preview?.textContent.trim())return;
    const field=adapter?.compose,value=field?.value,chat=adapter?.chatId;
    if(target!==field||!value?.trim()||!adapter.view)return;
    autoSendTimer=setTimeout(()=>{
     autoSendTimer=null;
-    if(preferences.autoSend&&wanted&&!paused&&!document.hidden&&!pending&&valid(field)&&adapter?.compose===field&&adapter?.chatId===chat&&field.value===value)action(()=>adapter.view.command('send'));
+    if(preferences.autoSend&&wanted&&!speaking&&!preview.textContent.trim()&&!paused&&!document.hidden&&!pending&&valid(field)&&adapter?.compose===field&&adapter?.chatId===chat&&field.value===value)action(()=>adapter.view.command('send'));
    },preferences.waitFive?5000:3000);
   }
   const valid=field=>field?.isConnected&&!field.disabled&&!field.readOnly&&adapter?.fields().includes(field)&&['textarea','input'].includes(field.localName)&&field.type!=='password';
@@ -50,7 +50,7 @@ window.OaclisVoice=(()=>{
   const paint=()=>{
    if(!button)return;
    if(button.disabled){button.dataset.mode='off';button.setAttribute('aria-pressed','false');button.title=locale.text('Voce non disponibile in questo browser.');button.setAttribute('aria-label',button.title);return;}
-   const mode=!wanted?'off':paused?'paused':state==='listening'?'listening':'busy';
+   const mode=!wanted?'off':state!=='listening'?'busy':paused?'paused':'listening';
    button.dataset.state=state;button.dataset.mode=mode;button.setAttribute('aria-pressed',String(wanted));
    button.title=locale.text(({off:'Attiva voce',paused:'Dettatura in pausa · riprendi',listening:'Dettatura attiva · clic per spegnere',busy:'Collegamento o elaborazione vocale · clic per spegnere'})[mode]);
    button.setAttribute('aria-label',button.title);
@@ -58,8 +58,7 @@ window.OaclisVoice=(()=>{
   const clearPending=()=>{clearTimeout(pendingTimer);pending=null;if(options){if(options.open)options.close();options.replaceChildren();}};
   function scheduleRecognition(hadResult){
    if(!wanted||disposed)return;
-   if(!hadResult)retries++;
-   if(retries>8){state='error';feedback('Microfono non avviato.');paint();return;}
+   if(!hadResult)retries=Math.min(retries+1,4);
    const delay=Math.min(400*2**Math.min(retries,4),6000);
    state='starting';trace('recognition:scheduled',{delay,retries});paint();
    restartTimer=setTimeout(()=>{restartTimer=null;if(wanted&&!disposed&&!session)startRecognition('end');},delay);
@@ -71,8 +70,8 @@ window.OaclisVoice=(()=>{
    trace('recognition:config',{continuous:current.continuous,interimResults:current.interimResults,language:current.lang});
    const fresh=()=>wanted&&!disposed&&session===current;
    current.onstart=()=>{trace('recognition:start');if(fresh()){state='listening';paint();}};
-   current.onspeechstart=()=>{trace('recognition:speechstart');if(fresh()){cancelAutoSend();utteranceRevision=revision;state='listening';paint();}};
-   current.onspeechend=()=>{trace('recognition:speechend');if(fresh()){state='processing';paint();}};
+   current.onspeechstart=()=>{trace('recognition:speechstart');if(fresh()){speaking=true;cancelAutoSend();utteranceRevision=revision;state='listening';paint();}};
+   current.onspeechend=()=>{trace('recognition:speechend');if(fresh()){speaking=false;scheduleAutoSend();state='processing';paint();}};
    for(const name of ['audiostart','audioend','soundstart','soundend'])current['on'+name]=()=>trace('recognition:'+name);
    current.onresult=event=>{
     if(!fresh()||!adapter||utteranceRevision!==revision){trace('recognition:result-ignored',{wanted,revision,utteranceRevision});return;}
@@ -109,9 +108,9 @@ window.OaclisVoice=(()=>{
    current.onend=()=>{
     trace('recognition:end',{wanted,state,paused,chat:adapter?.chatId});
     if(session!==current)return;
-    session=null;
+    session=null;speaking=false;
     if(!wanted||disposed){state='idle';paint();return;}
-    if(['not-allowed','service-not-allowed','audio-capture','language-not-supported'].includes(recognitionIssue?.error)){state='error';paint();return;}
+    if(['not-allowed','service-not-allowed','language-not-supported'].includes(recognitionIssue?.error)){state='error';paint();return;}
     scheduleRecognition(hadResult);
    };
    try{trace('call:start',{reason});current.start();}
@@ -119,7 +118,7 @@ window.OaclisVoice=(()=>{
   }
   function setListening(on,silent=true){
    if(on===wanted||disposed||!Recognition||!window.isSecureContext)return;
-   wanted=on;paused=false;clearTimeout(restartTimer);restartTimer=null;cancelAutoSend();clearPending();
+   wanted=on;paused=false;speaking=false;dictated=false;clearTimeout(restartTimer);restartTimer=null;cancelAutoSend();clearPending();
    if(!silent)OaclisReadAloud.feedback();
    if(preview)preview.textContent='';
    try{
@@ -209,7 +208,7 @@ window.OaclisVoice=(()=>{
    const audio=result.type==='command'&&['readOn','readOff','readStop','selectPane'].includes(result.id);
    const media=result.type==='command'&&['takePhoto','pickImage','removeImage'].includes(result.id);
    if(result.type==='command'){
-    cancelAutoSend();
+    cancelAutoSend();dictated=false;
     if(result.id==='stop'){stop(false);return;}
     if(result.id==='pauseRec'){if(!paused)OaclisReadAloud.feedback();paused=true;clearPending();preview.textContent='';paint();return;}
     if(result.id==='resumeRec'){if(paused)OaclisReadAloud.feedback();paused=false;paint();return;}
@@ -234,7 +233,7 @@ window.OaclisVoice=(()=>{
     feedback('Scegli uno dei numeri mostrati oppure annulla selezione.');return;
    }
    if(result.type==='error'){feedback(result.message);return;}
-   if(result.type==='dictation'){if(insert(result.text))scheduleAutoSend();return;}
+   if(result.type==='dictation'){if(insert(result.text)){dictated=true;scheduleAutoSend();}return;}
    const {id,args}=result;
    if(!available(id)){feedback('Comando non disponibile in questa schermata.');return;}
    switch(id){
@@ -257,12 +256,12 @@ window.OaclisVoice=(()=>{
    }
   }
   function input(event){
-   if(event.target===adapter?.compose)cancelAutoSend();
+   if(event.target===adapter?.compose){dictated=false;cancelAutoSend();}
   }
   function hidden(){trace('page:visibility',{state:document.visibilityState});if(document.hidden){cancelAutoSend();clearPending();}}
   function bind(next,host){
    const changed=!adapter||adapter.chatId!==next.chatId||adapter.compose!==next.compose;
-   if(changed){trace('target',{chat:next.chatId});cancelAutoSend();clearPending();revision++;target=next.compose||next.fields()[0];}
+   if(changed){dictated=false;trace('target',{chat:next.chatId});cancelAutoSend();clearPending();revision++;target=next.compose||next.fields()[0];}
    adapter=next;
    if(!button){
     controls=host;controls.classList.add('voice-controls');
@@ -284,9 +283,9 @@ window.OaclisVoice=(()=>{
    (document.getElementById('app')||document.body).append(root);paint();
    if(!initialized){initialized=true;if(preferences.startMic)setListening(true);}
   }
-  function leave(){trace('target:leave');cancelAutoSend();clearPending();reader?.reset(false);revision++;target=null;adapter=null;root?.remove();}
+  function leave(){dictated=false;trace('target:leave');cancelAutoSend();clearPending();reader?.reset(false);revision++;target=null;adapter=null;root?.remove();}
   function afterSend(){
-   trace('after-send',{pause:preferences.pauseAfterSend});
+   trace('after-send',{pause:preferences.pauseAfterSend});dictated=false;cancelAutoSend();
    if(preferences.pauseAfterSend&&wanted&&!paused){cancelAutoSend();paused=true;paint();}
   }
   function destroy(){stop();disposed=true;leave();reader?.destroy();controls?.remove();if(session)for(const name of ['onstart','onspeechstart','onspeechend','onresult','onerror','onend','onaudiostart','onaudioend','onsoundstart','onsoundend'])session[name]=null;document.removeEventListener('focusin',focus);document.removeEventListener('input',input);document.removeEventListener('visibilitychange',hidden);window.removeEventListener('pagehide',stop);}

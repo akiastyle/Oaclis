@@ -1,4 +1,4 @@
-// terminal-format.js v1.41.281
+// terminal-format.js v1.42.284
 "use strict";
 const OaclisTerminal = (() => {
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
@@ -242,5 +242,6 @@ function consoleScreen(value){
    };
    return pane;
   }
-  return {sortChats,render,renderConsole,parse,consoleScreen,imageData,attachImages,attachSendMenu,chatIcon,createConsole,createPane};
+  function remainingDraft(value,sent){return sent&&value.startsWith(sent)?value.slice(sent.length).trimStart():value;}
+  return {remainingDraft,sortChats,render,renderConsole,parse,consoleScreen,imageData,attachImages,attachSendMenu,chatIcon,createConsole,createPane};
 })();

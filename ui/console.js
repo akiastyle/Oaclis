@@ -1,4 +1,4 @@
-// console.js v3.140.2421
+// console.js v3.140.2423
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -289,7 +289,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     const text = form.elements.text.value, attachment=chat.image; submitting = true;
     try {
       const sent=await send({action:"input",text,key:"Enter",...(attachment?{image:attachment}:{})});
-      if(sent){if(chat.image===attachment)files.remove();if(form.elements.text.value===text)form.elements.text.value="";panel.sendWindowDraft?.();window.OaclisLocalVoice?.sent(panel);}
+      if(sent){if(chat.image===attachment)files.remove();form.elements.text.value=OaclisTerminal.remainingDraft(form.elements.text.value,text);panel.sendWindowDraft?.();window.OaclisLocalVoice?.sent(panel);}
       return sent;
     } finally {submitting=false;}
   };
