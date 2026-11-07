@@ -1,4 +1,4 @@
-// voice.js v2.52.1175
+// voice.js v2.52.1178
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -70,7 +70,7 @@ window.OaclisVoice=(()=>{
    trace('recognition:config',{continuous:current.continuous,interimResults:current.interimResults,language:current.lang});
    const fresh=()=>wanted&&!disposed&&session===current;
    current.onstart=()=>{trace('recognition:start');if(fresh()){state='listening';paint();}};
-   current.onspeechstart=()=>{trace('recognition:speechstart');if(fresh()){speaking=true;reader?.setDictating(true);cancelAutoSend();utteranceRevision=revision;state='listening';paint();}};
+   current.onspeechstart=()=>{trace('recognition:speechstart');if(fresh()){speaking=true;cancelAutoSend();utteranceRevision=revision;state='listening';paint();}};
    current.onspeechend=()=>{trace('recognition:speechend');if(fresh()){speaking=false;reader?.setDictating(false);scheduleAutoSend();state='processing';paint();}};
    for(const name of ['audiostart','audioend','soundstart','soundend'])current['on'+name]=()=>trace('recognition:'+name);
    current.onresult=event=>{
@@ -80,6 +80,7 @@ window.OaclisVoice=(()=>{
     for(let i=event.resultIndex;i<event.results.length;i++){
      if(!fresh())break;
      const result=event.results[i];
+     if(/[\p{L}\p{N}]/u.test(result[0].transcript)){reader?.setDictating(true);if(!speaking)reader?.setDictating(false);}
      if(result.isFinal){
       trace('recognition:final',{index:i,text:result[0].transcript.slice(0,200)});
       if(i<=consumed)continue;consumed=i;preview.textContent='';
