@@ -1,0 +1,23 @@
+<!-- index.html v1.0.13 -->
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oaclis · Spazio 3D</title><link rel="icon" href="/logo.png"><link rel="stylesheet" href="./style.css">
+<script type="importmap">{"imports":{"three":"./vendor/three.module.min.js"}}</script>
+<script defer src="/locale.js"></script><script defer src="/icons.js"></script><script type="module" src="./scene.js"></script>
+</head>
+<body>
+<main id="workspace" aria-label="Bozza della mappa dispositivi in tre dimensioni">
+<div id="scene" tabindex="0" aria-label="Scena 3D: trascina i cubi per spostarli, lo sfondo per ruotare; rotella durante il trascinamento per la profondità"></div>
+<div id="flat-map" class="flat-map" hidden aria-label="Mappa dispositivi in due dimensioni"></div>
+<div id="labels" aria-label="Dispositivi dimostrativi"></div>
+<svg id="tether" aria-hidden="true"><path/></svg>
+<header class="toolbar glass"><a class="brand" href="http://localhost:23232/" aria-label="Torna a Oaclis"><img src="/logo.png" alt="" width="30" height="30"><strong>aclis</strong></a><span class="divider"></span><span class="view-name">Spazio 3D</span><span class="draft">Bozza</span></header>
+<nav class="view-controls glass" aria-label="Controlli della vista"><button id="view-mode" type="button" aria-label="Passa alla vista 2D" title="Passa alla vista 2D">2D</button><button id="reset" type="button" aria-label="Inquadra tutti i dispositivi" title="Inquadra tutti i dispositivi"><svg data-icon="maximize"></svg></button><button id="top" type="button" aria-label="Vista dall’alto" title="Vista dall’alto"><svg data-icon="layers"></svg></button><button id="ghost-motion" type="button" aria-label="Anima i fantasmini" title="Anima i fantasmini" aria-pressed="true"><svg data-icon="bolt"></svg></button></nav>
+<section id="panel" class="glass" role="dialog" aria-label="Dettagli dispositivo" hidden><header><div><h1 id="panel-title"></h1><small id="panel-kind"></small></div><button id="close-panel" type="button" aria-label="Chiudi pannello"><svg data-icon="close"></svg></button></header><div id="panel-body"></div></section>
+<footer><div class="instructions"><span>Trascina lo spazio per ruotare</span><i></i><span>Afferra un cubo per spostarlo</span><i></i><span>Rotella: zoom / profondità</span></div><button id="flow" class="glass" type="button"><svg data-icon="play"></svg><span>Simula passaggio dati</span></button><small class="static-note">Dati statici · nessuna operazione sui device</small></footer>
+<div id="notice" role="status" hidden></div>
+<div id="loading" role="status">Preparazione dello spazio…</div>
+</main>
+</body></html>

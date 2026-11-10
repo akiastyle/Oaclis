@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="238.27850341796875 132.6039047241211 548 548" width="548" height="548">
+  <defs>
+    <linearGradient id="blue" x1="0.2" y1="0" x2="0.6" y2="1"><stop stop-color="#2589a4"></stop><stop offset=".45" stop-color="#214b87"></stop><stop offset="1" stop-color="#0b205b"></stop></linearGradient>
+    <linearGradient id="wave" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="#247790"></stop><stop offset="1" stop-color="#324984"></stop></linearGradient>
+    <linearGradient id="cream" x1=".3" y1="0" x2=".65" y2="1"><stop stop-color="#fff8e4"></stop><stop offset=".6" stop-color="#efdbb4"></stop><stop offset="1" stop-color="#dcb87d"></stop></linearGradient>
+    <linearGradient id="belly-shade" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d0ab76"></stop><stop offset="1" stop-color="#eed6ac"></stop></linearGradient>
+    <linearGradient id="water" x1=".2" y1="0" x2=".8" y2="1"><stop stop-color="#b1e2e7"></stop><stop offset=".45" stop-color="#64b9d0"></stop><stop offset="1" stop-color="#1b5c90"></stop></linearGradient>
+    <path id="whale" d="M265 508C247 475 246 436 254 401C270 325 329 287 408 295C475 298 517 332 571 376C623 421 665 447 709 429C750 412 754 359 733 325C676 341 619 313 593 260C619 268 643 264 662 255C685 244 704 257 716 267C704 246 710 231 728 212C738 201 745 188 750 179C775 214 774 251 755 278C779 317 781 377 765 425C754 460 733 482 700 496C679 513 678 535 686 552C698 582 656 577 635 566C589 549 551 521 508 491C451 452 414 437 377 434C314 423 271 444 265 508Z"></path>
+    <clipPath id="whale-clip"><use href="#whale"></use></clipPath>
+    <path id="belly" d="M306 434C292 434 277 457 276 489C277 526 297 567 332 601C375 643 439 671 501 675C567 682 632 659 683 624C726 593 757 539 770 451C762 485 735 517 691 528C704 556 681 589 638 586C600 582 569 550 529 529C486 505 459 478 431 461C387 434 330 425 306 434Z"></path>
+    <clipPath id="belly-clip"><use href="#belly"></use></clipPath>
+    <mask id="eye"><rect width="1024" height="1024" fill="white"></rect><circle cx="494" cy="407" r="18" fill="black"></circle></mask>
+  </defs>
+  <g mask="url(#eye)">
+    <use href="#whale" fill="url(#blue)"></use>
+    <path d="M255 406C286 344 335 324 387 335C467 342 511 371 570 417C627 461 691 470 730 436C780 394 755 334 737 316C688 329 636 306 607 275C635 278 650 269 669 264C693 259 706 276 720 278C730 271 725 251 733 233C741 217 748 214 751 199C763 232 747 257 741 280C760 331 762 398 742 428C719 464 675 462 638 452C574 432 523 384 460 369C365 345 302 349 255 406Z" fill="url(#wave)" opacity=".56" clip-path="url(#whale-clip)"></path>
+  </g>
+  <use href="#belly" fill="url(#cream)"></use>
+  <g clip-path="url(#belly-clip)" fill="url(#belly-shade)">
+    <path d="M286 441C310 553 361 625 493 674L514 675C369 625 315 538 297 434Z"></path>
+    <path d="M390 432C423 534 469 620 585 657L601 650C481 610 445 533 406 434Z"></path>
+    <path d="M448 448C485 533 529 574 611 594C641 601 665 594 683 582C670 609 643 625 611 620C529 611 480 532 448 448Z" opacity=".4"></path>
+  </g>
+  <g fill="url(#water)">
+    <path d="M441 204C435 181 422 177 407 166C388 151 394 136 407 137C427 137 443 164 441 204Z"></path>
+    <path d="M474 216C481 194 478 176 494 164C515 148 531 159 529 175C527 190 493 194 474 216Z"></path>
+    <path d="M432 246C397 234 371 238 346 240C321 240 305 231 312 211C321 188 350 189 373 198C397 208 418 226 432 246Z"></path>
+    <path d="M456 278C460 258 470 240 488 232C506 223 522 230 522 241C522 256 502 260 487 263C473 266 463 272 456 278Z"></path>
+  </g>
+  <g fill="#d0edf0" opacity=".45">
+    <path d="M317 213C322 199 344 197 358 201C373 205 390 214 401 224C379 217 363 210 344 211C333 212 323 217 317 213Z"></path>
+    <path d="M400 146C410 137 422 153 428 166C415 157 407 154 400 146Z"></path>
+    <path d="M490 176C500 164 516 157 521 168C515 176 501 180 486 190Z"></path>
+    <path d="M476 247C487 232 507 229 512 239C502 242 491 241 476 252Z"></path>
+  </g>
+</svg>

@@ -1,0 +1,226 @@
+# Relay mobile
+
+Sorgenti della pagina gia' pubblicata su https://oaclis.krprojects.it/.
+Questo componente PHP gira sull'hosting; Oaclis continua a funzionare in Rust.
+
+La directory pubblica contiene index.php, gli script e gli stili della PWA,
+il manifest, il service worker, le icone e il suono di conferma.
+La libreria lbuchs/WebAuthn v2.2.0
+(commit 20adb4a240c3997bd8cac7dc4dde38ab0bea0ed1, MIT), la configurazione e lo
+stato restano in una cartella privata dal nome neutro, fuori da www.
+Il percorso effettivo e' definito da `PRIVATE_DIR` in index.php.
+L'autenticazione non usa file di sessione PHP.
+composer.lock documenta la versione della libreria; sul server esistente e' caricata
+come library/src. Non caricare configurazioni, chiavi o stato nella directory pubblica.
+
+Il master genera inviti, approva e revoca gli accessi. Nel master la chiave di gestione del
+relay resta in ~/.config/oaclis/mobile-relay.json; non e' replicata agli slave.
+La mappa usa soltanto ID pubblico, nome e stato dei telefoni approvati. Nessuna ricerca
+SSH, analisi di chat/app/percorsi o sincronizzazione viene avviata per un telefono.
+
+Attivo significa che la pagina mobile autenticata sta comunicando: l'ultima presenza
+scade dopo 30 secondi e il master aggiorna la propria memoria ogni 10 secondi.
+Lo stato non prova che il telefono sia acceso o connesso a Internet con l'app chiusa.
+Le letture della UI usano la memoria; le comunicazioni con l'hosting avvengono fuori
+dai lock dello snapshot. Un errore di rete conserva le card ma le indica non attive.
+Eliminare una card revoca l'accesso; per ricollegarsi serve un nuovo abbinamento.
+
+La card del telefono apre la selezione delle chat. Nessuna e' autorizzata di default.
+Il master riusa catalogo locale, collegamenti gia' salvati e nomi personalizzati;
+non avvia ricerche SSH o nuove analisi per aprire la selezione. La scelta e' salvata
+nel record del singolo telefono sul relay. Solo ID e titoli selezionati sono inviati.
+La pagina mobile riceve solo le proprie chat dopo la verifica di codice, passkey,
+sessione e abbinamento approvato; non puo' leggere o modificare le scelte di altri
+telefoni. La lista si aggiorna ogni cinque secondi, senza trasferire archivi o console.
+
+Abbinamento e passkey: https://oaclis.krprojects.it/auth. La card apre il QR del solo indirizzo di accesso.
+.htaccess instrada auth; legacy.php mantiene compatibili i vecchi link ed endpoint.
+
+Una chat autorizzata apre la console del master. Il relay accoda soltanto open/read/input
+con scadenza breve e un comando in attesa per telefono; Rust riusa terminal/tmux.
+Il master riceve un comando alla volta, senza aprire porte pubbliche. Le risposte
+restano isolate per telefono e chat; revoca, logout e rimozione del permesso bloccano
+l'accesso. Il relay conserva solo l'ultima schermata, non l'archivio della chat.
+
+L'installazione mobile usa manifest.webmanifest, le icone PNG e sw.js.
+Il service worker mette in cache soltanto feedback.mp3; chat, risposte della
+console, autorizzazioni e credenziali restano escluse dalla cache.
+
+Console responsiveness: Rust reuses an HTTPS connection pool instead of launching curl.
+The master checks every 200 ms while a console request is recent, and every two
+seconds otherwise. The phone asks for the result immediately; the relay waits up
+to two seconds, releasing the state lock between checks. Revocation,
+chat grants and job identity are checked again after each wait. Console refreshes
+wait 200 ms after a completed read; hidden pages retain the slower 1.5-second wait.
+Input waits for an ongoing read rather than being silently discarded.
+Relay response durations are recorded in the existing orchestrator log, without keys.
+
+Relay state uses a separate state.lock for all readers/writers and long-poll waits.
+Writes replace state.json atomically from a completed temporary file in the same
+private directory. Never lock the renamed state file itself or rewrite it in place.
+Expired mobile sessions return to passkey login; temporary errors retain the list
+and retry, while an unavailable pairing shows a recovery message instead of hiding.
+
+Console read errors retain the last screen and retry after one second. Pending
+result IDs are reused after transient failures; input commands are never replayed.
+
+Initialize a new relay with state.json containing {"invitations":[],"devices":[]}.
+State reads clear PHP's file metadata cache and retry empty/failed reads briefly.
+An unreadable state is never silently replaced with an empty device registry.
+
+## Voce nella PWA
+
+Il pulsante microfono nell'elenco chat e nella console avvia l'italiano parlato.
+Il microfono verde indica la dettatura attiva; arancione lampeggiante indica
+collegamento o elaborazione, giallo fisso indica la pausa di scrittura. Non ci
+sono righe di stato, anteprime o pulsanti “?” sotto i comandi della console.
+Le indicazioni di accessibilita restano disponibili ai lettori di schermo.
+`comandi` apre o chiude la guida a tutto schermo; anche la X la chiude.
+I comandi vocali e la dettatura funzionano anche con la guida aperta.
+`pausa dettatura` mantiene il microfono in ascolto ma ignora dettatura e azioni di modifica;
+`riprendi dettatura` riprende la scrittura. In pausa restano utilizzabili i controlli di
+registrazione, help e spegnimento. Un clic sul microfono acceso spegne tutto;
+il clic successivo riattiva la dettatura. Scelte ambigue e conferme esplicite
+usano pannelli a tutto schermo solo quando necessari.
+
+- Dettatura: parlare nel messaggio o nel filtro selezionato. `scrivi invia` detta
+  la parola riservata; una frase isolata uguale a un comando esegue quel comando.
+- `invia`, `cancella`. Cancella svuota subito la bozza.
+- `cambia Santi`, `cambia 3`, `cambia tre`. I numeri corrispondono alla lista filtrata visibile
+  (oppure all'ultima lista mostrata dalla console); supporto da uno a venti.
+- Per nomi ambigui, scegliere un'opzione a schermo o pronunciare `scegli due`;
+  `annulla selezione` interrompe, la scelta scade dopo 15 secondi.
+- `comandi`, `spegni`. Spegni disattiva il microfono.
+
+Un segmento esegue una sola azione: i comandi non vengono cercati dentro frasi
+libere. `comando teletrasporto` segnala un errore senza scrivere nella bozza.
+La navigazione conserva le bozze per chat nella memoria della pagina; il reload,
+la chiusura della pagina e il logout non le conservano. Nessun audio o risultato
+vocale viene salvato nei log; solo un invio esplicito usa la console esistente.
+
+Il riconoscimento dipende dal browser e puo usare servizi audio in rete.
+Non e' garantito offline, in background o a schermo bloccato. Dopo il background
+serve un nuovo tocco sul microfono; i retry dopo interruzioni sono limitati a tre.
+Non viene aperto uno stream getUserMedia aggiuntivo. La sintesi vocale non e'
+compresa in questa prima versione.
+Verifiche automatiche con SpeechRecognition simulato: `node tools/test_mobile_voice.cjs`
+(test locale ignorato da Git). Il test fisico S24/PWA resta da eseguire sul telefono.
+
+Su Android ogni sessione vocale riconosce una frase, con anteprima provvisoria e
+riarmo dopo il risultato definitivo finche il toggle resta acceso. Questo evita
+la promozione dei risultati parziali a finali nella modalita continua di Chromium.
+Le ripetizioni intenzionali in frasi successive restano valide: non si deduplica
+confrontando il testo. Sugli altri sistemi resta la modalita continua.
+
+Il toggle resta richiesto dopo una frase, un invio e le normali pause di silenzio
+su Android. Durante l'invio l'ascolto e' sospeso e riprende da solo al termine.
+Gli errori effettivi conservano il limite di tre retry; il silenzio Android non
+e' un errore. Lo spegnimento esplicito e il background annullano ogni riarmo.
+Un microfono realmente spento non puo ricevere il comando per riaccendersi:
+serve il pulsante.
+
+## Lingue condivise e lista chat
+
+La fonte unica per Oaclis e PWA e' `ui/locale.js`: impostare `settings.language`
+a `auto` (default), `it` o `en`. In automatico si sceglie la prima lingua
+supportata tra quelle preferite dal browser; se nessuna e' supportata si usa
+l'inglese. La lingua scelta imposta testi UI, attributo HTML lang, comandi,
+numeri parlati e SpeechRecognition.lang (it-IT / en-US). Non ci sono nuove
+preferenze su DB, scansioni periodiche o un pannello da gestire.
+
+Italiano: `pausa`, `riprendi`, `comandi`,
+`scrivi invia`, `comando invia`. Inglese: `pause`,
+`resume`, `commands`, `write send`,
+`command send`. Gli ID delle azioni interne non cambiano. Nomi delle chat,
+bozze e output delle console non vengono tradotti.
+
+Il deploy pubblica `ui/locale.js` e `ui/icons.js` come `/oaclis/locale.js` e
+`/oaclis/icons.js`, prima degli script relay che li usano. Non mantenere copie
+indipendenti in relay/. La lista usa numero grande separato, icona condivisa
+o PNG personalizzato, nome a sinistra e play a destra nella stessa azione.
+L'aspetto delle chat autorizzate viene aggiornato nel worker relay esistente
+quando cambia la presentazione sul master; gli ID autorizzati non cambiano.
+
+## Identita e versione online
+
+La lista autenticata mostra la balena con il marchio aclis e, in fondo, la
+versione PWA calcolata dagli header dei file pubblicati con la formula del master.
+Il valore identifica i file caricati dalla pagina: ricaricare per ricevere una
+nuova release. Non viene scambiata o salvata la versione del master nel relay.
+L'accesso normale senza abbinamento, in attesa, negato o annullato resta vuoto;
+per riprovare una passkey annullata ricaricare. L'invito di nuovo abbinamento
+conserva il modulo necessario a creare la passkey. La console non aggiunge
+logo o footer, per lasciare spazio al testo.
+
+Il sottodominio deve avere HTTPS valido e document root `www/oaclis`. Origin e RP ID sono esclusivamente `oaclis.krprojects.it`: richiedere nuovi abbinamenti e nuove passkey, senza importare le autorizzazioni precedenti. L'autenticazione usa un cookie `__Host-Oaclis`, Secure, HttpOnly e SameSite=Strict, senza Domain e con path `/`. Il contenuto e' cifrato e autenticato con AES-256-GCM e scade dopo due ore. La chiave deriva dalla credenziale amministrativa privata con un contesto separato; non viene creato un nuovo file di chiavi. Abbinamenti, permessi, hash di revoca e prove monouso restano nel JSON privato esistente. Logout e revoca invalidano anche una copia precedente del cookie. Le letture non rinnovano o riscrivono il cookie. Nessuna chiamata apre una sessione PHP su disco; dopo il passaggio dal vecchio formato serve la passkey una volta, conservando l'abbinamento.
+
+Le richieste senza sessione valida o chiave amministrativa sono limitate a 60 al minuto per bucket derivato dall’IP di connessione (256 bucket fissi, senza fidarsi di X-Forwarded-For). Le richieste negate non acquisiscono il lock dello stato una volta raggiunto il limite; il traffico autenticato ne è esente. Il limite applicativo non sostituisce le protezioni anti-DDoS del provider.
+
+La console conserva colori ANSI, grassetto e colori RGB. Pubblicare anche terminal-format.js
+dalla stessa sorgente ui/terminal-format.js usata dal master, insieme a ui/console.css, prima di index.php.
+Il testo resta separato dalla formattazione; nessun output della console viene interpretato come HTML.
+
+Il pulsante audio legge solo nuovi messaggi dell'assistente, a frasi complete, escludendo
+codice. Include i messaggi intermedi; per gli strumenti legge soltanto le intestazioni
+della console, come Running/Ran, Exploring/Explored, Calling/Called, Browsing the web
+e Opened. Non legge comandi, percorsi, argomenti o risultati tecnici. Se l’attivita resta
+in corso e invariata, ripete la stessa intestazione dopo 10 secondi; non la
+ripete quando il lavoro e terminato. Le attivita in attesa di lettura si accorpano
+alla piu recente per non accumulare una coda di annunci.
+read-aloud.js usa gli eventi nativi del Codex gia attivo,
+inoltrati dallo stesso canale mobile firmato; nessun nuovo turno viene avviato.
+La lettura e disattivata inizialmente salvo la preferenza di avvio automatico. Cambiando chat interrompe la risposta precedente
+ma conserva la scelta acceso/spento; nascondendo la pagina si ferma.
+I comandi vocali brevi sono Pausa e Riprendi (Pause/Resume in inglese).
+
+Voce on/off controllano solo la lettura. Voce stop salta la risposta corrente,
+lasciando attiva la lettura delle successive. Durante la riproduzione il microfono
+accetta solo questi comandi con prefisso voce e non trascrive l'audio riprodotto.
+
+Il microfono conserva lo stato nel cambio chat. Brevi suoni confermano attivazione,
+pausa e spegnimento del microfono e della lettura. Il titolo della console riusa
+la stessa icona della lista.
+
+Se abilitato, l’invio automatico avviene dopo 3 o 5 secondi di silenzio. Nuova voce rinvia
+l’invio; pausa, spegnimento, cambio chat, modifica manuale o invio esplicito lo annullano.
+Le bozze scritte soltanto da tastiera non vengono inviate automaticamente.
+
+Nella console mobile i pulsanti 1, 2 e 3 inviano direttamente il tasto numerico
+per scegliere una risposta, senza incollare testo o aggiungere Invio.
+Sostituiscono le frecce su/giu e non modificano la bozza del messaggio.
+
+La dettatura riusa un solo riconoscitore tra le frasi e gli invii. A ogni fine
+ascolto scollega i gestori precedenti; i risultati gia elaborati sono segnati
+con un solo indice, senza conservare una lista crescente durante l’ascolto continuo.
+
+Il suono di conferma usa feedback.mp3 senza il silenzio finale, precaricato in un solo
+lettore e conservato in cache. Ogni conferma lo riavvia senza sovrapporre lettori.
+Dopo l’invio
+di un messaggio, la lettura attende due secondi prima della prima frase,
+lasciando disponibile il microfono per il comando pausa.
+
+Il pannello Comandi contiene cinque check locali, salvati nel browser: avvio
+del microfono, avvio della lettura, invio automatico, attesa di 5 secondi
+(in alternativa a 3) e pausa della dettatura dopo un invio riuscito.
+I permessi del browser restano necessari per avviare automaticamente microfono e voce.
+
+La console mobile consente due chat sovrapposte con un solo compositore e gruppo
+di comandi. Il pulsante a destra del primo titolo sceglie la seconda chat;
+ripremendolo conserva soltanto quella attiva. Un tocco su una chat la seleziona.
+Bozze e posizione di lettura restano distinte; solo la chat attiva viene letta.
+I comandi «affianca 3 / affianca nome» e «attiva sopra / attiva sotto» riusano il
+vocabolario IT/EN. «Cambia» sostituisce la chat attiva o seleziona quella già visibile.
+Le due viste condividono una coda di richieste firmate: non vengono creati canali
+concorrenti né modificati abbinamenti o autorizzazioni sul relay.
+
+La lista delle chat mostra la release PWA calcolata dagli header dei suoi file
+PHP, JavaScript e CSS pubblicati, incluse le sorgenti condivise di lingua,
+icone e console. La formula e' identica al master: media di X e Z su tutti i
+file, media di Y sui soli valori positivi, arrotondamento a meta' verso l'alto.
+Non esiste un contatore manuale. I file web contribuiscono anche alla versione
+generale del master. Ricaricare la pagina carica e mostra la nuova release.
+
+I contatori delle richieste anonime sono distinti dall'autenticazione: sull'hosting
+senza APCu restano i 256 bucket fissi gia' esistenti, riusati e di dimensione
+limitata, non un file per chiamata o accesso. Non viene introdotto un servizio
+Redis/Memcached sul server passivo.

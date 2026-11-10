@@ -1,0 +1,481 @@
+// app.js v4.167.3204
+"use strict";
+OaclisSettings.translate(document.body);
+let consoleWindow=null;
+try{if(location.hash.startsWith('#console=')){const value=JSON.parse(decodeURIComponent(location.hash.slice(9)));if(value&&typeof value.id==='string'&&/^[\w-]{1,160}$/.test(value.id)&&typeof value.device==='string'&&/^[\w-]{1,160}$/.test(value.device))consoleWindow=value;}}catch{}
+if(consoleWindow)document.documentElement.dataset.consoleWindow='true';
+const $ = (s) => document.querySelector(s);
+sessionStorage.removeItem('oaclis-local-access');
+if (/^#access=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
+const esc = (v) =>
+  String(v ?? "").replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
+let data = {
+    devices: [],
+    chats: [],
+    ssh_settings: {},
+    connections: {},
+    job: { status: "idle" },
+  },
+  sourceId = null,
+  selected = null,
+  link = null,
+  visibleChats = [],
+  drag = null,
+  positions = {},
+  linkPositions = {},
+  linkPositionSaving = false,
+  catalogRequest = 0,
+  catalogLoading = 0,
+  noticeTimer;
+try {
+  positions = JSON.parse(localStorage.getItem("oaclis-map") || "{}");
+} catch {
+  positions = {};
+}
+const catalogFailures = new Set();
+let chatLinks = [];
+let saveLinks = Promise.resolve();
+function saveLinkChange(action) {
+  const pending = saveLinks.then(action);
+  saveLinks = pending.catch(() => {});
+  return pending;
+}
+let removingPresentation = false;
+let drawingMap = false;
+const master = { id: "master", name: OaclisSettings.text("Questo dispositivo") };
+const devices = () => [{ ...master, name: data.appearance?.["device:master"]?.label || master.name }, ...data.devices, ...(data.mobile_devices || [])];
+const deviceName = (id) => devices().find((d) => d.id === id)?.name || id;
+document.documentElement.dataset.theme =
+  localStorage.getItem("oaclis-theme") ||
+  (matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light");
+$("#theme").onclick = () => {
+  const theme =
+    document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+  document.documentElement.dataset.theme = theme;
+  localStorage.setItem("oaclis-theme", theme);
+};
+const palettes = {
+  sienna: ["#3d5a80", "#98c1d9", "#e0fbfc", "#ee6c4d", "#293241"],
+  imperial: ["#2b2d42", "#8d99ae", "#edf2f4", "#ef233c", "#d90429"],
+  honey: ["#8ecae6", "#219ebc", "#023047", "#ffb703", "#fb8500"],
+  rose: ["#355070", "#6d597a", "#b56576", "#e56b6f", "#eaac8b"],
+  cyber: ["#00296b", "#003f88", "#00509d", "#fdc500", "#ffd500"],
+  paradise: ["#ef476f", "#ffd166", "#06d6a0", "#118ab2", "#073b4c"],
+  lemon: ["#003049", "#d62828", "#f77f00", "#fcbf49", "#eae2b7"],
+  oxford: ["#000000", "#14213d", "#fca311", "#e5e5e5", "#ffffff"],
+  carolina: ["#ffffff", "#00171f", "#003459", "#007ea7", "#00a8e8"],
+  blue: ["#03045e", "#0077b6", "#00b4d8", "#90e0ef", "#caf0f8"],
+  midnight: ["#177e89", "#084c61", "#db3a34", "#ffc857", "#323031"],
+  sage: ["#033f63", "#28666e", "#7c9885", "#b5b682", "#fedc97"],
+  almond: ["#f1dac4", "#a69cac", "#474973", "#161b33", "#0d0c1d"],
+  ruby: ["#d81159", "#8f2d56", "#218380", "#fbb13c", "#73d2de"],
+  atomic: ["#f79256", "#fbd1a2", "#7dcfb6", "#00b2ca", "#1d4e89"],
+  cadet: ["#dd6e42", "#e8dab2", "#4f6d7a", "#c0d6df", "#eaeaea"],
+  jet: ["#353535", "#3c6e71", "#ffffff", "#d9d9d9", "#284b63"],
+  sunglow: ["#ff595e", "#ffca3a", "#8ac926", "#1982c4", "#6a4c93"],
+  salmon: ["#70d6ff", "#ff70a6", "#ff9770", "#ffd670", "#e9ff70"],
+  coffee: ["#3c3744", "#090c9b", "#3066be", "#b4c5e4", "#fbfff1"],
+  cerise: ["#0a2463", "#3e92cc", "#fffaff", "#d8315b", "#1e1b18"],
+};
+let palette = localStorage.getItem("oaclis-palette") || "sienna";
+if (!palettes[palette]) palette = "sienna";
+function automaticColor(id) {
+  // Stable pseudo-random assignment: polling never changes a chat's color.
+  let hash = 0;
+  for (const c of id) hash = (Math.imul(hash, 31) + c.charCodeAt(0)) | 0;
+  return palettes[palette][(hash >>> 0) % palettes[palette].length];
+}
+function paletteSwatches(colors) {
+  const preview = document.createElement("span");
+  preview.className = "palette-swatches";
+  preview.setAttribute("aria-hidden", "true");
+  for (const color of colors) {
+    const swatch = document.createElement("i");
+    swatch.style.backgroundColor = color;
+    preview.append(swatch);
+  }
+  return preview;
+}
+function updatePalettePreview() {
+  document.documentElement.dataset.palette = palette;
+  document.querySelectorAll(".palette-option").forEach(button => {
+    const active = button.dataset.palette === palette;
+    button.setAttribute("aria-checked", String(active));
+    button.tabIndex = active ? 0 : -1;
+    if (active) $("#palette").title = button.textContent.trim();
+  });
+}
+const toolbar=$('.toolbar'),toolbarActions=$('#toolbar-actions'),toolbarToggle=$('#toolbar-toggle');
+let toolbarTimer;
+toolbarToggle.querySelector('svg').innerHTML=OaclisIcons.settings;
+new ResizeObserver(()=>{
+  const size=toolbarActions.getBoundingClientRect();toolbar.style.setProperty('--toolbar-width',Math.ceil(size.width)+'px');toolbar.style.setProperty('--toolbar-height',Math.ceil(size.height)+'px');
+}).observe(toolbarActions);
+function expandToolbar(){
+  clearTimeout(toolbarTimer);toolbar.dataset.expanded='true';toolbarActions.inert=false;toolbarToggle.setAttribute('aria-expanded','true');toolbarToggle.tabIndex=-1;
+  toolbarActions.querySelectorAll(':scope > button, #local-voice-controls button').forEach((button,index)=>button.style.setProperty('--toolbar-order',index));
+  toolbarTimer=setTimeout(collapseToolbar,3000);
+}
+function collapseToolbar(){
+  if(toolbar.querySelector(':popover-open')||toolbarActions.contains(document.activeElement)&&document.activeElement.matches(':focus-visible')){toolbarTimer=setTimeout(collapseToolbar,3000);return;}
+  if(toolbarActions.contains(document.activeElement))toolbarToggle.focus({preventScroll:true});
+  toolbar.dataset.expanded='false';toolbarActions.inert=true;toolbarToggle.setAttribute('aria-expanded','false');toolbarToggle.tabIndex=0;
+}
+for(const event of ['pointerenter','pointermove','pointerdown','keydown'])toolbar.addEventListener(event,expandToolbar);
+toolbar.addEventListener('focusin',event=>{if(toolbarActions.contains(event.target))expandToolbar();});
+toolbar.addEventListener('toggle',()=>{if(toolbar.dataset.expanded==='true'){clearTimeout(toolbarTimer);toolbarTimer=setTimeout(collapseToolbar,3000);}},true);
+toolbarToggle.onclick=event=>{expandToolbar();if(event.detail===0)toolbarActions.querySelector('button')?.focus();};
+const powerOptions=[...document.querySelectorAll('#power-menu [data-power]')];
+function updatePowerMenu(){
+  const runtime=data.device_runtime?.master,mode=runtime?.power_mode||(runtime?.active?'always':'normal');
+  for(const button of powerOptions)button.setAttribute('aria-checked',String(button.dataset.power===mode));
+  const selected=powerOptions.find(button=>button.dataset.power===mode);
+  if(selected){$('#power').innerHTML=selected.innerHTML;$('#power').title=OaclisSettings.text('Modalità energia')+' · '+selected.title+(runtime?.power_applied===false?' · '+OaclisSettings.text('Non applicata'):'');$('#power').setAttribute('aria-label',$('#power').title);}
+  $('#power').dataset.applied=String(runtime?.power_applied!==false);
+}
+for(const button of powerOptions)button.onclick=guard(async()=>{
+  const trigger=$('#power');trigger.dataset.busy='true';trigger.disabled=true;powerOptions.forEach(button=>button.disabled=true);
+  try{data.device_runtime??={};data.device_runtime.master=await api('device/control',{device_id:'master',action:'power-'+button.dataset.power});$('#power-menu').hidePopover();trigger.focus();}
+  finally{delete trigger.dataset.busy;trigger.disabled=false;powerOptions.forEach(button=>button.disabled=false);updatePowerMenu();}
+});
+$('#power-menu').addEventListener('toggle',event=>{
+  if(event.newState!=='open')return;updatePowerMenu();
+  const anchor=$('#power').getBoundingClientRect(),menu=event.target;
+  menu.style.left=Math.max(8,Math.min(anchor.left,innerWidth-menu.offsetWidth-8))+'px';
+  menu.style.top=Math.max(8,Math.min($('.toolbar').getBoundingClientRect().bottom+8,innerHeight-menu.offsetHeight-8))+'px';
+  menu.querySelector('[aria-checked="true"]')?.focus({preventScroll:true});
+});
+$('#power-menu').onkeydown=event=>{
+  const index=powerOptions.indexOf(document.activeElement);let next;
+  if(['ArrowDown','ArrowRight'].includes(event.key))next=(index+1)%powerOptions.length;
+  if(['ArrowUp','ArrowLeft'].includes(event.key))next=(index-1+powerOptions.length)%powerOptions.length;
+  if(event.key==='Home')next=0;if(event.key==='End')next=powerOptions.length-1;
+  if(next!==undefined){event.preventDefault();powerOptions[next].focus();}
+};
+const paletteOptions = [...document.querySelectorAll(".palette-option")];
+for (const button of paletteOptions) {
+  button.append(paletteSwatches(palettes[button.dataset.palette]));
+  button.onclick = () => {
+    palette = button.dataset.palette;
+    localStorage.setItem("oaclis-palette", palette);
+    updatePalettePreview();
+    renderMap();
+    renderLibrary();
+    $("#palette-menu").hidePopover();
+    $("#palette").focus();
+  };
+}
+$("#palette-menu").addEventListener("toggle", e => {
+  if (e.newState !== "open") return;
+  const anchor = $("#palette").getBoundingClientRect();
+  const menu = e.target;
+  menu.style.left = Math.max(8, Math.min(anchor.left, innerWidth - menu.offsetWidth - 8)) + "px";
+  menu.style.top = Math.max(8, Math.min($(".toolbar").getBoundingClientRect().bottom + 8, innerHeight - menu.offsetHeight - 8)) + "px";
+  menu.querySelector('[aria-checked="true"]').focus({ preventScroll: true });
+});
+$("#palette-menu").onkeydown = e => {
+  const index = paletteOptions.indexOf(document.activeElement);
+  let next;
+  if (e.key === "ArrowDown" || e.key === "ArrowRight") next = (index + 1) % paletteOptions.length;
+  if (e.key === "ArrowUp" || e.key === "ArrowLeft") next = (index - 1 + paletteOptions.length) % paletteOptions.length;
+  if (e.key === "Home") next = 0;
+  if (e.key === "End") next = paletteOptions.length - 1;
+  if (next !== undefined) { e.preventDefault(); paletteOptions[next].focus(); }
+};
+updatePalettePreview();
+$("#sound").onclick = () => {
+  const enabled = $("#sound").getAttribute("aria-pressed") !== "true";
+  $("#sound").setAttribute("aria-pressed", enabled);
+  if (enabled) OaclisReadAloud.feedback();
+};
+function beep() {
+  if ($("#sound").getAttribute("aria-pressed") === "true") OaclisReadAloud.feedback();
+}
+async function api(path, value) {
+  const response = await fetch("/api/" + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(value === undefined ? {} : value),
+  });
+  if (response.status === 403) throw Error(OaclisSettings.text("Operazione non riuscita"));
+  const result = await response.json();
+  if (!response.ok) throw Error(result.error || OaclisSettings.text("Operazione non riuscita"));
+  return result;
+}
+function notice(text) {
+  clearTimeout(noticeTimer);
+  $("#notice").textContent = OaclisSettings.text(text);
+  $("#notice").hidden = false;
+  noticeTimer = setTimeout(() => ($("#notice").hidden = true), 6000);
+}
+function guard(fn) {
+  return async (...args) => {
+    try {
+      await fn(...args);
+    } catch (e) {
+      notice(e.message);
+    }
+  };
+}
+function renderEye(button, crossed, label) {
+  button.innerHTML = OaclisIcon(crossed ? 'eyeOff' : 'eye');
+  button.title = label; button.setAttribute("aria-label", label);
+  button.setAttribute("aria-pressed", String(!crossed));
+}
+let showHiddenChats = false;
+renderEye($("#show-hidden"), true, OaclisSettings.text("Mostra chat nascoste"));
+$("#show-hidden").onclick = () => {
+  showHiddenChats = !showHiddenChats;
+  renderEye($("#show-hidden"), !showHiddenChats, showHiddenChats ? OaclisSettings.text("Nascondi chat nascoste") : OaclisSettings.text("Mostra chat nascoste"));
+  renderLibrary();
+};
+$("#close").onclick = closePanel;
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && $("#path-authorization[open]")) return;
+  if (e.key === "Escape" && $("#terminal-choice")) { $("#terminal-choice .popover-close").click(); return; }
+  if (e.key === "Escape" && document.activeElement?.closest(".chat-terminal")) { closeChatTerminal(document.activeElement.closest(".chat-terminal")); return; }
+  if (e.key === "Escape" && $("#device-settings")) { closeDeviceSettings(); return; }
+  if (e.key === "Escape" && $("#connection-popover")) { closeConnectionPopover(); return; }
+  if (e.key === "Escape" && $(".chat-editor")) { closeChatEditor(); return; }
+  if (e.key === "Escape" && !$("#panel").hidden) closePanel();
+});
+$("#back").onclick = showLibrary;
+async function openDevice(id) {
+  if (devices().find(d => d.id === id)?.kind === 'mobile') return;
+  sourceId = id;
+  $("#panel-device").textContent = deviceName(id);
+  $("#search").value = "";
+  visibleChats = [];
+  showLibrary();
+  openPanel();
+  $("#panel").opener = [...document.querySelectorAll(".map-node")].find(node => node.dataset.id === id);
+  bindPanelDrag($("#panel"), true);
+  renderConnections();
+  await loadChats();
+  window.OaclisLocalVoice?.library();
+  if (sourceId === id && !$("#panel").hidden) $("#search").focus();
+}
+async function numberCatalog(result){
+  result.chats=result.chats.filter(chat=>!(data.deleted_chats||[]).includes(chat.id));
+  const missing=result.chats.filter(chat=>!data.chat_settings?.[chat.id]?.number);
+  if(missing.length){
+    const {numbers}=await api('chat/numbers',{chats:missing.map(chat=>({id:chat.id,name:chatLabel(chat).slice(0,160)}))});
+    data.chat_settings??={};for(const [id,number]of Object.entries(numbers))(data.chat_settings[id]??={}).number=number;
+  }
+  for(const chat of result.chats)chat.number=data.chat_settings[chat.id].number;
+  return result;
+}
+async function loadChats() {
+  if (!sourceId) return;
+  const request = ++catalogRequest;
+  const id = sourceId;
+  catalogFailures.delete(id);
+  if (id !== "master" && data.connections[id] === "offline") {
+    $("#library-list").innerHTML = OaclisSettings.html('<p class="muted">Dispositivo offline.</p>');
+    return;
+  }
+  $("#library-list").innerHTML = OaclisSettings.html('<p class="muted">Caricamento…</p>');
+  catalogLoading++;lastCatalog=Date.now();
+  try {
+    const result = await numberCatalog(await api("catalog", { device_id: id }));
+    if (request !== catalogRequest || sourceId !== id) return;
+    visibleChats = result.chats;
+    if (id === "master") data.codex_root = result.root;
+    renderLibrary();
+  } catch (e) {
+    if (request !== catalogRequest) return;
+    catalogFailures.add(id);
+    $("#library-list").innerHTML =
+      '<p class="muted">' + esc(e.message) + "</p>";
+    throw e;
+  } finally { catalogLoading--; }
+}
+$("#refresh").onclick = guard(loadChats);
+$("#search").oninput = renderLibrary;
+const appearance = (entry) => {
+  const saved = data.appearance?.["chat:" + entry.id] || {};
+  return { ...saved, color: saved.color || automaticColor(entry.id) };
+};
+const chatLabel = (entry) => appearance(entry).label || entry.name;
+const iconNames=OaclisIconNames;
+function iconBody(icon, name) {
+  if (icon?.startsWith("data:image/png;base64,")) return '<img src="' + esc(icon) + '" alt="">';
+  if (icons[icon]) return OaclisIcon(icon);
+  return esc([...name.trim()][0]?.toLocaleUpperCase() || "?");
+}
+function badge(entry) {
+  return '<span class="chat-badge" aria-hidden="true">' + iconBody(appearance(entry).icon, chatLabel(entry)) + '</span>';
+}
+let positionTimer, positionsSaving = false;
+$("#reset-map").onclick = () => {
+  positions = {};
+  savePositions();
+  renderMap();
+};
+$("#check").onclick = guard(() => api("check", {}));
+$("#add-device").onclick = () => openDiscovery();
+$('#new-chat').onclick=()=>openNewChat($('#new-chat'));
+$('#engine-settings').onclick=()=>openEngineSettings($('#engine-settings'));
+$('#jobs-monitor').onclick=()=>OaclisJobs.open($('#jobs-monitor'));
+$("#edit-device").onclick = () => editDevice(data.devices.find(d => d.id === sourceId), $("#edit-device"));
+const lastConnection = {};
+let statusRevisions = {};
+async function poll() {
+  const saved = saveLinks;
+  await saved;
+  if (saved !== saveLinks) return;
+  const next = await api("status", {revisions:statusRevisions});
+  statusRevisions = {...next.revisions,shared:statusRevisions.shared};
+  for (const device of data.devices) {
+    const state = next.connections[device.id];
+    if (state === "online" && lastConnection[device.id] === "offline") {
+      catalogFailures.delete(device.id);
+      notice(device.name + OaclisSettings.text(" raggiungibile"));
+      beep();
+    }
+    if (state !== "checking") lastConnection[device.id] = state;
+  }
+  if (next.shared && saved === saveLinks && !removingPresentation && !positionsSaving && !linkPositionSaving && !drag && !document.querySelector('.map-node[data-dragging="true"], .link-badge[data-dragging="true"]')) {
+    const previous = JSON.stringify([data.devices, data.appearance, chatLinks, data.chat_settings, positions, linkPositions, data.deleted_chats || []]);
+    const shared = next.shared;
+    if (previous !== JSON.stringify([shared.devices, shared.appearance, shared.links, shared.chat_settings, shared.positions, shared.link_positions, shared.deleted_chats || []])) {
+      const nodesChanged = JSON.stringify([data.devices, Object.fromEntries(Object.entries(data.appearance || {}).filter(([key]) => key.startsWith("device:"))), positions]) !==
+        JSON.stringify([shared.devices, Object.fromEntries(Object.entries(shared.appearance || {}).filter(([key]) => key.startsWith("device:"))), shared.positions]);
+      const libraryChanged = JSON.stringify([data.appearance, data.chat_settings, data.deleted_chats || []]) !== JSON.stringify([shared.appearance, shared.chat_settings, shared.deleted_chats || []]);
+      Object.assign(data, shared); chatLinks = shared.links; positions = shared.positions; linkPositions = shared.link_positions || {};
+      document.querySelectorAll('.chat-editor').forEach(panel=>{if((data.deleted_chats || []).includes(panel.dataset.objectId))closeChatEditor(panel);});
+      document.querySelectorAll('.chat-terminal').forEach(panel=>{if((data.deleted_chats || []).includes(panel.dataset.chatId))closeChatTerminal(panel);});
+      if (nodesChanged) renderMap(true);
+      if (nodesChanged || libraryChanged) renderLibrary();
+    }
+    statusRevisions.shared = next.revisions?.shared;
+  }
+  data.device_runtime ??= {};
+  if (next.device_runtime) for (const id of Object.keys(data.device_runtime)) if (!(id in next.device_runtime)) delete data.device_runtime[id];
+  for (const [id, runtime] of Object.entries(next.device_runtime || {})) {
+    const previous = data.device_runtime[id];
+    if (runtime.available !== false && (!previous?.observed_at || !runtime.observed_at || runtime.observed_at >= previous.observed_at)) {
+      for (const chat of runtime.stopped_chats || []) if (!previous?.stopped_chats?.includes(chat)) closeStoppedChatWindows({kind:'oaclis-console-stopped',chat_id:chat,device_id:id});
+    }
+    if (previous?.update?.status === "running" && runtime.update?.status === "failed") { console.error("Oaclis update:", runtime.update.error); notice(OaclisSettings.text("Aggiornamento non riuscito")); }
+    if (runtime.available === false || previous?.available === false || !previous?.observed_at || !runtime.observed_at || runtime.observed_at >= previous.observed_at) data.device_runtime[id] = runtime;
+  }
+  if (Array.isArray(next.mobile_devices) && !removingPresentation && !drag && !document.querySelector('.map-node[data-dragging="true"]')) {
+    const roster = list => JSON.stringify((list || []).map(({id, name}) => [id, name]));
+    const changed = roster(data.mobile_devices) !== roster(next.mobile_devices);
+    data.mobile_devices = next.mobile_devices;
+    if (changed) renderMap(true);
+  }
+  updatePowerMenu();
+  data.build = next.build;
+  data.connections = next.connections;
+  data.job = next.job;
+  renderPathAuthorization(next.job?.authorization);
+  data.paused = next.paused;
+  data.checks_paused = next.checks_paused;
+  data.settings_paused = next.settings_paused;
+  if (Object.hasOwn(next,"analyses")) data.analyses = next.analyses;
+  if (Object.hasOwn(next,"app_checks")) data.app_checks = next.app_checks;
+  if (Object.hasOwn(next,"transfers")) data.transfers = next.transfers;
+  if (Object.hasOwn(next,"preparations")) data.preparations = next.preparations;
+  for (const editor of document.querySelectorAll(".chat-editor")) {
+    if (editor.scopeEntry) { renderScopeDetails(editor, editor.scopeEntry); editor.updateVisibility?.(); }
+  }
+  if (next.discovery) await updateDiscovery(next.discovery);
+  renderConnections();
+  for (const marker of document.querySelectorAll(".chat-link .link-badge[data-link-key]")) {
+    const [id, source] = JSON.parse(marker.dataset.linkKey);
+    const connection = chatLinks.find(value => value.entry.id === id && value.source === source && value.target === JSON.parse(marker.dataset.linkKey)[2]);
+    if (connection) updateBadgeMotion(marker, connection);
+  }
+}
+let polling = false, runtimeTimer;
+async function pollStatus() {
+  clearTimeout(runtimeTimer);
+  if (document.hidden || polling) return;
+  polling = true;const started=Date.now();
+  refreshCatalog();
+  try { await poll(); }
+  catch (e) { notice(e.message); }
+  finally {
+    polling = false;
+    const transferring=data.job?.status==='running'||document.querySelector('.link-badge[data-motion-phase="transferring"]');
+    if(!document.hidden)runtimeTimer=setTimeout(pollStatus,Math.max(0,(transferring?500:2000)-(Date.now()-started)));
+  }
+}
+if(!consoleWindow)runtimeTimer=setTimeout(pollStatus,500);
+
+let refreshing = false, lastCatalog=0;
+async function refreshCatalog() {
+  if (document.hidden || refreshing || catalogLoading || Date.now()-lastCatalog<10000 || !sourceId || $("#panel").hidden || drag || catalogFailures.has(sourceId) ||
+      (sourceId !== "master" && data.connections[sourceId] !== "online")) return;
+  refreshing = true;lastCatalog=Date.now();
+  const id = sourceId,
+    version = catalogRequest;
+  try {
+    const result = await numberCatalog(await api("catalog", { device_id: id }));
+    if (sourceId !== id || version !== catalogRequest) return;
+    for (const editor of document.querySelectorAll(".chat-editor")) {
+      if (editor.dataset.sourceDevice !== id) continue;
+      const entry = result.chats.find(c => c.id === editor.dataset.objectId);
+      if (entry) renderScopeDetails(editor, entry);
+    }
+    if (JSON.stringify(result.chats) !== JSON.stringify(visibleChats) || visibleChats.length === 0) {
+      visibleChats = result.chats;
+      renderLibrary();
+      if (selected) {
+        const next = visibleChats.find((c) => c.id === selected.id);
+        if (next) {
+          selected = next;
+          const heading = $("#details h2");
+          if ($("#chat-form") && heading) heading.textContent = chatLabel(next);
+        }
+      }
+    }
+  } catch (e) {
+    if (sourceId === id && version === catalogRequest) { catalogFailures.add(id); notice(e.message); }
+  } finally {
+    refreshing = false;
+  }
+}
+if(!consoleWindow)document.addEventListener('visibilitychange',()=>{clearTimeout(runtimeTimer);if(!document.hidden){lastCatalog=0;pollStatus();}});
+window.onresize = () => {
+  if(consoleWindow)return;
+  renderMap();
+  for (const panel of document.querySelectorAll('.context-popover:popover-open')) {if(panel.dataset.snap&&panel.snapConsole)panel.snapConsole(panel.dataset.snap);else positionContext(panel,panel.opener);}
+};
+guard(async () => {
+  data = await api("state");
+  if(consoleWindow){
+    sourceId=consoleWindow.device;visibleChats=data.chats||[];
+    const entry=visibleChats.find(chat=>chat.id===consoleWindow.id)||{id:consoleWindow.id,name:typeof consoleWindow.name==='string'?consoleWindow.name.slice(0,160):'Chat'};
+    openChatTerminal({entry},null,sourceId);
+    if(sourceId!=='master')api('catalog',{device_id:sourceId}).then(numberCatalog).then(result=>{visibleChats=result.chats||[entry];}).catch(()=>{});
+    return;
+  }
+  if(!data.engines?.configured&&!data.chats?.length&&!data.devices?.length&&!data.mobile_devices?.length)openEngineSettings($('#toolbar-toggle'));
+  consoleChannel?.postMessage('discover');
+  updatePowerMenu();
+  chatLinks = data.links || [];
+  const oldPositions = positions;
+  positions = data.positions || {};
+  linkPositions = data.link_positions || {};
+  renderMap();
+  if (data.role === "master" && !Object.keys(positions).length) {
+    positions = Object.fromEntries([...document.querySelectorAll(".map-node")].map(n => [n.dataset.id, oldPositions[n.dataset.id] || { x: n.offsetLeft, y: n.offsetTop }]));
+    await api("positions", positions);
+    localStorage.removeItem("oaclis-map");
+    renderMap();
+  }
+  await updateDiscovery(await api("peers"), true);
+  await api("check", {});
+})();
+
+let discovery = { peers: [] };
+const noticedPeers = new Set();

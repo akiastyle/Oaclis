@@ -1,0 +1,24 @@
+[package]
+name = "oaclis"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+base64 = "0.23.1"
+ring = "0.17.14"
+ureq = { version = "3.4", default-features = false, features = ["rustls"] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+serde = { version = "1", features = ["derive", "rc"] }
+serde_json = { version = "1", features = ["arbitrary_precision"] }
+sha2 = "0.11"
+tiny_http = "0.12"
+
+regex = "1"
+toml = "0.8"
+rustpython-parser = { version = "0.4", default-features = false, features = ["num-bigint"] }
+rustpython-ast = { version = "0.4", default-features = false, features = ["num-bigint", "visitor"] }
+qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+
+[build-dependencies]
+sha2 = "0.11"

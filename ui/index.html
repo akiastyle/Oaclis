@@ -1,0 +1,157 @@
+<!-- index.html v1.0.238 -->
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Oaclis</title>
+    <link rel="icon" href="/assets/__BRAND_ICON__" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/assets/__BRAND_ICON__.png" />
+    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="/badge-motion.css" />
+    <link rel="stylesheet" href="/console.css" />
+    <link rel="stylesheet" href="/jobs.css" />
+    <script src="/locale.js" defer></script>
+    <script src="/engines.js" defer></script>
+    <script src="/jobs.js" defer></script>
+    <script src="/icons.js" defer></script>
+    <script src="/badge-motion.js" defer></script>
+    <script src="/panels.js" defer></script>
+    <script src="/map.js" defer></script>
+    <script src="/terminal-format.js" defer></script>
+    <script src="/voice.js" defer></script>
+    <script src="/read-aloud.js" defer></script>
+    <script src="/console.js" defer></script>
+    <script src="/app.js" defer></script>
+    <script src="/voice-local.js" defer></script>
+  </head>
+  <body>
+    <main id="map" aria-label="Dispositivi"><div id="nodes"></div></main>
+    <small class="app-version" aria-label="Versione Oaclis">__APP_VERSION__</small>
+    <nav class="toolbar" data-expanded="false" aria-label="Comandi Oaclis">
+      <a class="brand" href="/"><span class="brand-mark"><img class="brand-logo" src="/assets/oaclis-particles.png" alt="" width="32" height="32" />__MASTER_CROWN__</span><span class="brand-word">ac<span class="brand-accent">lis</span></span></a
+      ><div class="toolbar-reveal"><div id="toolbar-actions" inert><button
+        id="add-device"
+        class="icon-button"
+        aria-label="Aggiungi dispositivo"
+        title="Aggiungi dispositivo"
+      >
+        <svg viewBox="0 0 24 24" data-icon="plus"></svg></button
+      ><button
+        id="check"
+        class="icon-button"
+        aria-label="Verifica collegamenti"
+        title="Verifica collegamenti"
+      >
+        <svg viewBox="0 0 24 24" data-icon="refresh"></svg>
+      </button>
+
+      <button id="jobs-monitor" class="icon-button" type="button" aria-label="Statistiche" title="Statistiche"><svg viewBox="0 0 24 24" data-icon="chartColumn"></svg></button>
+      <button id="toggle-log" class="icon-button" type="button" aria-label="Log" title="Log" aria-expanded="false"><svg viewBox="0 0 24 24" data-icon="log"></svg></button>
+      <button id="power" class="icon-button" type="button" popovertarget="power-menu" aria-label="Modalità energia" title="Modalità energia"><svg viewBox="0 0 24 24" aria-hidden="true" data-icon="leaf"></svg></button>
+      <div id="power-menu" popover="auto" role="radiogroup" aria-label="Modalità energia">
+        <button type="button" class="icon-button" data-power="always" role="radio" aria-checked="false" aria-label="Sempre acceso" title="Sempre acceso"><svg viewBox="0 0 24 24" aria-hidden="true" data-icon="sun"></svg></button>
+        <button type="button" class="icon-button" data-power="screen-off" role="radio" aria-checked="false" aria-label="Spegni monitor senza standby" title="Spegni monitor senza standby"><svg viewBox="0 0 24 24" aria-hidden="true" data-icon="monitorOff"></svg></button>
+        <button type="button" class="icon-button" data-power="normal" role="radio" aria-checked="true" aria-label="Normale" title="Normale"><svg viewBox="0 0 24 24" aria-hidden="true" data-icon="leaf"></svg></button>
+      </div>
+      <button id="engine-settings" class="icon-button" type="button" aria-label="Motori AI" title="Motori AI"><svg viewBox="0 0 24 24" data-icon="cpu"></svg></button>
+      <button id="palette" class="icon-button" type="button" popovertarget="palette-menu" aria-label="Scegli palette colori" title="Palette colori"><svg viewBox="0 0 24 24" aria-hidden="true" data-icon="palette"></svg></button>
+      <div id="palette-menu" popover="auto" role="radiogroup" aria-label="Palette colori">
+        <button type="button" class="palette-option" data-palette="sienna" role="radio" aria-checked="false"><span class="palette-name">Sienna · Blue</span></button>
+        <button type="button" class="palette-option" data-palette="imperial" role="radio" aria-checked="false"><span class="palette-name">Imperial · Cadet</span></button>
+        <button type="button" class="palette-option" data-palette="honey" role="radio" aria-checked="false"><span class="palette-name">Honey · Prussian</span></button>
+        <button type="button" class="palette-option" data-palette="rose" role="radio" aria-checked="false"><span class="palette-name">Rose · Blue</span></button>
+        <button type="button" class="palette-option" data-palette="cyber" role="radio" aria-checked="false"><span class="palette-name">Cyber · Royal</span></button>
+        <button type="button" class="palette-option" data-palette="paradise" role="radio" aria-checked="false"><span class="palette-name">Paradise · Caribbean</span></button>
+        <button type="button" class="palette-option" data-palette="lemon" role="radio" aria-checked="false"><span class="palette-name">Lemon · Prussian</span></button>
+        <button type="button" class="palette-option" data-palette="oxford" role="radio" aria-checked="false"><span class="palette-name">Orange · Oxford</span></button>
+        <button type="button" class="palette-option" data-palette="carolina" role="radio" aria-checked="false"><span class="palette-name">Carolina · CG</span></button>
+        <button type="button" class="palette-option" data-palette="blue" role="radio" aria-checked="false"><span class="palette-name">Shades of Blue</span></button>
+        <button type="button" class="palette-option" data-palette="midnight" role="radio" aria-checked="false"><span class="palette-name">Midnight · Seaweed</span></button>
+        <button type="button" class="palette-option" data-palette="sage" role="radio" aria-checked="false"><span class="palette-name">Sage · Ming</span></button>
+        <button type="button" class="palette-option" data-palette="almond" role="radio" aria-checked="false"><span class="palette-name">Almond · Navy</span></button>
+        <button type="button" class="palette-option" data-palette="ruby" role="radio" aria-checked="false"><span class="palette-name">Ruby · Sky</span></button>
+        <button type="button" class="palette-option" data-palette="atomic" role="radio" aria-checked="false"><span class="palette-name">Tangerine · Pacific</span></button>
+        <button type="button" class="palette-option" data-palette="cadet" role="radio" aria-checked="false"><span class="palette-name">Sienna · Cadet</span></button>
+        <button type="button" class="palette-option" data-palette="jet" role="radio" aria-checked="false"><span class="palette-name">Jet · Indigo</span></button>
+        <button type="button" class="palette-option" data-palette="sunglow" role="radio" aria-checked="false"><span class="palette-name">Sunglow · Crayola</span></button>
+        <button type="button" class="palette-option" data-palette="salmon" role="radio" aria-checked="false"><span class="palette-name">Salmon · Baby Blue</span></button>
+        <button type="button" class="palette-option" data-palette="coffee" role="radio" aria-checked="false"><span class="palette-name">Coffee · Duke</span></button>
+        <button type="button" class="palette-option" data-palette="cerise" role="radio" aria-checked="false"><span class="palette-name">Cerise · Royal</span></button>
+      </div>
+      <button
+        id="reset-map"
+        class="icon-button"
+        aria-label="Riordina mappa"
+        title="Riordina mappa"
+      >
+        <svg viewBox="0 0 24 24" data-icon="maximize"></svg></button
+      ><button
+        id="sound"
+        class="icon-button"
+        aria-label="Abilita avviso sonoro"
+        aria-pressed="false"
+        title="Avviso sonoro"
+      >
+        <svg viewBox="0 0 24 24" data-icon="volume"></svg></button
+      ><button
+        id="theme"
+        class="icon-button"
+        aria-label="Cambia tema"
+        title="Cambia tema"
+      >
+        <svg viewBox="0 0 24 24" data-icon="moon"></svg>
+      </button>
+      </div></div>
+      <button id="toolbar-toggle" class="icon-button" type="button" aria-label="Impostazioni" title="Impostazioni" aria-expanded="false" aria-controls="toolbar-actions"><svg viewBox="0 0 24 24" aria-hidden="true"></svg></button>
+    </nav>
+    <aside id="panel" popover="manual" hidden aria-label="Chat e trasferimento">
+      <div class="panel-bar">
+        <button
+          id="back"
+          class="icon-button"
+          aria-label="Torna alle chat"
+          hidden
+        >
+          <svg viewBox="0 0 24 24" data-icon="chevronLeft"></svg></button
+        ><span id="panel-device"></span
+        ><button
+          id="edit-device"
+          class="icon-button"
+          aria-label="Modifica dispositivo"
+          title="Modifica dispositivo"
+        >
+          <svg viewBox="0 0 24 24" data-icon="edit"></svg></button
+        ><button
+          id="refresh"
+          class="icon-button"
+          aria-label="Aggiorna chat"
+          title="Aggiorna chat"
+        >
+          <svg viewBox="0 0 24 24" data-icon="refresh"></svg></button
+        ><button id="show-hidden" type="button" class="icon-button" aria-label="Mostra chat nascoste" title="Mostra chat nascoste" aria-pressed="false"></button
+        ><button id="new-chat" class="icon-button" type="button" aria-label="Nuova chat" title="Nuova chat"><svg viewBox="0 0 24 24" data-icon="plus"></svg></button
+        ><button id="close" class="icon-button" aria-label="Chiudi pannello">
+          <svg viewBox="0 0 24 24" data-icon="close"></svg>
+        </button>
+      </div>
+      <div id="library">
+        <label class="search"
+          ><input
+            id="search"
+            type="search"
+            placeholder="Cerca una chat"
+            aria-label="Cerca una chat"
+        /></label>
+        <div
+          id="library-list"
+          role="region"
+          aria-label="Chat del dispositivo"
+        ></div>
+      </div>
+      <div id="details" hidden></div>
+    </aside>
+    <section id="orchestrator-log" class="context-popover" hidden aria-label="Log"><button type="button" class="icon-button popover-close" aria-label="Chiudi log"><svg viewBox="0 0 24 24" data-icon="close" aria-hidden="true"></svg></button><h2>Log</h2><pre></pre></section>
+    <div id="notice" hidden role="status" aria-live="polite"></div>
+  </body>
+</html>

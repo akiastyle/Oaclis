@@ -1,0 +1,381 @@
+<?php
+// index.php v1.8.736
+declare(strict_types=1);
+const ORIGIN = 'https://oaclis.krprojects.it';
+const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
+header('Cache-Control: no-store');
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: no-referrer');
+header("Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; manifest-src 'self'; img-src 'self' data:; media-src 'self'; worker-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
+header('Permissions-Policy: publickey-credentials-create=(self), publickey-credentials-get=(self), screen-wake-lock=(self), microphone=(self)');
+if (($_SERVER['HTTP_HOST'] ?? '') !== 'oaclis.krprojects.it') { http_response_code(404); exit; }
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    if (($_SERVER['HTTP_ORIGIN'] ?? '') !== ORIGIN || !str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') || (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 1048576) { http_response_code(403); exit; }
+    umask(0077);
+    $config = require PRIVATE_DIR . '/config.php';
+    $cookieKey=hash('sha256','oaclis-cookie-v1:'.$config['admin_hash'],true);
+    spl_autoload_register(function ($class) {
+        $prefix = 'lbuchs\\WebAuthn\\';
+        if (str_starts_with($class, $prefix)) require PRIVATE_DIR . '/library/src/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
+    });
+    function readCookie(mixed $value,string $key): array {
+        if (!is_string($value) || !str_starts_with($value,'v1.') || strlen($value)>3800) return [];
+        $raw=base64_decode(strtr(substr($value,3),'-_','+/'),true);
+        if ($raw===false || strlen($raw)<29) return [];
+        $plain=openssl_decrypt(substr($raw,28),'aes-256-gcm',$key,OPENSSL_RAW_DATA,substr($raw,0,12),substr($raw,12,16),ORIGIN);
+        if ($plain===false) return [];
+        try {$decoded=json_decode($plain,true,16,JSON_THROW_ON_ERROR);return is_array($decoded)?$decoded:[];} catch (Throwable) {return [];}
+    }
+    function writeCookie(): void {
+        global $session,$originalSession,$cookieKey;
+        if ($session===$originalSession) return;
+        $value='';
+        if ($session) {
+            $iv=random_bytes(12);$tag='';
+            $plain=json_encode($session,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+            $encrypted=openssl_encrypt($plain,'aes-256-gcm',$cookieKey,OPENSSL_RAW_DATA,$iv,$tag,ORIGIN,16);
+            if ($encrypted===false) {$session=[];throw new RuntimeException('Session encryption unavailable');}
+            $value='v1.'.rtrim(strtr(base64_encode($iv.$tag.$encrypted),'+/','-_'),'=');
+            if (strlen($value)>3800) {$session=[];throw new RuntimeException('Session cookie too large');}
+        }
+        if (!setcookie('__Host-Oaclis',$value,['expires'=>$value===''?time()-3600:($session['auth']['until']??$session['challenge']['until']??time()+120),'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Strict'])) throw new RuntimeException('Unable to set authentication cookie');
+        $originalSession=$session;
+    }
+    function respond(array $value, int $code=200): never { writeCookie(); http_response_code($code); echo json_encode($value, JSON_THROW_ON_ERROR); exit; }
+    function readState(): string {
+        $path=PRIVATE_DIR.'/state.json';
+        for ($attempt=0;$attempt<5;$attempt++) {
+            clearstatcache(true,$path);
+            $raw=@file_get_contents($path);
+            if (is_string($raw) && $raw!=='') return $raw;
+            if ($attempt<4) usleep(20000);
+        }
+        throw new RuntimeException('Relay state temporarily unreadable');
+    }
+    function decode(string $s): string {
+        if (strlen($s)>18000 || !preg_match('/^[A-Za-z0-9_-]+$/D', $s)) throw new RuntimeException();
+        $v=base64_decode(strtr($s,'-_','+/'), true);
+        if ($v===false) throw new RuntimeException();
+        return $v;
+    }
+    function checkClient(string $encoded): string {
+        $raw=decode($encoded); $c=json_decode($raw,true,32,JSON_THROW_ON_ERROR);
+        if (($c['origin']??'')!==ORIGIN || ($c['crossOrigin']??false)!==false) throw new RuntimeException();
+        return $raw;
+    }
+    function takeChallenge(string $kind, string $device): string {
+        global $session,$state;
+        $c=$session['challenge']??[]; unset($session['challenge']);
+        if (($c['kind']??'')!==$kind || ($c['device']??'')!==$device || ($c['until']??0)<time()) throw new RuntimeException();
+        $saved=$kind==='get'?($state['devices'][$device]['login_challenge']??''):($state['invitations'][$c['invite']??'']['challenge']??'');
+        if (!is_string($c['nonce']??null) || !hash_equals($saved,hash('sha256',$c['nonce']))) throw new RuntimeException();
+        if ($kind==='get') unset($state['devices'][$device]['login_challenge']);
+        return base64_decode($c['bytes'], true);
+    }
+    $session=readCookie($_COOKIE['__Host-Oaclis']??null,$cookieKey);$originalSession=$session;
+    try {
+        $body=file_get_contents('php://input',false,null,0,1048577);
+        if ($body===false || strlen($body)>1048576) respond([],413);
+        $input=json_decode($body,true,32,JSON_THROW_ON_ERROR);
+        $action=$input['action']??'';
+        $device=$_SERVER['HTTP_X_DEVICE_CODE']??'';
+        $deviceId=preg_match('/^[a-f0-9]{64}$/D',$device)?hash('sha256',$device):'';
+        $admin=$_SERVER['HTTP_X_ADMIN_KEY']??'';
+        $isAdmin=hash_equals($config['admin_hash'],hash('sha256',$admin));
+        $adminActions=['admin-list','chat-access','set-chat-access','invite','approve','revoke','console-exchange'];
+        $authenticated=$deviceId!=='' && ($session['auth']['device']??'')===$deviceId && ($session['auth']['until']??0)>=time();
+        if (!$isAdmin && !$authenticated) {
+            // Fixed shards bound disk usage; use the connection address, never forwarded headers.
+            $bucket=substr(hash('sha256',$_SERVER['REMOTE_ADDR']??''),0,2);
+            $limit=fopen(PRIVATE_DIR.'/rate-'.$bucket,'c+');
+            if (!$limit || !flock($limit,LOCK_EX|LOCK_NB)) { header('Retry-After: 1'); http_response_code(429); exit; }
+            $window=intdiv(time(),60);
+            $usage=explode(' ',trim(stream_get_contents($limit,64)));
+            $count=($usage[0]??'')===(string)$window?(int)($usage[1]??0):0;
+            if ($count>=60) { flock($limit,LOCK_UN); fclose($limit); header('Retry-After: '.(60-time()%60)); http_response_code(429); exit; }
+            rewind($limit); ftruncate($limit,0);
+            if (fwrite($limit,$window.' '.($count+1))===false) throw new RuntimeException();
+            flock($limit,LOCK_UN); fclose($limit);
+        }
+        if (!$isAdmin && in_array($action,$adminActions,true)) { http_response_code(403); exit; }
+        $db=fopen(PRIVATE_DIR.'/state.lock','c+');
+        if (!$db || !flock($db,LOCK_EX)) throw new RuntimeException();
+        $raw=readState();
+        $originalState=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
+        $state=$originalState;
+        if (($state['jobs_received']??0)<time()-3600) unset($state['jobs'],$state['jobs_received']);
+        $record=$state['devices'][$deviceId]??null;
+        $authenticated=$authenticated && ($record['status']??'')==='approved' && is_string($session['auth']['nonce']??null) && hash_equals($record['auth_token']??'',hash('sha256',$session['auth']['nonce']));
+        if (!$authenticated) unset($session['auth']);
+        $result=[];
+        if (in_array($action,['register-options','register','login-options','login'],true))
+            $web=new \lbuchs\WebAuthn\WebAuthn('Oaclis','oaclis.krprojects.it',['none'],true);
+        switch ($action) {
+        case 'admin-list':
+            if (!$isAdmin) respond([],403);
+            $result['devices']=array_values(array_map(function($id,$r){return ['id'=>$id,'name'=>$r['name'],'status'=>$r['status'],'created'=>$r['created'],'lastAccess'=>$r['lastAccess']??null,'active'=>$r['status']==='approved' && ($r['lastSeen']??0)>=time()-30,'pairing'=>$r['status']==='pending'?($r['pairing']??null):null];},array_keys($state['devices']),$state['devices']));
+            break;
+        case 'chat-access': case 'set-chat-access':
+            if (!$isAdmin) respond([],403);
+            $target=$input['id']??'';
+            if (!is_string($target) || ($state['devices'][$target]['status']??'')!=='approved') respond([],403);
+            if ($action==='chat-access') { $result=['chats'=>$state['devices'][$target]['chats']??[]]; break; }
+            $chats=$input['chats']??null;
+            if (!is_array($chats) || !array_is_list($chats) || count($chats)>500) throw new RuntimeException();
+            $allowed=[];
+            foreach ($chats as $chat) {
+                if (!is_array($chat) || !is_string($chat['id']??null) || !preg_match('/^[A-Za-z0-9][A-Za-z0-9_.-]{0,159}$/D',$chat['id']) || !is_string($chat['name']??null) || trim($chat['name'])==='' || mb_strlen($chat['name'])>320 || preg_match('/[\x00-\x1f\x7f]/u',$chat['name']) || isset($allowed[$chat['id']])) throw new RuntimeException();
+                $icon=$chat['icon']??''; $color=$chat['color']??'';
+                if (!is_string($icon) || strlen($icon)>48000 || ($icon!=='' && !preg_match('/^(?:[a-z]+|data:image\/png;base64,iVBORw0KGgo[A-Za-z0-9+\/=]*)$/D',$icon)) || !is_string($color) || ($color!=='' && !preg_match('/^#[a-f0-9]{6}$/iD',$color))) throw new RuntimeException();
+                $number=$chat['number']??null;
+                if ($number!==null && (!is_int($number) || $number<1 || $number>9007199254740991)) throw new RuntimeException();
+                $allowed[$chat['id']]=['id'=>$chat['id'],'name'=>$chat['name'],'icon'=>$icon,'color'=>$color,'number'=>$number];
+            }
+            $state['devices'][$target]['chats']=array_values($allowed);
+            if (isset($state['devices'][$target]['console']) && !isset($allowed[$state['devices'][$target]['console']['chat_id']])) unset($state['devices'][$target]['console']);
+            $result=['ok'=>true];
+            break;
+        case 'invite':
+            if (!$isAdmin) respond([],403);
+            $state['invitations']=array_filter($state['invitations'],fn($r)=>$r['until']>time());
+            if (count($state['invitations'])>=20) throw new RuntimeException();
+            $hash=$input['invite_hash']??'';
+            if (!is_string($hash) || !preg_match('/^[a-f0-9]{64}$/D',$hash)) throw new RuntimeException();
+            $state['invitations'][$hash]=['until'=>time()+600];
+            $result=['ok'=>true];
+            break;
+        case 'approve': case 'revoke':
+            if (!$isAdmin) respond([],403);
+            if ($action==='revoke' && ($input['reset_all']??false)===true) {
+                $state['devices']=[]; $state['invitations']=[];
+                $session=[];
+                $result=['ok'=>true]; break;
+            }
+            $id=$input['id']??'';
+            if (!isset($state['devices'][$id])) throw new RuntimeException();
+            if ($action==='revoke' && ($input['forget']??false)===true) {
+                unset($state['devices'][$id]); $result=['ok'=>true]; break;
+            }
+            if ($action==='approve' && $state['devices'][$id]['status']!=='pending') throw new RuntimeException();
+            $state['devices'][$id]['status']=$action==='approve'?'approved':'revoked';
+            if ($action==='revoke') $state['devices'][$id]['lastSeen']=0;
+            if ($action==='revoke') unset($state['devices'][$id]['console'],$state['devices'][$id]['auth_token'],$state['devices'][$id]['login_challenge']);
+            $result=['ok'=>true];
+            break;
+        case 'register-options':
+            $invite=$input['invite']??'';
+            if (!is_string($invite) || !preg_match('/^[a-f0-9]{64}$/D',$invite)) respond([],403);
+            if (!$deviceId || $record || ($state['invitations'][$invite]['until']??0)<time() || count($state['devices'])>=100) respond([],403);
+            $name=trim((string)($input['name']??'Telefono'));
+            if ($name==='' || mb_strlen($name)>60) throw new RuntimeException();
+            $pairing=$input['pairing']??null;
+            if (!is_array($pairing) || ($pairing['invite_hash']??null)!==$invite || !is_string($pairing['payload']??null) || strlen($pairing['payload'])>2048 || !is_string($pairing['proof']??null) || !preg_match('/^[a-f0-9]{64}$/D',$pairing['proof']) || !is_string($pairing['key_proof']??null) || !preg_match('/^[a-f0-9]{128}$/D',$pairing['key_proof'])) respond([],403);
+            $binding=json_decode($pairing['payload'],true,8,JSON_THROW_ON_ERROR);
+            if (!is_array($binding) || !array_is_list($binding) || count($binding)!==4 || $binding[0]!=='oaclis-pair-v1' || $binding[1]!==$deviceId || $binding[2]!==$name || !is_string($binding[3]) || !preg_match('/^04[a-f0-9]{128}$/D',$binding[3])) respond([],403);
+            $args=$web->getCreateArgs(hex2bin($deviceId),$name,$name,60,true,true,false);
+            $nonce=bin2hex(random_bytes(32));$state['invitations'][$invite]['challenge']=hash('sha256',$nonce);
+            $session['challenge']=['nonce'=>$nonce,'kind'=>'create','device'=>$deviceId,'until'=>time()+120,'bytes'=>base64_encode($web->getChallenge()->getBinaryString()),'invite'=>$invite,'name'=>$name,'pairing'=>$pairing];
+            $result=$args;
+            break;
+        case 'register':
+            $pending=$session['challenge']??[];
+            $challenge=takeChallenge('create',$deviceId);
+            $invite=$pending['invite']??'';
+            if (!$deviceId || $record || ($state['invitations'][$invite]['until']??0)<time()) respond([],403);
+            $data=$web->processCreate(checkClient($input['clientDataJSON']??''),decode($input['attestationObject']??''),$challenge,true,true);
+            if (!hash_equals($data->credentialId,decode($input['id']??''))) throw new RuntimeException();
+            $state['devices'][$deviceId]=['name'=>$pending['name'],'status'=>'pending','created'=>gmdate('c'),'credential'=>base64_encode($data->credentialId),'key'=>$data->credentialPublicKey,'counter'=>$data->signatureCounter??0,'pairing'=>$pending['pairing']];
+            unset($state['invitations'][$invite]);
+            $result=['status'=>'pending'];
+            break;
+        case 'status':
+            if (!$record || $record['status']==='revoked') respond([],403);
+            $result=['status'=>$record['status'],'name'=>$record['name']];
+            break;
+        case 'login-options':
+            if (!$record || $record['status']!=='approved') respond([],403);
+            $args=$web->getGetArgs([base64_decode($record['credential'],true)],60,true,true,true,true,true,true);
+            $nonce=bin2hex(random_bytes(32));$state['devices'][$deviceId]['login_challenge']=hash('sha256',$nonce);
+            $session['challenge']=['nonce'=>$nonce,'kind'=>'get','device'=>$deviceId,'until'=>time()+120,'bytes'=>base64_encode($web->getChallenge()->getBinaryString())];
+            $result=$args;
+            break;
+        case 'login':
+            $challenge=takeChallenge('get',$deviceId);
+            if (!$record || $record['status']!=='approved' || !hash_equals($record['credential'],base64_encode(decode($input['id']??'')))) respond([],403);
+            if (!empty($input['userHandle']) && !hash_equals(hex2bin($deviceId),decode($input['userHandle']))) throw new RuntimeException();
+            $web->processGet(checkClient($input['clientDataJSON']??''),decode($input['authenticatorData']??''),decode($input['signature']??''),$record['key'],$challenge,$record['counter'],true,true);
+            $state['devices'][$deviceId]['counter']=$web->getSignatureCounter()??0;
+            $state['devices'][$deviceId]['lastAccess']=gmdate('c');
+            $state['devices'][$deviceId]['lastSeen']=time();
+            $nonce=bin2hex(random_bytes(32));$state['devices'][$deviceId]['auth_token']=hash('sha256',$nonce);
+            $session['auth']=['device'=>$deviceId,'until'=>time()+7200,'nonce'=>$nonce];
+            $result=['ok'=>true];
+            break;
+        case 'console': case 'console-result':
+            if (!$authenticated) respond([],403);
+            if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
+            $chat=$input['chat_id']??'';
+            if (!is_string($chat) || !in_array($chat,array_column($record['chats']??[],'id'),true)) respond([],403);
+            if ($action==='console-result') {
+                $job=$state['devices'][$deviceId]['console']??[];
+                if (($job['id']??'')!==($input['request_id']??'') || ($job['chat_id']??'')!==$chat) respond([],409);
+                // Wait without the state lock: the master must publish the result.
+                $authUntil=$session['auth']['until'];
+                $deadline=microtime(true)+2;
+                while (!isset($job['result']) && microtime(true)<$deadline) {
+                    flock($db,LOCK_UN);
+                    usleep(100000);
+                    if (!flock($db,LOCK_EX)) throw new RuntimeException();
+                    $raw=readState();
+                    $originalState=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
+                    $state=$originalState;
+                    $record=$state['devices'][$deviceId]??null;
+                    $job=$record['console']??[];
+                    if (!$record || $record['status']!=='approved' || $authUntil<time() || !hash_equals($record['auth_token']??'',hash('sha256',$session['auth']['nonce'])) ||
+                        !in_array($chat,array_column($record['chats']??[],'id'),true)) respond([],403);
+                    if (($job['id']??'')!==($input['request_id']??'') || ($job['chat_id']??'')!==$chat) respond([],409);
+                }
+                if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
+                $result=isset($job['result'])?$job['result']:['pending'=>true];
+                break;
+            }
+            $operation=$input['operation']??''; $text=$input['text']??''; $key=$input['key']??'';
+            if (!in_array($operation,['open','read','stop','input','create','engines','models'],true) || !is_string($text) || mb_strlen($text)>8000 || str_contains($text,"\0") || !in_array($key,['','Enter','Escape','Tab','Up','Down','Left','Right','BSpace','C-c','1','2','3'],true)) throw new RuntimeException();
+            $signed=$input['signed']??null;
+            if (!is_array($signed) || !is_string($signed['payload']??null) || strlen($signed['payload'])>786432 || !is_string($signed['signature']??null) || !preg_match('/^[a-f0-9]{128}$/D',$signed['signature'])) respond([],403);
+            $packet=json_decode($signed['payload'],true,16,JSON_THROW_ON_ERROR);
+            if (!is_array($packet) || ($packet['purpose']??'')!=='oaclis-console-v1' || ($packet['device']??'')!==$deviceId || ($packet['chat_id']??'')!==$chat || ($packet['action']??'')!==$operation || ($packet['text']??null)!==$text || ($packet['key']??null)!==$key || !is_string($packet['id']??null) || !preg_match('/^[a-f0-9]{32}$/D',$packet['id'])) respond([],403);
+            if (!is_bool($packet['speech']??false) || (($packet['speech_cursor']??null)!==null && (!is_int($packet['speech_cursor']) || $packet['speech_cursor']<0))) respond([],403);
+            if (isset($packet['screen_revision']) && (!is_string($packet['screen_revision']) || !preg_match('/^[a-f0-9]{64}$/Di',$packet['screen_revision']))) respond([],403);
+            if ($operation==='create' && (trim($text)==='' || mb_strlen($text)>160 || $key!=='' || isset($packet['image']) || !is_string($packet['icon']??'') || !preg_match('/^[a-z]*$/D',$packet['icon']??''))) respond([],400);
+            if (isset($packet['image'])) {
+                $image=$packet['image'];
+                if ($operation!=='input' || $key!=='Enter' || !is_string($image) || strlen($image)>699075 || !str_starts_with($image,'data:image/jpeg;base64,')) respond([],400);
+                $bytes=base64_decode(substr($image,23),true);
+                if ($bytes===false || strlen($bytes)>524288 || !str_starts_with($bytes,"\xff\xd8\xff") || !str_ends_with($bytes,"\xff\xd9")) respond([],400);
+            }
+            $previous=$record['console']??[];
+            // Only observations can be superseded; pending inputs remain exclusive.
+            if (($previous['until']??0)>time() && !isset($previous['result']) && !(in_array($operation,['input','create','engines','models'],true) && ($previous['operation']??'')==='read')) respond(['error'=>'Attendi il completamento della richiesta.'],409);
+            $id=$packet['id'];
+            $state['devices'][$deviceId]['console']=['id'=>$id,'chat_id'=>$chat,'operation'=>$operation,'until'=>min(time()+20,$session['auth']['until']),'signed'=>$signed];
+            $result=['request_id'=>$id];
+            break;
+        case 'console-exchange':
+            if (!$isAdmin) respond([],403);
+            $security=$input['security']??null;
+            if (!is_array($security) || !is_string($security['epoch']??null) || !preg_match('/^[a-f0-9]{64}$/D',$security['epoch']) || !is_int($security['time']??null)) throw new RuntimeException();
+            $state['console_security']=['epoch'=>$security['epoch'],'received_at'=>time()];
+            if (array_key_exists('active_chats',$input)) {
+                $active=$input['active_chats'];
+                if (!is_array($active)||!array_is_list($active)||count($active)>1024||array_filter($active,fn($id)=>!is_string($id)||!preg_match('/^[A-Za-z0-9_-]{1,160}$/D',$id))) throw new RuntimeException('Invalid session status');
+                $state['active_chats']=$active;
+            }
+            if (array_key_exists('jobs',$input)) {
+                $jobs=$input['jobs'];
+                if (!is_array($jobs)||!array_is_list($jobs)||count($jobs)>256||strlen(json_encode($jobs,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES))>65536) throw new RuntimeException('Invalid tool status');
+                foreach ($jobs as $row) {
+                    if (!is_array($row)||!is_string($row['chat_id']??null)||!is_string($row['id']??null)||!is_string($row['device_id']??null)||!preg_match('/^[A-Za-z0-9_-]{1,160}$/D',$row['chat_id'])||!preg_match('/^[A-Za-z0-9_-]{1,160}$/D',$row['id'])||!is_string($row['text']??null)||mb_strlen($row['text'])>2000||!is_int($row['updated_at']??null)||!is_bool($row['stale']??null)||(($row['progress']??null)!==null&&((!is_int($row['progress'])&&!is_float($row['progress']))||$row['progress']<0||$row['progress']>100))) throw new RuntimeException('Invalid tool status');
+                }
+                $state['jobs']=$jobs;$state['jobs_received']=time();
+            }
+            foreach (($input['results']??[]) as $answer) {
+                $target=$answer['device']??''; $job=$state['devices'][$target]['console']??[];
+                if (($job['id']??'')!==($answer['id']??null) || ($job['until']??0)<time() || ($state['devices'][$target]['status']??'')!=='approved' || !in_array($job['chat_id'],array_column($state['devices'][$target]['chats']??[],'id'),true)) continue;
+                unset($state['devices'][$target]['console']['signed']);
+                if (($job['operation']??'')==='create' && is_array($answer['new_chat']??null)) {
+                    $chat=$answer['new_chat'];
+                    if (!is_string($chat['id']??null)||!preg_match('/^[a-f0-9-]{36}$/D',$chat['id'])||!is_string($chat['name']??null)||mb_strlen($chat['name'])>160||!is_string($chat['icon']??null)||!preg_match('/^[a-z]*$/D',$chat['icon'])) throw new RuntimeException('Invalid new chat');
+                    if (!in_array($chat['id'],array_column($state['devices'][$target]['chats']??[],'id'),true)) $state['devices'][$target]['chats'][]=$chat;
+                    $state['devices'][$target]['console']['result']=['new_chat'=>$chat];
+                    continue;
+                }
+                if (($job['operation']??'')==='engines' && is_array($answer['engines']??null) && strlen(json_encode($answer['engines']))<=16384) {
+                    $state['devices'][$target]['console']['result']=['engines'=>$answer['engines']];
+                    continue;
+                }
+                if (($job['operation']??'')==='models' && is_array($answer['models']??null) && array_is_list($answer['models']) && strlen(json_encode($answer['models']))<=32768) {
+                    $state['devices'][$target]['console']['result']=['models'=>$answer['models']];
+                    continue;
+                }
+                $packet=json_decode($job['signed']['payload']??'{}',true);
+                $revision=$answer['screen_revision']??null;
+                $validRevision=is_string($revision)&&preg_match('/^[a-f0-9]{64}$/Di',$revision);
+                $unchanged=($answer['unchanged']??false)===true&&($job['operation']??'')==='read'&&$validRevision&&($packet['screen_revision']??null)===$revision;
+                $screen=$answer['screen']??null;
+                $state['devices'][$target]['console']['result']=is_string($screen)&&strlen($screen)<=60000?['screen'=>$screen]:['error'=>'Console non disponibile. Riprova.'];
+                if ($unchanged) $state['devices'][$target]['console']['result']=['unchanged'=>true];
+                if (($answer['stopped']??false)===true) $state['devices'][$target]['console']['result']=['stopped'=>true];
+                if ($validRevision&&($unchanged||is_string($screen))) $state['devices'][$target]['console']['result']['screen_revision']=$revision;
+                if (is_string($screen)&&strlen($screen)<=60000&&is_string($answer['screen_ansi']??null)&&strlen($answer['screen_ansi'])<=24000) $state['devices'][$target]['console']['result']['screen_ansi']=$answer['screen_ansi'];
+                if (($unchanged||is_string($screen))&&is_array($answer['jobs']??null)&&array_is_list($answer['jobs'])&&strlen(json_encode($answer['jobs']))<=65536&&!array_filter($answer['jobs'],fn($row)=>!is_array($row)||($row['chat_id']??null)!==$job['chat_id'])) $state['devices'][$target]['console']['result']['jobs']=$answer['jobs'];
+                if (($unchanged||is_string($screen))&&is_array($answer['speech']??null)&&strlen(json_encode($answer['speech'],JSON_UNESCAPED_UNICODE))<=10000) $state['devices'][$target]['console']['result']['speech']=$answer['speech'];
+            }
+            $result=['commands'=>[], 'console_active'=>false];
+            foreach ($state['devices'] as $id=>$phone) {
+                $job=$phone['console']??[];
+                if ($phone['status']==='approved' && ($job['until']??0)>=time()) $result['console_active']=true;
+                if ($phone['status']==='approved' && ($job['until']??0)>=time() && !isset($job['result']) && in_array($job['chat_id'],array_column($phone['chats']??[],'id'),true)) {
+                    if (!empty($job['claimed'])) continue;
+                    $state['devices'][$id]['console']['claimed']=true;
+                    $result['commands'][]=['device'=>$id,'id'=>$job['id'],'signed'=>$job['signed']??null];
+                    break;
+                }
+            }
+            break;
+        case 'protected':
+            if (!$authenticated) respond([],403);
+            if (($record['lastSeen']??0)<time()-10) $state['devices'][$deviceId]['lastSeen']=time();
+            $allowed=array_column($record['chats']??[],'id');
+            $jobs=array_values(array_filter($state['jobs']??[],fn($job)=>in_array($job['chat_id']??null,$allowed,true)));
+            foreach ($jobs as &$job) if (($state['console_security']['received_at']??0)<time()-30) $job['stale']=true;
+            unset($job);
+            $chats=$record['chats']??[];
+            foreach ($chats as &$chat) $chat['active']=($state['console_security']['received_at']??0)>=time()-30&&in_array($chat['id'],$state['active_chats']??[],true);
+            unset($chat);
+            $result=['message'=>'Accesso autorizzato','name'=>$record['name'],'time'=>gmdate('c'),'chats'=>$chats,'jobs'=>$jobs];
+            break;
+        case 'logout':
+            if ($authenticated) {$state['devices'][$deviceId]['lastSeen']=0;unset($state['devices'][$deviceId]['auth_token'],$state['devices'][$deviceId]['console']);}
+            unset($session['auth'],$session['challenge']);
+            $result=['ok'=>true];
+            break;
+        default: respond([],404);
+        }
+        if (in_array($action,['protected','console','console-result'],true)) $result['security']=isset($state['console_security']['epoch'])?['epoch'=>$state['console_security']['epoch'],'time'=>time()]:null;
+        if ($state!==$originalState) {
+            $encoded=json_encode($state,JSON_THROW_ON_ERROR|JSON_PRETTY_PRINT);
+            $temporary=tempnam(PRIVATE_DIR,'state-');
+            if ($temporary===false) throw new RuntimeException();
+            try {
+                if (file_put_contents($temporary,$encoded)!==strlen($encoded) ||
+                    !rename($temporary,PRIVATE_DIR.'/state.json')) throw new RuntimeException();
+            } finally { if (is_file($temporary)) unlink($temporary); }
+        }
+        flock($db,LOCK_UN); fclose($db);
+        writeCookie();
+        echo json_encode($result,JSON_THROW_ON_ERROR|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES);
+    } catch (Throwable $e) { writeCookie(); @file_put_contents(PRIVATE_DIR.'/last-error.json',json_encode(['action'=>is_string($action??null)?substr($action,0,32):'','reason'=>substr($e->getMessage(),0,240),'line'=>$e->getLine(),'time'=>gmdate('c')]),LOCK_EX); error_log('Oaclis auth test: '.$e->getMessage()); http_response_code(400); echo '{"error":"Verifica non riuscita. Riprova."}'; }
+    exit;
+}
+if ($_SERVER['REQUEST_METHOD']!=='GET') {http_response_code(405);exit;}
+function pwaVersion(): string {
+    $sums=[0,0,0]; $counts=[0,0,0];
+    foreach (['index.php','app.js','style.css','voice.js','read-aloud.js','security.js','sw.js','locale.js','engines.js','jobs.js','jobs.css','icons.js','terminal-format.js','console.css'] as $file) {
+        $source=file_get_contents(__DIR__.'/'.$file,false,null,0,512);
+        if ($source===false || !preg_match('/'.preg_quote($file,'/').' v([0-9]+)\.([0-9]+)\.([0-9]+)/',$source,$match)) throw new RuntimeException('Missing PWA source version');
+        for ($i=0;$i<3;$i++) {
+            $value=(int)$match[$i+1];
+            if ($i===1 && $value===0) continue;
+            $sums[$i]+=$value; $counts[$i]++;
+        }
+    }
+    $parts=[];
+    for ($i=0;$i<3;$i++) $parts[]=$counts[$i] ? intdiv($sums[$i]*2+$counts[$i],$counts[$i]*2) : 0;
+    return 'v'.implode('.',$parts);
+}
+?>
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content"><meta name="robots" content="noindex,nofollow"><title>Oaclis</title><meta name="theme-color" content="#111314"><link rel="stylesheet" href="/jobs.css?v=<?= hash_file('sha256', __DIR__.'/jobs.css') ?>"><link rel="manifest" href="/manifest.webmanifest"><link rel="icon" type="image/png" href="/icon-192.png"><link rel="apple-touch-icon" href="/icon-192.png"><link rel="stylesheet" href="/style.css?v=<?= hash_file('sha256', __DIR__.'/style.css') ?>"><link rel="stylesheet" href="/console.css?v=<?= hash_file('sha256', __DIR__.'/console.css') ?>"><script defer src="/locale.js?v=<?= hash_file('sha256', __DIR__.'/locale.js') ?>"></script><script defer src="/engines.js?v=<?= hash_file('sha256', __DIR__.'/engines.js') ?>"></script><script defer src="/jobs.js?v=<?= hash_file('sha256', __DIR__.'/jobs.js') ?>"></script><script defer src="/icons.js?v=<?= hash_file('sha256', __DIR__.'/icons.js') ?>"></script><script defer src="/voice.js?v=<?= hash_file('sha256', __DIR__.'/voice.js') ?>"></script><script defer src="/security.js?v=<?= hash_file('sha256', __DIR__.'/security.js') ?>"></script><script defer src="/terminal-format.js?v=<?= hash_file('sha256', __DIR__.'/terminal-format.js') ?>"></script><script defer src="/read-aloud.js?v=<?= hash_file('sha256', __DIR__.'/read-aloud.js') ?>"></script><script defer src="/app.js?v=<?= hash_file('sha256', __DIR__.'/app.js') ?>"></script></head>
+<body><main id="app" data-pwa-version="<?= pwaVersion() ?>" hidden aria-live="polite"></main></body></html>
