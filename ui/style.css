@@ -1,4 +1,4 @@
-/* style.css v2.0.1619 */
+/* style.css v2.0.1623 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1368,3 +1368,7 @@ html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: va
 #gaze-panel video{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:var(--soft);border:var(--border-width) solid var(--line);border-radius:var(--radius-control)}
 #gaze-panel [role="status"],#gaze-panel .gaze-note{font-size:var(--font-small);color:var(--muted);margin:var(--space-12) 0}
 .gaze-actions{display:flex;gap:var(--space-8);margin-block:var(--space-12)}.gaze-actions .primary{margin:0;flex:1}.gaze-focus{display:flex;align-items:center;gap:var(--space-8);font-size:var(--font-small)}
+
+.gaze-display-settings{margin-block:var(--space-18)}.gaze-display-heading{display:flex;align-items:center;justify-content:space-between;gap:var(--space-8)}.gaze-display-heading h3{font-size:var(--font-small);font-weight:var(--weight-medium);margin:0}.gaze-display-heading .icon-button{flex-shrink:0}
+.gaze-monitors{--gaze-map-max-height:180px;position:relative;width:min(100%,calc(var(--gaze-map-max-height) * var(--gaze-aspect,1)));aspect-ratio:var(--gaze-aspect,1);margin-top:var(--space-8)}.gaze-monitors:empty{display:none}.gaze-monitors button{position:absolute;display:grid;place-content:center;justify-items:center;gap:var(--space-4);padding:var(--space-4);border:2px solid var(--panel);border-radius:var(--radius-control);background:var(--soft);color:var(--muted);font-size:var(--font-small);transition:background var(--duration-ui) var(--ease-ui),color var(--duration-ui) var(--ease-ui)}.gaze-monitors button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}.gaze-monitors button span{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.gaze-monitors svg{width:var(--size-20);height:var(--size-20)}
+#gaze-panel [data-monitor-status]{font-size:var(--font-small);color:var(--muted);margin-block:var(--space-8)}

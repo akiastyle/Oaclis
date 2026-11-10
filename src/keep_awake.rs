@@ -1,4 +1,4 @@
-// keep_awake.rs v1.20.507
+// keep_awake.rs v1.20.509
 //! Native power settings; no forced monitor-off or forced sleep commands.
 use crate::invalid;
 use serde_json::json;
@@ -15,7 +15,7 @@ fn host() -> io::Result<&'static str> {
     Err(invalid("Blocco standby non supportato in questo ambiente"))
 }
 
-fn windows(script: &str) -> Command {
+pub(crate) fn windows(script: &str) -> Command {
     let mut command = Command::new("/mnt/c/Windows/System32/WindowsPowerShell/v1.0/powershell.exe");
     command.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]);
     if !env::var_os("WSL_INTEROP").is_some_and(|p| fs::metadata(p).is_ok_and(|m| m.file_type().is_socket())) {

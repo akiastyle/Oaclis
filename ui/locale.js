@@ -1,4 +1,4 @@
-// locale.js v1.3.549
+// locale.js v1.3.559
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -8,6 +8,16 @@ window.OaclisSettings=(()=>{
  const speechLanguage=language==='it'?'it-IT':'en-US';
  document.documentElement.lang=language;
  const en={
+  "Monitor per la calibrazione":"Calibration monitors",
+  "Rileva monitor":"Detect monitors",
+  "Rilevamento monitor…":"Detecting monitors…",
+  "Rilevamento monitor disponibile sul computer Windows di Oaclis.":"Monitor detection is available on the Windows computer running Oaclis.",
+  "Nessun monitor attivo.":"No active monitors.",
+  "Monitor selezionati":"Selected monitors",
+  "Principale":"Primary",
+  "Monitor":"Monitor",
+  "Impossibile rilevare i monitor. Riprova.":"Unable to detect monitors. Try again.",
+
   "Controllo sguardo":"Gaze control",
   "Webcam di questo computer":"Camera on this computer",
   "Anteprima webcam":"Camera preview",

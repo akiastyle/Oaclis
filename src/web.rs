@@ -1,4 +1,4 @@
-// web.rs v2.29.1932
+// web.rs v2.29.1935
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -263,12 +263,13 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
         let _configuration_edit = if request.method() == &Method::Post && matches!(url.as_str(), "/api/device" | "/api/device/delete" | "/api/rule") {
             Some(configuration_edits.lock().unwrap())
         } else { None };
-        if !matches!(url.as_str(),"/api/state"|"/api/status"|"/api/log"|"/api/links"|"/api/peers"|"/api/mobile/qr"|"/api/mobile/pending"|"/api/jobs/status"|"/api/jobs/list"|"/api/terminal") {
+        if !matches!(url.as_str(),"/api/state"|"/api/status"|"/api/log"|"/api/links"|"/api/peers"|"/api/mobile/qr"|"/api/mobile/pending"|"/api/jobs/status"|"/api/jobs/list"|"/api/gaze/monitors"|"/api/terminal") {
             let action=match url.as_str(){"/api/device/control"=>"Controllo dispositivo","/api/links/play"=>"Richiesta sincronizzazione","/api/appearance"=>"Salvataggio impostazioni chat","/api/positions"|"/api/link-position"=>"Salvataggio posizione",_=>"Operazione dall'interfaccia"};
             crate::state_transport::log(action.into());
         }
         let result = (|| -> io::Result<Value> {
             match (request.method(), url.as_str()) {
+                (&Method::Post, "/api/gaze/monitors") => crate::gaze::monitors(),
                 (&Method::Post, "/api/jobs/status") => crate::jobs::update(body(&mut request)?),
                 (&Method::Post, "/api/jobs/list") => {
                     let mut result=crate::jobs::all(&devices::load(config.join("devices.json"))?);
