@@ -1,4 +1,4 @@
-/* style.css v2.0.1615 */
+/* style.css v2.0.1619 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1364,3 +1364,7 @@ html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: va
 .chat-terminal{--duration-console-focus:.8s;transition:border-color var(--duration-console-focus) var(--ease-ui,ease)}
 .chat-terminal[data-keyboard-focus]{border-color:var(--console-accent)}
 @media(prefers-reduced-motion:reduce){.chat-terminal{transition:none}}
+
+#gaze-panel video{display:block;width:100%;aspect-ratio:4/3;object-fit:contain;background:var(--soft);border:var(--border-width) solid var(--line);border-radius:var(--radius-control)}
+#gaze-panel [role="status"],#gaze-panel .gaze-note{font-size:var(--font-small);color:var(--muted);margin:var(--space-12) 0}
+.gaze-actions{display:flex;gap:var(--space-8);margin-block:var(--space-12)}.gaze-actions .primary{margin:0;flex:1}.gaze-focus{display:flex;align-items:center;gap:var(--space-8);font-size:var(--font-small)}

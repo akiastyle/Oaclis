@@ -1,4 +1,4 @@
-// locale.js v1.3.528
+// locale.js v1.3.549
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -8,6 +8,27 @@ window.OaclisSettings=(()=>{
  const speechLanguage=language==='it'?'it-IT':'en-US';
  document.documentElement.lang=language;
  const en={
+  "Controllo sguardo":"Gaze control",
+  "Webcam di questo computer":"Camera on this computer",
+  "Anteprima webcam":"Camera preview",
+  "Webcam predefinita":"Default camera",
+  "Avvia anteprima":"Start preview",
+  "Ferma anteprima":"Stop preview",
+  "Anteprima spenta":"Preview off",
+  "Collegamento webcam…":"Connecting to camera…",
+  "Anteprima attiva · nessun rilevamento dello sguardo":"Preview active · gaze tracking is not running",
+  "Webcam scollegata":"Camera disconnected",
+  "Accesso alla webcam negato. Consenti la fotocamera nelle impostazioni del browser.":"Camera access denied. Allow the camera in your browser settings.",
+  "Nessuna webcam disponibile.":"No camera available.",
+  "Webcam occupata da un altro programma.":"Camera in use by another application.",
+  "Webcam selezionata non disponibile. Scegline un’altra.":"Selected camera unavailable. Choose another camera.",
+  "Impossibile avviare la webcam.":"Unable to start the camera.",
+  "Calibra":"Calibrate",
+  "Test":"Test",
+  "Focus automatico":"Automatic focus",
+  "Calibrazione e rilevamento dello sguardo non ancora disponibili.":"Calibration and gaze tracking are not available yet.",
+  "Apri Oaclis su localhost o HTTPS per usare la webcam.":"Open Oaclis on localhost or HTTPS to use the camera.",
+
   "Statistiche":"Statistics",
   "Nessun dato disponibile":"No data available",
   "Avanzamento non disponibile":"Progress unavailable",

@@ -28,4 +28,6 @@ Per avere tempo di passare manualmente a un altro programma prima del tentativo:
 
 Nella UI, il bordo della singola console evidenzia il focus DOM effettivo dentro la pagina e si spegne quando la finestra perde il focus. La transizione dura 0,8 s e rispetta la preferenza di movimento ridotto. Funziona per pannelli interni e finestre separate; non aggiunge rilevamento dello sguardo o selezione automatica dei pannelli.
 
-Il toggle nel menu e previsto per il servizio dello sguardo, non per questo script finito. Il servizio webcam non e ancora implementato: nessun pulsante fittizio lo dichiara attivo. Lo script Win32 e specifico per Windows; il bordo della console funziona nei browser anche su macOS e Linux.
+Nel menu Oaclis, l’icona occhio apre il pannello contestuale Controllo sguardo. La selezione della webcam viene ricordata nel browser; Avvia anteprima richiede il permesso della fotocamera e mostra solo il video locale, senza audio, registrazioni o invio di immagini. Ferma anteprima, la chiusura del pannello e l’uscita dalla pagina rilasciano la camera. La camera selezionata e quella del computer sul quale e aperto il browser, non quella di un peer selezionato nella mappa.
+
+Calibra, Test e Focus automatico sono disabilitati e dichiarati non disponibili: il servizio di rilevamento dello sguardo non e ancora implementato. Lo script Win32 resta specifico per Windows; anteprima webcam e bordo della console usano API browser e funzionano anche su macOS e Linux compatibili.
