@@ -28,7 +28,7 @@ Per avere tempo di passare manualmente a un altro programma prima del tentativo:
 
 Nella UI, il bordo della singola console evidenzia il focus DOM effettivo dentro la pagina e si spegne quando la finestra perde il focus. La transizione dura 0,8 s e rispetta la preferenza di movimento ridotto. Funziona per pannelli interni e finestre separate; non aggiunge rilevamento dello sguardo o selezione automatica dei pannelli.
 
-Nel menu Oaclis, l’icona occhio apre il pannello contestuale Controllo sguardo. La selezione della webcam viene ricordata nel browser; Avvia anteprima richiede il permesso della fotocamera e mostra solo il video locale, senza audio, registrazioni o invio di immagini. Ferma anteprima, la chiusura del pannello e l’uscita dalla pagina rilasciano la camera. La camera selezionata e quella del computer sul quale e aperto il browser, non quella di un peer selezionato nella mappa.
+Nel menu Oaclis, l’icona occhio apre il pannello contestuale Controllo sguardo. La selezione della webcam viene ricordata nel browser; L’apertura del pannello avvia l’anteprima, richiede il permesso della fotocamera e mostra solo il video locale, senza audio, registrazioni o invio di immagini. La X del pannello e l’uscita dalla pagina rilasciano la camera; non esiste un pulsante separato per avviare o fermare l’anteprima. La camera selezionata e quella del computer sul quale e aperto il browser, non quella di un peer selezionato nella mappa.
 
 Calibra si abilita con anteprima attiva e almeno un monitor selezionato. Test e Focus automatico restano disabilitati: non viene ancora applicato alcun cambio di finestra tramite lo sguardo. Lo script Win32 resta specifico per Windows; anteprima webcam e bordo della console usano API browser e funzionano anche su macOS e Linux compatibili.
 
@@ -37,7 +37,7 @@ Il pannello mostra anche una mappa dei monitor Windows del computer che esegue O
 
 ## Calibrazione manuale degli occhi
 
-Con l’anteprima accesa, Calibra apre una finestra separata. Trascinare due rettangoli distinti, uno intorno a ciascun occhio, includendo pupilla e parte bianca ma evitando sopracciglia. L’immagine di selezione non e specchiata. La testa deve restare nella stessa posizione durante tutta la prova.
+Aprendo il pannello la webcam si accende automaticamente. Calibra apre una finestra separata. Trascinare due rettangoli distinti, uno intorno a ciascun occhio, includendo pupilla e parte bianca ma evitando sopracciglia. L’immagine di selezione non e specchiata. La testa deve restare nella stessa posizione durante tutta la prova.
 
 Continua richiede a Chrome il permesso di gestione dei monitor. Per ciascun monitor Windows selezionato si conferma lo schermo del browser corrispondente prima di Avvia i 9 punti. L’abbinamento iniziale usa geometria e DPI quando coincide; il selettore consente la conferma manuale, necessaria quando le coordinate browser e Windows differiscono. I bersagli sono presentati a schermo intero tramite [Window Management API](https://developer.chrome.com/docs/capabilities/web-apis/window-management), uno schermo alla volta. Il controllo resta separato dal focus automatico delle console.
 
