@@ -1,4 +1,4 @@
-// locale.js v1.3.559
+// locale.js v1.3.598
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -8,6 +8,45 @@ window.OaclisSettings=(()=>{
  const speechLanguage=language==='it'?'it-IT':'en-US';
  document.documentElement.lang=language;
  const en={
+  "Calibrazione sguardo":"Gaze calibration",
+  "Seleziona le due zone degli occhi":"Select the two eye regions",
+  "Schermo del browser":"Browser display",
+  "Riseleziona occhi":"Reselect eyes",
+  "Continua":"Continue",
+  "Punti di calibrazione":"Calibration points",
+  "Acquisisci punto":"Capture point",
+  "Annulla calibrazione":"Cancel calibration",
+  "Apri la calibrazione dal pannello Controllo sguardo.":"Open calibration from the Gaze control panel.",
+  "Impossibile completare la calibrazione.":"Unable to complete calibration.",
+  "La webcam non è più disponibile. Riapri l’anteprima.":"The camera is no longer available. Reopen the preview.",
+  "Trascina un rettangolo intorno a ciascun occhio, includendo pupilla e parte bianca. Mantieni ferma la testa.":"Drag a rectangle around each eye, including the pupil and the white. Keep your head still.",
+  "Seleziona il primo occhio.":"Select the first eye.",
+  "Seleziona il secondo occhio.":"Select the second eye.",
+  "Seleziona una zona distinta e abbastanza grande intorno all’occhio.":"Select a separate region large enough to contain the eye.",
+  "Occhi selezionati. Continua per scegliere lo schermo.":"Eyes selected. Continue to choose the display.",
+  "Seleziona lo schermo corrispondente":"Select the matching display",
+  "Avvia i 9 punti":"Start the 9 points",
+  "Conferma lo schermo corrispondente. Guarda ogni punto e premi Spazio, senza muovere la testa.":"Confirm the matching display. Look at each point and press Space, keeping your head still.",
+  "Guarda il punto e premi Spazio.":"Look at the point and press Space.",
+  "Calcolo della calibrazione…":"Calculating calibration…",
+  "Calibrazione salvata. Focus automatico ancora disattivato.":"Calibration saved. Automatic focus is still off.",
+  "Errore stimato":"Estimated error",
+  "punti":"points",
+  "Acquisizione… mantieni lo sguardo sul punto.":"Capturing… keep looking at the point.",
+  "Pupille non distinguibili. Riprova il punto oppure riseleziona gli occhi.":"Pupils not distinguishable. Retry the point or reselect the eyes.",
+  "Sguardo instabile. Guarda il punto e premi di nuovo Spazio.":"Unstable gaze. Look at the point and press Space again.",
+  "Ricomincia":"Start over",
+  "Per la calibrazione su più monitor apri Oaclis con Chrome sul computer Windows.":"For calibration across displays, open Oaclis in Chrome on the Windows computer.",
+  "Disposizione monitor cambiata. Riavvia la calibrazione.":"Display layout changed. Restart calibration.",
+  "Pupille non distinguibili. Riseleziona gli occhi.":"Pupils not distinguishable. Reselect the eyes.",
+  "Schermo non corrispondente. Seleziona lo schermo corretto.":"Display does not match. Select the correct display.",
+  "Calibrazione annullata.":"Calibration cancelled.",
+  "Seleziona almeno un monitor.":"Select at least one display.",
+  "Seleziona gli occhi e acquisisci 9 punti per monitor. Il focus automatico resta spento.":"Select the eyes and capture 9 points per display. Automatic focus stays off.",
+  "Consenti le finestre popup per avviare la calibrazione.":"Allow popup windows to start calibration.",
+  "Misure dello sguardo insufficienti":"Insufficient gaze measurements",
+  "Movimento delle pupille non distinguibile":"Pupil movement is not distinguishable",
+  "Calibrazione imprecisa: ripeti mantenendo ferma la testa":"Inaccurate calibration: repeat while keeping your head still",
   "Monitor per la calibrazione":"Calibration monitors",
   "Rileva monitor":"Detect monitors",
   "Rilevamento monitor…":"Detecting monitors…",
