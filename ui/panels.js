@@ -1,4 +1,4 @@
-// panels.js v3.143.2882
+// panels.js v3.143.2887
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -640,16 +640,13 @@ function renderDiscovery() {
   positionContext(panel, $("#add-device"));
 }
 
-async function updateDiscovery(next, first = false) {
+async function updateDiscovery(next) {
   discovery = next;
   const fresh = next.peers.filter(peer => !noticedPeers.has(peer.id));
   for (const peer of fresh) noticedPeers.add(peer.id);
   const newRegistration = next.peers.some(peer => peer.device_id && !data.devices.some(device => device.id === peer.device_id));
   if (newRegistration && !removingPresentation) { data = await api('state'); chatLinks = data.links || []; renderMap(); await api('check', {}); }
   if (fresh.some(peer => !peer.connected)) { notice(OaclisSettings.text('Oaclis trovato nella rete')); beep(); }
-  if ((first && !data.devices.length) || fresh.some(peer => !peer.accepted && !peer.connected)) {
-    if (!document.querySelector('.context-popover:popover-open')) openDiscovery();
-  }
   renderDiscovery();
 }
 

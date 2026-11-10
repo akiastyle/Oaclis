@@ -1,4 +1,4 @@
-// gaze.js v1.6.53
+// gaze.js v1.6.57
 'use strict';
 window.OaclisGaze=(()=>{
  let panel=null,stream=null,generation=0,preferred='',selected=null,monitorLoading=false,available=[],calibrationWindow=null;
@@ -54,7 +54,7 @@ window.OaclisGaze=(()=>{
  }
  function open(anchor){
   if(!panel){
-   panel=document.createElement('section');panel.id='gaze-panel';panel.className='context-popover';panel.setAttribute('popover','auto');panel.setAttribute('role','dialog');panel.setAttribute('aria-label',text('Controllo sguardo'));panel.opener=anchor;
+   panel=document.createElement('section');panel.id='gaze-panel';panel.className='context-popover';panel.setAttribute('popover','manual');panel.setAttribute('role','dialog');panel.setAttribute('aria-label',text('Controllo sguardo'));panel.opener=anchor;
    panel.innerHTML=OaclisSettings.html('<button type="button" class="icon-button popover-close" aria-label="Chiudi pannello">'+OaclisIcon('close')+'</button><h2>Controllo sguardo</h2><label class="field">Webcam di questo computer<select aria-label="Webcam di questo computer"></select></label><section class="gaze-display-settings"><div class="gaze-display-heading"><h3>Monitor per la calibrazione</h3><button type="button" class="icon-button" data-monitor-refresh aria-label="Rileva monitor" title="Rileva monitor">'+OaclisIcon('refresh')+'</button></div><div class="gaze-monitors" role="group" aria-label="Monitor per la calibrazione"></div><p data-monitor-status aria-live="polite"></p></section><video autoplay muted playsinline aria-label="Anteprima webcam"></video><p role="status" aria-live="polite"></p><button type="button" class="primary" data-preview aria-pressed="false">Avvia anteprima</button><div class="gaze-actions"><button type="button" class="primary" data-calibrate disabled>Calibra</button><button type="button" class="primary" disabled>Test</button></div><label class="gaze-focus"><input type="checkbox" disabled>Focus automatico</label><p class="gaze-note">Seleziona gli occhi e acquisisci 9 punti per monitor. Il focus automatico resta spento.</p>');
    document.body.append(panel);
    panel.querySelector('[data-monitor-refresh]').onclick=monitors;
@@ -66,7 +66,7 @@ window.OaclisGaze=(()=>{
    navigator.mediaDevices?.addEventListener('devicechange',()=>{if(panel.matches(':popover-open'))cameras().catch(()=>status('Nessuna webcam disponibile.'));});
    window.addEventListener('pagehide',stop);
   }
-  if(panel.matches(':popover-open')){panel.hidePopover();return;}
+  if(panel.matches(':popover-open')){panel.querySelector('.popover-close').focus();return;}
   panel.showPopover();positionContext(panel,anchor);status('Anteprima spenta');monitors();
   if(!window.isSecureContext||!navigator.mediaDevices?.getUserMedia){panel.querySelector('[data-preview]').disabled=true;status('Apri Oaclis su localhost o HTTPS per usare la webcam.');return;}
   cameras().catch(()=>status('Nessuna webcam disponibile.'));

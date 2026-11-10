@@ -1,4 +1,4 @@
-// app.js v4.167.3205
+// app.js v4.167.3211
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -240,10 +240,6 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && $("#path-authorization[open]")) return;
   if (e.key === "Escape" && $("#terminal-choice")) { $("#terminal-choice .popover-close").click(); return; }
   if (e.key === "Escape" && document.activeElement?.closest(".chat-terminal")) { closeChatTerminal(document.activeElement.closest(".chat-terminal")); return; }
-  if (e.key === "Escape" && $("#device-settings")) { closeDeviceSettings(); return; }
-  if (e.key === "Escape" && $("#connection-popover")) { closeConnectionPopover(); return; }
-  if (e.key === "Escape" && $(".chat-editor")) { closeChatEditor(); return; }
-  if (e.key === "Escape" && !$("#panel").hidden) closePanel();
 });
 $("#back").onclick = showLibrary;
 async function openDevice(id) {
@@ -474,7 +470,7 @@ guard(async () => {
     localStorage.removeItem("oaclis-map");
     renderMap();
   }
-  await updateDiscovery(await api("peers"), true);
+  await updateDiscovery(await api("peers"));
   await api("check", {});
 })();
 

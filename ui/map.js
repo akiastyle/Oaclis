@@ -1,4 +1,4 @@
-// map.js v4.134.3540
+// map.js v4.134.3544
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -986,9 +986,9 @@ function renderMobileLinks() {
 }
 
 function openAccessChats(marker) {
-  if(marker.accessPanel?.isConnected){marker.accessPanel.hidePopover();return;}
+  if(marker.accessPanel?.isConnected){marker.accessPanel.querySelector('.popover-close').focus();return;}
   const {group}=marker.accessState,panel=document.createElement('div');
-  panel.className='access-chat-list';panel.setAttribute('popover','auto');panel.setAttribute('role','dialog');
+  panel.className='access-chat-list';panel.setAttribute('popover','manual');panel.setAttribute('role','dialog');
   panel.setAttribute('aria-label',group.name||deviceName(group.target));
   panel.innerHTML='<button type="button" class="icon-button popover-close" aria-label="'+esc(OaclisSettings.text('Chiudi'))+'">'+OaclisIcon('close')+'</button><h2>'+esc(group.name||deviceName(group.target))+'</h2>';
   for(const entry of OaclisTerminal.sortChats(group.entries,chatLabel)){

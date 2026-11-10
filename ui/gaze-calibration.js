@@ -1,4 +1,4 @@
-// gaze-calibration.js v1.0.0
+// gaze-calibration.js v1.0.2
 'use strict';
 (async()=>{
  const $=selector=>document.querySelector(selector),text=value=>OaclisSettings.text(value);
@@ -80,7 +80,9 @@
   try{
    if(!details){
     if(!window.getScreenDetails)throw Error(text('Per la calibrazione su più monitor apri Oaclis con Chrome sul computer Windows.'));
+    message('Consenti a Chrome di gestire i monitor per continuare.');
     details=await window.getScreenDetails();details.addEventListener('screenschange',()=>abort('Disposizione monitor cambiata. Riavvia la calibrazione.'));
+    message('Verifica delle pupille…');
     const result=await request('pupils',{eyes:frame()});if(!result.valid)throw Error(text('Pupille non distinguibili. Riseleziona gli occhi.'));
     chooseScreen();
    }else{

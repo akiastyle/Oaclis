@@ -1,4 +1,4 @@
-// locale.js v1.3.598
+// locale.js v1.3.600
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -8,6 +8,8 @@ window.OaclisSettings=(()=>{
  const speechLanguage=language==='it'?'it-IT':'en-US';
  document.documentElement.lang=language;
  const en={
+  "Consenti a Chrome di gestire i monitor per continuare.":"Allow Chrome to manage displays to continue.",
+  "Verifica delle pupille…":"Checking pupils…",
   "Calibrazione sguardo":"Gaze calibration",
   "Seleziona le due zone degli occhi":"Select the two eye regions",
   "Schermo del browser":"Browser display",
