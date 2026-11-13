@@ -1,4 +1,4 @@
-// terminal.rs v1.33.576
+// terminal.rs v1.34.596
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -237,10 +237,11 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         },
         _ => {},
     }
+    // Capture errors must not broadcast an explicit stop to the other views.
     let (plain, ansi)=capture.read(|| {
-        let screen=tmux(&["capture-pane","-p","-e","-t",&target,"-S","-200"]).map_err(|_|invalid("Sessione terminata: riapri la chat"))?;
+        let screen=tmux(&["capture-pane","-p","-e","-t",&target,"-S","-200"]).map_err(|_|invalid("Collegamento temporaneamente non disponibile. Riprova."))?;
         String::from_utf8(screen).map_err(io::Error::other)
-    }).inspect_err(|_|mark_open(chat,false))?;
+    }).inspect_err(|_|{OPEN_CHATS.get_or_init(Default::default).lock().unwrap().remove(chat);})?;
     mark_open(chat,true);
     drop(capture);
     let access=if value["action"]=="open" {
@@ -317,6 +318,21 @@ mod tests {
         let exists=tmux(&["has-session","-t",&format!("={session}")]).is_ok();
         if exists {let _=tmux(&["kill-session","-t",&format!("={session}")]);}
         assert_eq!(result.unwrap(),json!({"ok":true}));assert!(!exists);assert!(lock.lock().unwrap().screen.is_none());
+    }
+    #[test]
+    fn capture_failure_does_not_turn_a_live_console_into_an_explicit_stop() {
+        let chat=format!("capture-fixture-{}",std::process::id());let session=format!("oaclis-{chat}");
+        tmux(&["new-session","-d","-s",&session,"sleep 30"]).unwrap();
+        tmux(&["set-option","-t",&session,"renumber-windows","off"]).unwrap();
+        mark_open(&chat,true);
+        tmux(&["move-window","-s",&format!("{session}:0"),"-t",&format!("{session}:1")]).unwrap();
+        let failed=local(&json!({"chat_id":chat,"action":"read"}));
+        let incorrectly_stopped=stopped_chats().contains(&chat);
+        tmux(&["move-window","-s",&format!("{session}:1"),"-t",&format!("{session}:0")]).unwrap();
+        let recovered=local(&json!({"chat_id":chat,"action":"read"}));
+        let _=tmux(&["kill-session","-t",&format!("={session}")]);
+        assert!(failed.is_err());assert!(!incorrectly_stopped,"A failed capture must not close every view");
+        assert!(recovered.unwrap()["screen"].is_string());
     }
     #[test]
     fn reset_discards_only_the_capture_without_starting_or_stopping_codex() {
