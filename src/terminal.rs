@@ -1,4 +1,4 @@
-// terminal.rs v1.34.596
+// terminal.rs v1.35.608
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -190,6 +190,9 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         let home=env::var_os("HOME").map(PathBuf::from).ok_or_else(||invalid("HOME non definita"))?;
         let root=env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(||home.join(".codex"));
         let cwd=value["cwd"].as_str().filter(|v|!v.is_empty()).map(PathBuf::from).map(Ok).unwrap_or_else(||working_directory(&home,&root,chat))?;
+        if value["cwd"].as_str().is_some_and(|path|!path.is_empty())&&cwd.is_absolute()&&cwd.is_dir()&&value["use_existing_directory"]!=true {
+            return Ok(json!({"directory_exists":cwd}));
+        }
         let name=value["text"].as_str().unwrap_or("").trim();
         let default_model=crate::engines::creation(&home,value)?;
         let mut entry=crate::catalog::create(&home,&root,&cwd,name,value["model"].as_str().filter(|v|!v.is_empty()).unwrap_or(&default_model))?;
@@ -318,6 +321,15 @@ mod tests {
         let exists=tmux(&["has-session","-t",&format!("={session}")]).is_ok();
         if exists {let _=tmux(&["kill-session","-t",&format!("={session}")]);}
         assert_eq!(result.unwrap(),json!({"ok":true}));assert!(!exists);assert!(lock.lock().unwrap().screen.is_none());
+    }
+    #[test]
+    fn explicit_existing_creation_directory_requires_confirmation() {
+        let directory=std::env::temp_dir().join(format!("oaclis-existing-directory-{}",std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let result=local(&json!({"chat_id":"new-chat","action":"create","cwd":directory,"text":"Project"})).unwrap();
+        assert_eq!(result,json!({"directory_exists":directory}));
+        assert!(result.get("new_chat").is_none());
+        std::fs::remove_dir(directory).unwrap();
     }
     #[test]
     fn capture_failure_does_not_turn_a_live_console_into_an_explicit_stop() {

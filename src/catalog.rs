@@ -1,4 +1,4 @@
-// catalog.rs v2.41.1864
+// catalog.rs v2.42.1893
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -316,7 +316,7 @@ fn native<T>(home:&Path,root:&Path,release:bool,work:impl FnOnce(&mut NativeClie
     result
 }
 pub(crate) fn create(home:&Path,root:&Path,cwd:&Path,name:&str,model:&str)->io::Result<Value> {
-    if name.trim().is_empty()||name!=name.trim()||!cwd.is_absolute()||!cwd.is_dir(){return Err(crate::invalid("Nome o cartella chat non validi"));}
+    if name.trim().is_empty()||name!=name.trim()||!cwd.is_absolute(){return Err(crate::invalid("Nome o cartella chat non validi"));}
     crate::appearance::Appearance{label:name.into(),..Default::default()}.validate()?;
     crate::terminal::validate_model(model)?;
     native(home,root,true,|client|{
@@ -325,6 +325,7 @@ pub(crate) fn create(home:&Path,root:&Path,cwd:&Path,name:&str,model:&str)->io::
         let models=available["data"].as_array().ok_or_else(||crate::invalid("Elenco modelli non disponibile"))?;
         let selected=if model.is_empty(){config["config"]["model"].as_str().or_else(||models.iter().find(|m|m["isDefault"]==true).and_then(|m|m["model"].as_str())).ok_or_else(||crate::invalid("Scegli il modello per la nuova chat"))?}else{model};
         if !models.iter().any(|m|m["model"]==selected){return Err(crate::invalid("Modello non disponibile in Codex"));}
+        fs::create_dir_all(cwd)?;
         let result=client.request("thread/start",json!({"cwd":cwd,"model":selected,"ephemeral":false,"historyMode":"legacy","persistExtendedHistory":true}))?;
         let thread=&result["thread"];let id=thread["id"].as_str().filter(|id|id.len()==36&&crate::devices::identifier(id)).ok_or_else(||crate::invalid("Identificativo nuova chat non valido"))?;
         client.request("thread/name/set",json!({"threadId":id,"name":name}))?;
@@ -340,6 +341,32 @@ pub(crate) fn remote(device: &Device) -> io::Result<Value> {
 mod tests {
     use super::*;
     use std::fs;
+    #[test]
+    fn creation_makes_the_requested_directory_before_starting_the_chat() {
+        use std::os::unix::fs::PermissionsExt;
+        let root=std::env::temp_dir().join(format!("oaclis-create-directory-{}",std::process::id()));
+        let cwd=root.join("new/project");let binary=root.join("packages/app-server-daemon/current/bin/codex");
+        fs::create_dir_all(binary.parent().unwrap()).unwrap();
+        let reply=json!({"id":3,"result":{"thread":{"id":"11111111-1111-4111-8111-111111111111","path":root.join("sessions/fixture.jsonl")}}});
+        let script=format!(r#"#!/bin/sh
+while IFS= read -r line; do
+ case "$line" in
+  *'"method":"initialize"'*) echo '{{"id":0,"result":{{}}}}' ;;
+  *'"method":"config/read"'*) echo '{{"id":1,"result":{{"config":{{"model":"test-model"}}}}}}' ;;
+  *'"method":"model/list"'*) echo '{{"id":2,"result":{{"data":[{{"model":"test-model"}}]}}}}' ;;
+  *'"method":"thread/start"'*) if [ -d '{}' ]; then echo '{}'; else echo '{{"id":3,"error":{{"message":"Directory missing at thread/start"}}}}'; fi ;;
+  *'"method":"thread/name/set"'*) echo '{{"id":4,"result":{{}}}}' ;;
+ esac
+done
+"#,cwd.display(),reply);
+        fs::write(&binary,script).unwrap();fs::set_permissions(&binary,fs::Permissions::from_mode(0o700)).unwrap();
+        let result=create(&root,&root,&cwd,"New project","").unwrap();
+        assert_eq!(result["cwd"],json!(cwd));assert!(cwd.is_dir());
+        let file=root.join("existing-file");fs::write(&file,"keep").unwrap();
+        assert!(create(&root,&root,&file,"Another project","").is_err());
+        assert_eq!(fs::read_to_string(&file).unwrap(),"keep");
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn chat_numbers_survive_renaming_filtering_and_deletion() {
         let root=std::env::temp_dir().join(format!("oaclis-chat-numbers-{}",std::process::id()));
