@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.736
+// index.php v1.8.740
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -266,7 +266,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!$isAdmin) respond([],403);
             $security=$input['security']??null;
             if (!is_array($security) || !is_string($security['epoch']??null) || !preg_match('/^[a-f0-9]{64}$/D',$security['epoch']) || !is_int($security['time']??null)) throw new RuntimeException();
-            $state['console_security']=['epoch'=>$security['epoch'],'received_at'=>time()];
+            $state['console_security']=['epoch'=>$security['epoch'],'time'=>$security['time'],'received_at'=>time()];
             if (array_key_exists('active_chats',$input)) {
                 $active=$input['active_chats'];
                 if (!is_array($active)||!array_is_list($active)||count($active)>1024||array_filter($active,fn($id)=>!is_string($id)||!preg_match('/^[A-Za-z0-9_-]{1,160}$/D',$id))) throw new RuntimeException('Invalid session status');
@@ -343,7 +343,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             break;
         default: respond([],404);
         }
-        if (in_array($action,['protected','console','console-result'],true)) $result['security']=isset($state['console_security']['epoch'])?['epoch'=>$state['console_security']['epoch'],'time'=>time()]:null;
+        if (in_array($action,['protected','console','console-result'],true)) $result['security']=isset($state['console_security']['epoch'],$state['console_security']['time'])?['epoch'=>$state['console_security']['epoch'],'time'=>$state['console_security']['time']]:null;
         if ($state!==$originalState) {
             $encoded=json_encode($state,JSON_THROW_ON_ERROR|JSON_PRETTY_PRINT);
             $temporary=tempnam(PRIVATE_DIR,'state-');
