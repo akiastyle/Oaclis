@@ -1,4 +1,4 @@
-/* style.css v2.0.1652 */
+/* style.css v2.0.1654 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1391,3 +1391,5 @@ html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: va
 @keyframes mobile-chat-tail{0%{stroke-dashoffset:.12;opacity:0}5%{opacity:.35}80%{stroke-dashoffset:-.88;opacity:.35}85%,100%{stroke-dashoffset:-.88;opacity:0}}
 @keyframes mobile-chat-arrival{0%{opacity:0;transform:scale(.8)}20%{opacity:.65;transform:scale(1)}100%{opacity:0;transform:scale(1.25)}}
 @media(prefers-reduced-motion:reduce){.mobile-chat-flows{display:none}}
+
+#notice[data-pending]{animation:none!important;opacity:1;visibility:visible;transform:none}

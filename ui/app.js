@@ -1,4 +1,4 @@
-// app.js v4.167.3222
+// app.js v4.167.3225
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -207,9 +207,10 @@ async function api(path, value) {
   if (!response.ok) throw Error(result.error || OaclisSettings.text("Operazione non riuscita"));
   return result;
 }
-function notice(text) {
+function notice(text, pending=false) {
   const element=$("#notice");
   element.textContent=OaclisSettings.text(text);
+  element.toggleAttribute('data-pending',pending);
   element.dataset.noticeCycle=element.dataset.noticeCycle==='a'?'b':'a';
   element.hidden=false;
 }

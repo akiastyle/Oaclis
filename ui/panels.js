@@ -1,4 +1,4 @@
-// panels.js v3.143.2899
+// panels.js v3.143.2906
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -870,6 +870,7 @@ function openNewChat(anchor){
     try{
       const value=Object.fromEntries(new FormData(form));
       const payload={device_id:device,chat_id:parent,text:value.label.trim(),engine:value.engine,model:value.model.trim(),icon:value.icon,color:value.color,cwd:value.cwd.trim(),access:value.console_access};
+      panel.hidePopover();notice('Creazione chat in corso…',true);
       let result=await api('chat/create',payload);
       if(result.directory_exists){
         if(!window.confirm(OaclisSettings.text('La cartella esiste già:')+'\n'+result.directory_exists+'\n\n'+OaclisSettings.text('Creare la chat usando questa cartella?')))return;
@@ -879,7 +880,11 @@ function openNewChat(anchor){
       data.chat_settings??={};data.chat_settings[entry.id]={console_access:entry.console_access||'default'};
       if(device==='master'&&!data.chats.some(chat=>chat.id===entry.id))data.chats.unshift(entry);if(sourceId===device){if(!visibleChats.some(chat=>chat.id===entry.id))visibleChats.unshift(entry);renderLibrary();}
       closeChatEditor(panel);openChatTerminal({entry},anchor,device);
-    }finally{button.disabled=false;}
+    }finally{
+      button.disabled=false;
+      if($('#notice').hasAttribute('data-pending')){$('#notice').hidden=true;$('#notice').removeAttribute('data-pending');}
+      if(panel.isConnected){panel.showPopover();positionContext(panel,anchor);}
+    }
   });
   panel.querySelector('[name="label"]').value=OaclisSettings.text('Nuova chat');panel.querySelector('[name="label"]').select();
 }

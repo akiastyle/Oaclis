@@ -1,4 +1,4 @@
-// locale.js v1.3.603
+// locale.js v1.3.604
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -9,6 +9,7 @@ window.OaclisSettings=(()=>{
  document.documentElement.lang=language;
  const en={
   "La cartella esiste già:":"The folder already exists:",
+  "Creazione chat in corso…":"Creating chat…",
   "Creare la chat usando questa cartella?":"Create the chat using this folder?",
   "Accedi con passkey":"Sign in with passkey",
   "Consenti a Chrome di gestire i monitor per continuare.":"Allow Chrome to manage displays to continue.",
