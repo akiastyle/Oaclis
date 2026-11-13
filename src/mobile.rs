@@ -1,4 +1,4 @@
-// mobile.rs v1.22.597
+// mobile.rs v1.24.641
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -132,17 +132,26 @@ pub(crate) struct Registry {
     exchange: Mutex<()>,
 }
 impl Registry {
+    fn expire_flows(device:&mut Value,now:u64) {
+        if let Some(flows)=device.get_mut("chat_flows").and_then(Value::as_object_mut){flows.retain(|_,activity|{let directions=activity.as_object_mut().unwrap();directions.retain(|_,time|time.as_u64().is_some_and(|time|now.saturating_sub(time)<10000));!directions.is_empty()});}
+    }
     pub(crate) fn snapshot(&self) -> Vec<Value> {
         let now=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
-        self.devices.lock().unwrap().iter().map(|device| {
+        let mut devices=self.devices.lock().unwrap();
+        for device in devices.iter_mut(){Self::expire_flows(device,now);}
+        devices.iter().map(|device| {
             let mut device=device.clone();
             for key in ["flow_in","flow_out"] { device[key]=json!(device[key].as_u64().is_some_and(|time|now.saturating_sub(time)<2150)); }
             device
         }).collect()
     }
-    fn flow(&self, id:&str, key:&str) {
+    fn flow(&self, id:&str, key:&str, chat:&str) {
         if let Some(device)=self.devices.lock().unwrap().iter_mut().find(|device|device["id"].as_str().is_some_and(|value|value.strip_prefix("mobile-")==Some(id))) {
-            device[key]=json!(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64);
+            let now=std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64;
+            device[key]=json!(now);
+            let flows=device.as_object_mut().unwrap().entry("chat_flows").or_insert_with(||json!({})).as_object_mut().unwrap();
+            flows.entry(chat).or_insert_with(||json!({}))[key]=json!(now);
+            Self::expire_flows(device,now);
         }
     }
 }
@@ -154,6 +163,8 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
         let console_registry = registry.clone();
         thread::spawn(move || {
             let mut results = Vec::<Value>::new();
+            // Keep per-chat animation metadata local; relay packets stay unchanged.
+            let mut deliveries=Vec::<(String,String)>::new();
             let mut pending_log:Option<(String,bool)>=None;
             let mut last_read=String::new();
             let mut sent_jobs:Option<Vec<Value>>=None;
@@ -174,17 +185,16 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
                         if !read || message!=last_read {crate::state_transport::log(message.clone());}
                         last_read=if read {message}else{String::new()};
                     }
-                    for answer in &results {
-                        if answer["screen"].is_string() { if let Some(device)=answer["device"].as_str() { console_registry.flow(device,"flow_out"); } }
-                    }
+                    for (device,chat) in deliveries.drain(..){console_registry.flow(&device,"flow_out",&chat);}
                     results.clear();
                     for command in reply["commands"].as_array().into_iter().flatten().take(1) {
                         let Some(device)=command["device"].as_str().filter(|id|id.len()==64 && id.bytes().all(|b|b.is_ascii_hexdigit())) else {continue;};
                         let Some(id)=command["id"].as_str().filter(|id|id.len()==32 && id.bytes().all(|b|b.is_ascii_hexdigit())) else {continue;};
                         let checked=authority.command(command);
                         if checked.is_err() {crate::state_transport::log("PWA: richiesta rifiutata, autorizzazione non valida".into());}
+                        let chat_id=checked.as_ref().ok().and_then(|value|value["chat_id"].as_str()).map(str::to_owned);
                         let result=checked.and_then(|value|{
-                            if matches!(value["action"].as_str(),Some("input"|"stop"|"open"|"create")) { console_registry.flow(device,"flow_in"); }
+                            if matches!(value["action"].as_str(),Some("input"|"stop"|"open"|"create")) { console_registry.flow(device,"flow_in",value["chat_id"].as_str().unwrap()); }
                             let result=crate::terminal::request(None,&value).and_then(|result| {
                                 if value["action"]=="create"{authority.allow_created(device,value["chat_id"].as_str().unwrap(),result["new_chat"]["id"].as_str().ok_or_else(||invalid("Nuova chat non disponibile"))?)?;}
                                 Ok(result)
@@ -196,6 +206,7 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
                         });
                         let mut answer = json!({"device":device,"id":id});
                         match result { Ok(value) if value["engines"].is_object() || value["models"].is_array()=>{if value["engines"].is_object(){answer["engines"]=value["engines"].clone();}else{answer["models"]=value["models"].clone();}}, Ok(value) if value["new_chat"].is_object()=>{answer["new_chat"]=value["new_chat"].clone();}, Ok(value) => { if let Some(jobs)=value.get("jobs") {answer["jobs"]=jobs.clone();} if let Some(speech)=value.get("speech") {answer["speech"]=speech.clone();} let screen=crate::terminal::mobile_screen(&value); answer.as_object_mut().unwrap().extend(screen.as_object().unwrap().clone()); }, Err(_) => answer["error"] = json!(true) }
+                        if answer["screen"].is_string() {if let Some(chat)=chat_id {deliveries.push((device.into(),chat));}}
                         results.push(answer);
                     }
                     if !results.is_empty() { continue; }
@@ -216,7 +227,8 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
                             let mut next=reply["devices"].as_array().unwrap().clone();
                             for device in &mut next {
                                 if let Some(previous)=devices.iter().find(|previous|previous["id"]==device["id"]) {
-                                    for key in ["flow_in","flow_out"] { device[key]=previous[key].clone(); }
+                                    for key in ["flow_in","flow_out","chat_flows"] { if let Some(value)=previous.get(key){device[key]=value.clone();} }
+                                    Registry::expire_flows(device,std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64);
                                 }
                             }
                             *devices=next;
@@ -339,6 +351,22 @@ mod tests {
         assert_eq!(choices[id]["color"],"#12ab34");
         assert!(choices.values().all(|v|v.as_object().unwrap().len()==5 && v.get("paths").is_none()));
         std::fs::remove_dir_all(&root).unwrap();
+    }
+    #[test]
+    fn mobile_flow_events_keep_chat_and_direction_and_expire() {
+        let id="a".repeat(64);
+        let registry=Registry{devices:Mutex::new(vec![json!({"id":format!("mobile-{id}")})]),exchange:Mutex::new(())};
+        assert!(registry.snapshot()[0].get("chat_flows").is_none());
+        registry.flow(&id,"flow_out","chat-a");registry.flow(&id,"flow_in","chat-b");
+        let snapshot=registry.snapshot();
+        assert_eq!(snapshot[0]["flow_out"],true);assert_eq!(snapshot[0]["flow_in"],true);
+        assert!(snapshot[0]["chat_flows"]["chat-a"]["flow_out"].is_u64());
+        assert!(snapshot[0]["chat_flows"]["chat-a"]["flow_in"].is_null());
+        assert!(snapshot[0]["chat_flows"]["chat-b"]["flow_in"].is_u64());
+        registry.devices.lock().unwrap()[0]["chat_flows"]["chat-a"]["flow_out"]=json!(1);
+        registry.devices.lock().unwrap()[0]["chat_flows"]["chat-b"]["flow_out"]=json!(1);
+        let snapshot=registry.snapshot();assert!(snapshot[0]["chat_flows"]["chat-a"].is_null());assert!(snapshot[0]["chat_flows"]["chat-b"]["flow_out"].is_null());
+        assert_eq!(registry.devices.lock().unwrap()[0]["chat_flows"].as_object().unwrap().len(),1);
     }
     #[test]
     fn qr_accepts_only_the_fixed_relay_and_random_code() {

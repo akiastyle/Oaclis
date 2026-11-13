@@ -1,4 +1,4 @@
-// map.js v4.134.3544
+// map.js v4.136.3601
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -49,6 +49,45 @@ function updateLinkFlow(path, directions) {
   path.parentNode.append(overlay);
 }
 
+function positionMobileFlight(path,flight) {
+  const marker=path.chatMarkers?.get(flight.dataset.chatId);
+  if(!marker?.isConnected){flight.remove();return;}
+  const coordinates=(path.accessCurve||path.getAttribute('d')).match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi).map(Number);
+  const controls=Array.from({length:4},(_,i)=>({x:coordinates[i*2],y:coordinates[i*2+1]}));
+  const point={x:parseFloat(marker.style.left),y:parseFloat(marker.style.top)};
+  const curve=curveThroughBadge(controls,marker.accessMidpoint)(point).match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi).map(Number);
+  const segment=flight.dataset.direction==='flow_out'?curve.slice(0,8):[curve[12],curve[13],curve[10],curve[11],curve[8],curve[9],curve[6],curve[7]];
+  const d=`M${segment[0]} ${segment[1]} C${segment.slice(2).join(' ')}`;
+  flight.querySelectorAll('path').forEach(trace=>trace.setAttribute('d',d));
+  const glow=flight.querySelector('circle');glow.setAttribute('cx',point.x);glow.setAttribute('cy',point.y);glow.setAttribute('r',marker.offsetWidth/2+4);
+}
+
+function renderMobileChatFlows(path,phone) {
+  const draw=phone.active&&!document.hidden&&!matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!draw){path.chatFlowOverlay?.remove();path.chatFlowOverlay=null;}
+  const seen=path.chatFlowSeen??=new Map(),current=new Set();let order=0;
+  for(const [chat,activity]of Object.entries(phone.chat_flows||{})){
+    const marker=path.chatMarkers?.get(chat);
+    if(!marker)continue;
+    for(const direction of ['flow_in','flow_out']){
+      const stamp=activity[direction];if(!stamp)continue;
+      const key=chat+':'+direction;current.add(key);
+      if(seen.get(key)===stamp)continue;seen.set(key,stamp);
+      if(!draw)continue;
+      if(!path.chatFlowOverlay){
+        path.chatFlowOverlay=document.createElementNS(path.namespaceURI,'g');path.chatFlowOverlay.classList.add('mobile-chat-flows');path.parentNode.append(path.chatFlowOverlay);
+      }
+      const entry=marker.accessState.group.entries.find(entry=>entry.id===chat);
+      const flight=document.createElementNS(path.namespaceURI,'g');flight.classList.add('mobile-chat-flight');flight.dataset.chatId=chat;flight.dataset.direction=direction;flight.style.setProperty('--mobile-flow-order',order++);
+      flight.style.color=appearance(entry).color||'var(--ink)';
+      flight.innerHTML='<path class="mobile-flow-tail" pathLength="1"/><path class="mobile-flow-head" pathLength="1"/><circle class="mobile-flow-arrival"/>';
+      path.chatFlowOverlay.append(flight);positionMobileFlight(path,flight);
+      flight.addEventListener('animationend',event=>{if(event.animationName==='mobile-chat-arrival')flight.remove();});
+    }
+  }
+  for(const key of seen.keys())if(!current.has(key))seen.delete(key);
+}
+
 function renderActiveLinkFlows() {
   const online = id => id === 'master' || data.connections?.[id] === 'online';
   for (const layer of document.querySelectorAll('.chat-link')) {
@@ -70,11 +109,9 @@ function renderActiveLinkFlows() {
   }
   for (const path of document.querySelectorAll('#mobile-links > path')) {
     const phone = data.mobile_devices?.find(device => device.id === path.dataset.id);
+    if(phone){updateLinkFlow(path,[]);renderMobileChatFlows(path,phone);continue;}
     let directions = [];
-    if (phone?.active) {
-      if (phone.flow_out) directions.push(false);
-      if (phone.flow_in) directions.push(true);
-    } else if (!phone && online(path.dataset.source) && online(path.dataset.target)) {
+    if (online(path.dataset.source) && online(path.dataset.target)) {
       const owner = data.device_runtime?.[path.dataset.source];
       if (chatLinks.some(link => link.operation === 'console' && link.source === path.dataset.source && link.target === path.dataset.target && owner?.active_chats?.includes(link.entry.id))) directions = [false, true];
     }
@@ -981,7 +1018,7 @@ function renderMobileLinks() {
     arrows.get(device.id).dataset.active = path.dataset.active;
   }
   document.querySelectorAll('.access-chat').forEach(node=>{if(!badges.has(node.dataset.accessKey)){node.accessPanel?.remove();node.remove();}});
-  for (const item of [...svg.querySelectorAll(':scope > path, defs > marker')]) if (!keep.has(item.dataset.id)) { item.flowOverlay?.remove(); item.remove(); }
+  for (const item of [...svg.querySelectorAll(':scope > path, defs > marker')]) if (!keep.has(item.dataset.id)) { item.flowOverlay?.remove();item.chatFlowOverlay?.remove(); item.remove(); }
   updateAccessChatActivity();
 }
 
@@ -1025,6 +1062,7 @@ function renderAccessBadges(path, group, keep, markers) {
   const points=count>1&&length>=spacing*(count+1)?group.entries.map((_,index)=>path.getPointAtLength(length*(index+1)/(count+1))):[];
   const grouped=count>1&&(points.length===0||points.some((point,index)=>points.slice(0,index).some(other=>Math.abs(point.x-other.x)<spacing&&Math.abs(point.y-other.y)<spacing)));
   const entries=grouped?[{id:'access-group',name:group.name||deviceName(group.target)}]:OaclisTerminal.sortChats(group.entries,chatLabel);
+  path.chatMarkers=new Map();
   entries.forEach((entry,index) => {
     const key=[entry.id,...[group.source,group.target].sort()].join(':');
     keep.add(key);
@@ -1035,9 +1073,11 @@ function renderAccessBadges(path, group, keep, markers) {
       $('#nodes').append(marker);markers.set(key,marker);
       const main=marker.querySelector('.link-main'),open=marker.querySelector('.link-open');
       marker.updateAccessCurve=()=>{
-        if(!marker.accessBend)return;
-        path.setAttribute('d',marker.accessBend({x:parseFloat(marker.style.left),y:parseFloat(marker.style.top)}));
-        path.flowOverlay?.querySelectorAll('.link-flow-trace').forEach(trace=>trace.setAttribute('d',path.getAttribute('d')));
+        if(marker.accessBend){
+          path.setAttribute('d',marker.accessBend({x:parseFloat(marker.style.left),y:parseFloat(marker.style.top)}));
+          path.flowOverlay?.querySelectorAll('.link-flow-trace').forEach(trace=>trace.setAttribute('d',path.getAttribute('d')));
+        }
+        path.chatFlowOverlay?.querySelectorAll('.mobile-chat-flight').forEach(flight=>{if(path.chatMarkers.get(flight.dataset.chatId)===marker)positionMobileFlight(path,flight);});
       };
       open.onclick=()=>openChatTerminal({entry:marker.accessState.entry},open,marker.accessState.source);
       main.onclick=event=>{if(marker.accessState.grouped&&(event.detail===0||!marker.accessMoved))openAccessChats(marker);};
@@ -1067,6 +1107,7 @@ function renderAccessBadges(path, group, keep, markers) {
         if(event.key==='Delete'&&!marker.accessState.grouped&&marker.accessState.console){const {entry,source,target}=marker.accessState;guard(()=>removeConnection({entry,source,target,operation:'console'},null))();}
       };
     }
+    for(const chat of grouped?group.entries:[entry])path.chatMarkers.set(chat.id,marker);
     if(marker.dataset.dragging)return;
     const main=marker.querySelector('.link-main'),open=marker.querySelector('.link-open');
     open.hidden=grouped;
