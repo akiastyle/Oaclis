@@ -1,4 +1,4 @@
-/* style.css v2.0.1644 */
+/* style.css v2.0.1648 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1386,8 +1386,8 @@ html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: va
 #mobile-links .mobile-chat-flight path{fill:none;stroke:currentColor;stroke-linecap:round;filter:drop-shadow(0 0 4px currentColor);transition:none;animation-duration:var(--mobile-flow-duration);animation-timing-function:linear;animation-fill-mode:both;animation-delay:calc(var(--mobile-flow-order) * .12s)}
 #mobile-links .mobile-flow-head{stroke-width:7px;stroke-dasharray:0 1;animation-name:mobile-chat-head}
 #mobile-links .mobile-flow-tail{stroke-width:4px;stroke-dasharray:.12 .88;animation-name:mobile-chat-tail}
-#mobile-links .mobile-flow-arrival{fill:none;stroke:currentColor;stroke-width:3px;filter:drop-shadow(0 0 6px currentColor);transform-box:fill-box;transform-origin:center;transition:none;animation:mobile-chat-arrival var(--mobile-flow-duration) ease-out both;animation-delay:calc(var(--mobile-flow-order) * .12s)}
+#mobile-links .mobile-flow-arrival{fill:none;stroke:currentColor;stroke-width:3px;filter:drop-shadow(0 0 4px currentColor);transform-box:fill-box;transform-origin:center;transition:none;animation:mobile-chat-arrival var(--mobile-flow-duration) ease-out both;animation-delay:calc(var(--mobile-flow-order) * .12s)}
 @keyframes mobile-chat-head{0%{stroke-dashoffset:0;opacity:0}5%{opacity:1}80%{stroke-dashoffset:-1;opacity:1}85%,100%{stroke-dashoffset:-1;opacity:0}}
 @keyframes mobile-chat-tail{0%{stroke-dashoffset:.12;opacity:0}5%{opacity:.35}80%{stroke-dashoffset:-.88;opacity:.35}85%,100%{stroke-dashoffset:-.88;opacity:0}}
-@keyframes mobile-chat-arrival{0%,80%{opacity:0;transform:scale(.8)}84%{opacity:1;transform:scale(1)}100%{opacity:0;transform:scale(1.25)}}
+@keyframes mobile-chat-arrival{0%,80%{opacity:0;transform:scale(.8)}84%{opacity:.65;transform:scale(1)}100%{opacity:0;transform:scale(1.25)}}
 @media(prefers-reduced-motion:reduce){.mobile-chat-flows{display:none}}
