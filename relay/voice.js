@@ -1,4 +1,4 @@
-// voice.js v2.61.1449
+// voice.js v2.61.1450
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -307,6 +307,7 @@ window.OaclisVoice=(()=>{
   }
   function leave(){clearPhrase();dictated=false;trace('target:leave');cancelAutoSend();clearPending();reader?.reset(false);revision++;target=null;adapter=null;root?.remove();}
   function afterSend(){
+   OaclisReadAloud.feedback();
    trace('after-send',{pause:preferences.pauseAfterSend});dictated=false;cancelAutoSend();
    if(preferences.pauseAfterSend&&wanted)setPaused(true);
   }
