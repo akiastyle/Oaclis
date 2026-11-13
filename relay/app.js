@@ -1,4 +1,4 @@
-// app.js v2.130.1265
+// app.js v2.131.1275
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -272,11 +272,9 @@ async function deviceView(){
  if(!await OaclisMobileSecurity.hasKey(code)){show('');return;}
  const x=await api('status');
  if(x.status==='pending'){show('');timer=setInterval(async()=>{try{const s=await api('status');if(s.status==='approved'){clearInterval(timer);await deviceView();}}catch{clearInterval(timer);app.hidden=true;app.replaceChildren();}},3000);return;}
- const login=async()=>{
-  show('');
-  try{const data=await api('login-options');const c=await navigator.credentials.get(options(data));await api('login',credential(c));location.replace('/');}
-  catch{show('');}
- };
- await login();
+ show(OaclisSettings.html('<button id="login" type="button">Accedi con passkey</button>'));
+ document.getElementById('login').onclick=e=>run(e.currentTarget,async()=>{
+  const data=await api('login-options');const c=await navigator.credentials.get(options(data));await api('login',credential(c));location.replace('/');
+ });
 }
 (async()=>{try{if(invite)await registerView();else if(code){if(authPage)await deviceView();else try{await protectedView();}catch(e){if(e.status===403)location.replace('/auth');else throw e;}}}catch(e){if(invite){show(OaclisSettings.html('<h1>Abbina questo telefono</h1>'));message(e.message,true);}else{voice.stop();show('');}}})();
