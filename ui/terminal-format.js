@@ -1,4 +1,4 @@
-// terminal-format.js v1.42.291
+// terminal-format.js v1.42.293
 "use strict";
 const OaclisTerminal = (() => {
   document.addEventListener('click',event=>{
@@ -6,7 +6,7 @@ const OaclisTerminal = (() => {
     if(!button?.closest('.oaclis-console')||button.disabled||button.matches('.voice-mic,.read-aloud'))return;
     button.tapFeedback?.cancel();
     const active={backgroundColor:'var(--status-online,#22c55e)',color:'#08231f'},reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
-    button.tapFeedback=button.animate([active,{...active,offset:1/11},{}],{duration:reduced?150:550,easing:reduced?'steps(1,end)':'ease-out'});
+    button.tapFeedback=button.animate([active,{...active,offset:1/21},{}],{duration:reduced?150:1050,easing:reduced?'steps(1,end)':'ease-out'});
   },true);
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
   function sortChats(chats,label=chat=>chat.name){return [...chats].sort((a,b)=>chatOrder.compare(label(a),label(b))||a.id.localeCompare(b.id));}
