@@ -1,4 +1,4 @@
-// app.js v4.167.3211
+// app.js v4.167.3222
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -31,8 +31,7 @@ let data = {
   linkPositions = {},
   linkPositionSaving = false,
   catalogRequest = 0,
-  catalogLoading = 0,
-  noticeTimer;
+  catalogLoading = 0;
 try {
   positions = JSON.parse(localStorage.getItem("oaclis-map") || "{}");
 } catch {
@@ -209,10 +208,10 @@ async function api(path, value) {
   return result;
 }
 function notice(text) {
-  clearTimeout(noticeTimer);
-  $("#notice").textContent = OaclisSettings.text(text);
-  $("#notice").hidden = false;
-  noticeTimer = setTimeout(() => ($("#notice").hidden = true), 6000);
+  const element=$("#notice");
+  element.textContent=OaclisSettings.text(text);
+  element.dataset.noticeCycle=element.dataset.noticeCycle==='a'?'b':'a';
+  element.hidden=false;
 }
 function guard(fn) {
   return async (...args) => {

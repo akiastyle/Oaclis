@@ -1,4 +1,4 @@
-/* badge-motion.css v1.0.137 */
+/* badge-motion.css v1.0.146 */
 :root {
   --badge-action-radius: 52px;
   --badge-ring-gap: 2px;
@@ -35,10 +35,15 @@
 .motion-badge[data-motion-phase="idle"] .link-open,.motion-badge[data-motion-phase="checking"] .link-open { transition-delay:var(--badge-stagger); }
 .badge-motion { position:absolute; inset:0; pointer-events:none; }
 .badge-gauges,.badge-check { position:absolute; width:120px; height:120px; left:calc(50% - 60px); top:calc(50% - 60px); overflow:visible; z-index:1; }
+.badge-motion [data-module="chat"]{--badge-order:0;--badge-progress:var(--badge-chat-progress,0)}
+.badge-motion [data-module="paths"]{--badge-order:1;--badge-progress:var(--badge-paths-progress,0)}
+.badge-motion [data-module="apps"]{--badge-order:2;--badge-progress:var(--badge-apps-progress,0)}
+.badge-motion [data-module]{--badge-delay:calc(var(--badge-order) * var(--badge-stagger));color:color-mix(in srgb,var(--badge-progress-start) calc((1 - var(--badge-progress)) * 100%),var(--badge-progress-end) calc(var(--badge-progress) * 100%))}
+.motion-badge[data-motion-phase="finishing"] .badge-motion [data-module]{--badge-delay:calc((2 - var(--badge-order)) * var(--badge-stagger))}
 .badge-ring { transition:none; transform-origin:60px 60px; transform:scale(.45); opacity:0; }
 .badge-ring circle { fill:none; stroke-width:var(--badge-ring-width); vector-effect:non-scaling-stroke; transition:none; }
 .badge-track { stroke:var(--badge-track-color); }
-.badge-fill { stroke-linecap:round; transform:rotate(-90deg); transform-origin:60px 60px; transition:stroke-dashoffset var(--duration-ui) linear,stroke var(--duration-ui) linear; }
+.badge-fill { stroke:currentColor;stroke-dashoffset:calc(100 * (1 - var(--badge-progress)));stroke-linecap:round; transform:rotate(-90deg); transform-origin:60px 60px; transition:stroke-dashoffset var(--duration-ui) linear,stroke var(--duration-ui) linear; }
 .badge-ring.is-active { animation:badge-expand var(--duration-ui) ease-out var(--badge-delay) both; }
 .badge-ring.is-leaving { animation:badge-contract var(--duration-ui) ease-out var(--badge-delay) both; }
 @keyframes badge-expand { 0%{opacity:0;transform:scale(.45)}70%{opacity:1;transform:scale(1.07)}100%{opacity:1;transform:scale(1)} }
@@ -58,6 +63,8 @@
 @media(prefers-reduced-motion:reduce) {
   .motion-badge *, .badge-motion * { animation-duration:.01ms!important; animation-delay:0s!important; transition-duration:.01ms!important; transition-delay:0s!important; }
   .badge-check path { animation:none; stroke-dasharray:none; }
+  .motion-badge .badge-ring.is-active{opacity:1;transform:scale(1);animation:none!important}
+  .motion-badge .badge-ring.is-leaving{animation:badge-contract .01ms linear both!important}
 }
 
 .motion-badge:not([data-motion-phase="idle"]):not([data-motion-phase="checking"]) .link-edit,
