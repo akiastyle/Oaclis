@@ -1,4 +1,4 @@
-// automation.rs v1.16.557
+// automation.rs v1.16.558
 //! Compare links periodically; transfers always require explicit Play.
 use crate::{devices, environment, link_flow, peers, transfer_job};
 use serde_json::{Value, json};
@@ -46,7 +46,6 @@ pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, con
         let mut reclaimed = Instant::now();
         loop {
             if reclaimed.elapsed() >= Duration::from_secs(60) {
-                crate::skills::refresh(&skill_home,&skill_codex);
                 crate::memory::release();
                 reclaimed = Instant::now();
             }

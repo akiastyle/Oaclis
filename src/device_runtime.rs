@@ -1,4 +1,4 @@
-// device_runtime.rs v1.22.486
+// device_runtime.rs v1.22.495
 //! Explicit app controls; no background SSH polling or system services.
 use crate::{devices, invalid};
 use serde_json::{Value, json};
@@ -55,7 +55,7 @@ impl Runtime {
             self.child.take();
             self.error = Some("Il blocco standby non è più attivo".into());
         }
-        json!({"available":true,"active_chats":crate::terminal::active_chats(),"stopped_chats":crate::terminal::stopped_chats(),"observed_at":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,"power_mode":self.power_mode,"power_applied":self.power_mode=="normal" || self.child.is_some(),"active":self.awake_pending.unwrap_or(self.child.is_some()),"error":self.error,"restarting":self.restarting,"build":build(),"skills":crate::skills::snapshot(),"desktop":*self.desktop.lock().unwrap(),"update":*self.update.lock().unwrap()})
+        json!({"available":true,"active_chats":crate::terminal::active_chats(),"stopped_chats":crate::terminal::stopped_chats(),"observed_at":std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as u64,"power_mode":self.power_mode,"power_applied":self.power_mode=="normal" || self.child.is_some(),"active":self.awake_pending.unwrap_or(self.child.is_some()),"error":self.error,"restarting":self.restarting,"build":build(),"skills":crate::skills::snapshot(&self.config),"desktop":*self.desktop.lock().unwrap(),"update":*self.update.lock().unwrap()})
     }
     fn start_inhibitor(mode: &str) -> io::Result<Child> {
         let mut child = Command::new(executable_path(std::env::current_exe()?)?).args(["keep-awake-hold",mode])
@@ -148,7 +148,7 @@ fn stop_inhibitor(mut child: Child) {
 impl Drop for Runtime { fn drop(&mut self) { self.stop(); } }
 
 pub(crate) fn remote(config: &Path, id: &str, action: &str) -> io::Result<Value> {
-    if !matches!(action, "status" | "restart" | "toggle-awake" | "update" | "power-always" | "power-screen-off" | "power-normal") { return Err(invalid("Comando dispositivo non valido")); }
+    if !matches!(action, "status" | "restart" | "toggle-awake" | "update" | "skills-auto-on" | "skills-auto-off" | "power-always" | "power-screen-off" | "power-normal") { return Err(invalid("Comando dispositivo non valido")); }
     let device = devices::load(config.join("devices.json"))?.into_iter().find(|d|d.id==id).ok_or_else(||invalid("Dispositivo non trovato"))?;
     let result=crate::state_transport::remote(&device, &json!({"kind":"device-control","action":action,"revision":env!("OACLIS_REVISION")}))
         .map_err(|error|io::Error::other(format!("{}: {error}", device.name)))?;
@@ -228,6 +228,11 @@ pub(crate) fn control(
 ) -> io::Result<Value> {
     if matches!(action, "restart" | "update") && (job.lock().unwrap()["status"] == "running" || !analyses.lock().unwrap().is_empty()) {
         return Err(invalid("Attendi il completamento delle operazioni in corso prima di riavviare"));
+    }
+    if matches!(action,"skills-auto-on"|"skills-auto-off") {
+        let config=runtime.lock().unwrap().config.clone();
+        crate::skills::set_auto_update(&config,action=="skills-auto-on")?;
+        return Ok(runtime.lock().unwrap().status());
     }
     if action == "update" {
         if role != "client" { return Err(invalid("Aggiornare il master dalla sua installazione locale")); }

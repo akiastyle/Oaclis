@@ -1,8 +1,9 @@
-// skills.js v1.0.0
+// skills.js v1.0.29
 'use strict';
 window.OaclisSkills=(()=>{
  const text=value=>OaclisSettings.text(value);
  let panel,child,watch,previous;
+ const notified=new Map();
  function render(root,state){
   const devices=(state.devices||[]).map(d=>({...d}));
   if(!devices.some(d=>d.id==='master'))devices.unshift({id:'master',name:text('Questo dispositivo')});
@@ -16,10 +17,22 @@ window.OaclisSkills=(()=>{
    const status=document.createElement('small');status.className='jobs-message';status.setAttribute('role','status');
    if(runtime?.available===false)status.textContent=text('Dispositivo non raggiungibile');
    else if(!skills)status.textContent=text('Rilevamento skill non disponibile su questo device');
+   else if(skills.state==='updating')status.textContent=text('Aggiornamento skill in corso…');
    else if(skills.state==='checking')status.textContent=text('Verifica skill in corso…');
    else if(skills.state==='unavailable')status.textContent=text('Verifica skill non riuscita');
    else if(!skills.items.length)status.textContent=text('Nessuna skill installata');
    section.append(status);
+   if(skills){
+    const setting=document.createElement('label');setting.className='skills-auto';
+    const check=document.createElement('input');check.type='checkbox';check.checked=skills.auto_update===true;check.disabled=runtime?.available===false;check.setAttribute('aria-label',text('Aggiorna automaticamente')+' · '+device.name);
+    check.onchange=async()=>{
+     check.disabled=true;
+     try{const response=await fetch('/api/device/control',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:device.id,action:check.checked?'skills-auto-on':'skills-auto-off'})});const result=await response.json();if(!response.ok)throw Error(result.error||text('Operazione non riuscita'));state.device_runtime[device.id]=result;update(state);}
+     catch(error){check.checked=!check.checked;if(typeof notice==='function')notice(error.message);else if(window.opener&&!window.opener.closed)window.opener.notice(error.message);else status.textContent=error.message;}
+     finally{check.disabled=false;}
+    };
+    setting.append(check,document.createTextNode(text('Aggiorna automaticamente')));section.append(setting);
+   }
    for(const skill of skills?.items||[]){
     const row=document.createElement('div');row.className='skill-row';
     const name=document.createElement('span');name.className='skill-name';name.textContent=skill.name;
@@ -31,7 +44,21 @@ window.OaclisSkills=(()=>{
    root.append(section);
   }
  }
- function update(state){previous=state;if(panel?.isConnected)render(panel.querySelector('.skills-list'),state);const count=Object.values(state.device_runtime||{}).reduce((n,r)=>n+(r.skills?.items||[]).filter(s=>s.update==='outdated').length,0);const button=document.getElementById('skills-monitor');if(button){button.dataset.updates=String(count);button.title=text('Skill')+(count?' · '+count+' '+text('Da aggiornare'):'');}}
+ function update(state){
+  previous=state;
+  if(typeof notice==='function')for(const [id,runtime]of Object.entries(state.device_runtime||{})){
+   const report=runtime.skills;if(!report)continue;
+   const token=JSON.stringify([report.state,report.checked_at]);if(notified.get(id)===token)continue;notified.set(id,token);
+   const name=state.appearance?.['device:'+id]?.label||(state.devices||[]).find(d=>d.id===id)?.name||text('Questo dispositivo');
+   if(report.state==='updating')notice(text('Aggiornamento skill in corso…')+' · '+name,true);
+   else if(report.state==='ready'){
+    const outdated=(report.items||[]).filter(s=>s.update==='outdated').length;
+    if(report.update_failed)notice(text('Aggiornamento skill non riuscito')+' · '+name);
+    else if(report.updated)notice(text('Skill aggiornate')+' · '+name);
+    else if(outdated)notice(text('Skill da aggiornare')+' · '+name+' ('+outdated+')');
+   }
+  }
+ if(panel?.isConnected)render(panel.querySelector('.skills-list'),state);const count=Object.values(state.device_runtime||{}).reduce((n,r)=>n+(r.skills?.items||[]).filter(s=>s.update==='outdated').length,0);const button=document.getElementById('skills-monitor');if(button){button.dataset.updates=String(count);button.title=text('Skill')+(count?' · '+count+' '+text('Da aggiornare'):'');}}
  function open(anchor){
   if(child&&!child.closed){child.focus();return;}
   if(panel?.isConnected){panel.hidePopover();panel.showPopover();return;}

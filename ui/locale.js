@@ -1,4 +1,4 @@
-// locale.js v1.3.616
+// locale.js v1.3.621
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -10,6 +10,11 @@ window.OaclisSettings=(()=>{
  const en={
   "La cartella esiste già:":"The folder already exists:",
   "Skill":"Skills",
+  "Aggiorna automaticamente":"Update automatically",
+  "Aggiornamento skill in corso…":"Updating skills…",
+  "Aggiornamento skill non riuscito":"Skill update failed",
+  "Skill aggiornate":"Skills updated",
+  "Skill da aggiornare":"Skill updates available",
   "Dispositivo non raggiungibile":"Device unreachable",
   "Rilevamento skill non disponibile su questo device":"Skill detection unavailable on this device",
   "Verifica skill in corso…":"Checking skills…",

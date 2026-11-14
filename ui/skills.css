@@ -1,4 +1,4 @@
-/* skills.css v1.0.0 */
+/* skills.css v1.0.3 */
 .skills-panel{width:min(500px,calc(100vw - 16px));max-height:calc(100dvh - 32px);overflow:auto}
 .skills-device+.skills-device{margin-top:var(--space-18)}
 .skills-device h3{margin:var(--space-8) 0;font-size:var(--font-label);font-weight:600}
@@ -12,3 +12,6 @@
 #skills-monitor{position:relative}
 
 :root[data-theme="dark"] .skill-status[data-state=enabled],:root[data-theme="dark"] .skill-status[data-state=current]{color:var(--status-online)}
+
+.skills-auto{display:flex;align-items:center;gap:var(--space-8);margin:var(--space-8) 0;font-size:var(--font-small);color:var(--ink)}
+.skills-auto input{width:auto;margin:0;accent-color:var(--ink)}
