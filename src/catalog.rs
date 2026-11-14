@@ -1,4 +1,4 @@
-// catalog.rs v2.42.1893
+// catalog.rs v2.43.1899
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -314,6 +314,12 @@ fn native<T>(home:&Path,root:&Path,release:bool,work:impl FnOnce(&mut NativeClie
     // The creator must release thread ownership before the terminal resumes it.
     if release{*saved=None;}
     result
+}
+pub(crate) fn skills(home:&Path,root:&Path)->io::Result<Value> {
+    let executable=root.join("packages/app-server-daemon/current/bin/codex");
+    let executable=if executable.is_file(){executable}else{crate::terminal::codex(home)?};
+    let mut client=NativeClient::start(root,&executable)?;
+    client.request("skills/list",json!({"cwds":[home],"forceReload":true}))
 }
 pub(crate) fn create(home:&Path,root:&Path,cwd:&Path,name:&str,model:&str)->io::Result<Value> {
     if name.trim().is_empty()||name!=name.trim()||!cwd.is_absolute(){return Err(crate::invalid("Nome o cartella chat non validi"));}

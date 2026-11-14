@@ -1,4 +1,4 @@
-// app.js v4.167.3225
+// app.js v4.167.3227
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -319,6 +319,7 @@ $("#add-device").onclick = () => openDiscovery();
 $('#new-chat').onclick=()=>openNewChat($('#new-chat'));
 $('#gaze-settings').onclick=()=>OaclisGaze.open($('#gaze-settings'));
 $('#engine-settings').onclick=()=>openEngineSettings($('#engine-settings'));
+$('#skills-monitor').onclick=()=>OaclisSkills.open($('#skills-monitor'));
 $('#jobs-monitor').onclick=()=>OaclisJobs.open($('#jobs-monitor'));
 $("#edit-device").onclick = () => editDevice(data.devices.find(d => d.id === sourceId), $("#edit-device"));
 const lastConnection = {};
@@ -370,6 +371,7 @@ async function poll() {
     if (changed) renderMap(true);
   }
   updatePowerMenu();
+  OaclisSkills.update(data);
   data.build = next.build;
   data.connections = next.connections;
   data.job = next.job;

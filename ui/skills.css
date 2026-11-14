@@ -1,0 +1,14 @@
+/* skills.css v1.0.0 */
+.skills-panel{width:min(500px,calc(100vw - 16px));max-height:calc(100dvh - 32px);overflow:auto}
+.skills-device+.skills-device{margin-top:var(--space-18)}
+.skills-device h3{margin:var(--space-8) 0;font-size:var(--font-label);font-weight:600}
+.skill-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:var(--space-8);padding:var(--space-8) 0;border-top:1px solid var(--line);font-size:var(--font-small)}
+.skill-name{min-width:0;overflow-wrap:anywhere}
+.skill-status{font-size:var(--font-small);color:var(--muted);white-space:nowrap}
+.skill-status[data-state=enabled],.skill-status[data-state=current]{color:color-mix(in srgb,var(--status-online),black 40%)}
+.skill-status[data-state=outdated],.skill-status[data-state=invalid]{color:var(--ink);font-weight:600}
+.skills-checked{display:block;margin-top:var(--space-8);font-size:var(--font-small);color:var(--muted)}
+#skills-monitor:not([data-updates="0"])::after{content:"";position:absolute;right:4px;top:4px;width:5px;height:5px;background:var(--status-online);border-radius:50%}
+#skills-monitor{position:relative}
+
+:root[data-theme="dark"] .skill-status[data-state=enabled],:root[data-theme="dark"] .skill-status[data-state=current]{color:var(--status-online)}

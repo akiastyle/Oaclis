@@ -1,4 +1,4 @@
-// locale.js v1.3.604
+// locale.js v1.3.616
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -9,6 +9,18 @@ window.OaclisSettings=(()=>{
  document.documentElement.lang=language;
  const en={
   "La cartella esiste già:":"The folder already exists:",
+  "Skill":"Skills",
+  "Dispositivo non raggiungibile":"Device unreachable",
+  "Rilevamento skill non disponibile su questo device":"Skill detection unavailable on this device",
+  "Verifica skill in corso…":"Checking skills…",
+  "Verifica skill non riuscita":"Skill check failed",
+  "Nessuna skill installata":"No skills installed",
+  "Attiva":"Enabled",
+  "Disabilitata":"Disabled",
+  "Aggiornata":"Up to date",
+  "Da aggiornare":"Update available",
+  "Non verificabile":"Cannot verify",
+  "Ultima verifica":"Last checked",
   "Creazione chat in corso…":"Creating chat…",
   "Creare la chat usando questa cartella?":"Create the chat using this folder?",
   "Accedi con passkey":"Sign in with passkey",

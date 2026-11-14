@@ -1,4 +1,4 @@
-// web.rs v2.29.1941
+// web.rs v2.29.1947
 //! Browser UI adapter. Transfer decisions remain in the existing core modules.
 use crate::{
     devices::{self, Device},
@@ -217,6 +217,9 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 return;
             }
             let asset = match url.as_str() {
+                "/skills" => Some((include_str!("../ui/skills.html").into(), "text/html; charset=utf-8")),
+                "/skills.js" => Some((include_str!("../ui/skills.js").into(), "text/javascript; charset=utf-8")),
+                "/skills.css" => Some((include_str!("../ui/skills.css").into(), "text/css; charset=utf-8")),
                 "/jobs" => Some((include_str!("../ui/jobs.html").into(), "text/html; charset=utf-8")),
                 "/jobs.js" => Some((include_str!("../ui/jobs.js").into(), "text/javascript; charset=utf-8")),
                 "/jobs.css" => Some((include_str!("../ui/jobs.css").into(), "text/css; charset=utf-8")),
@@ -265,7 +268,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
         let _configuration_edit = if request.method() == &Method::Post && matches!(url.as_str(), "/api/device" | "/api/device/delete" | "/api/rule") {
             Some(configuration_edits.lock().unwrap())
         } else { None };
-        if !matches!(url.as_str(),"/api/state"|"/api/status"|"/api/log"|"/api/links"|"/api/peers"|"/api/mobile/qr"|"/api/mobile/pending"|"/api/jobs/status"|"/api/jobs/list"|"/api/gaze/monitors"|"/api/gaze/pupils"|"/api/gaze/calibrate"|"/api/terminal") {
+        if !matches!(url.as_str(),"/api/state"|"/api/status"|"/api/log"|"/api/links"|"/api/peers"|"/api/mobile/qr"|"/api/mobile/pending"|"/api/jobs/status"|"/api/jobs/list"|"/api/skills/list"|"/api/gaze/monitors"|"/api/gaze/pupils"|"/api/gaze/calibrate"|"/api/terminal") {
             let action=match url.as_str(){"/api/device/control"=>"Controllo dispositivo","/api/links/play"=>"Richiesta sincronizzazione","/api/appearance"=>"Salvataggio impostazioni chat","/api/positions"|"/api/link-position"=>"Salvataggio posizione",_=>"Operazione dall'interfaccia"};
             crate::state_transport::log(action.into());
         }
@@ -274,6 +277,7 @@ pub fn serve(home: PathBuf) -> io::Result<()> {
                 (&Method::Post, "/api/gaze/monitors") => crate::gaze::monitors(),
                 (&Method::Post, "/api/gaze/pupils") => crate::gaze_calibration::pupils(body(&mut request)?),
                 (&Method::Post, "/api/gaze/calibrate") => crate::gaze_calibration::calibrate(body(&mut request)?),
+                (&Method::Post, "/api/skills/list") => Ok(json!({"appearance":crate::appearance::load(config.join("appearance.json"))?,"devices":devices::load(config.join("devices.json"))?,"device_runtime":crate::device_runtime::snapshot(&config,&runtime)?})),
                 (&Method::Post, "/api/jobs/status") => crate::jobs::update(body(&mut request)?),
                 (&Method::Post, "/api/jobs/list") => {
                     let mut result=crate::jobs::all(&devices::load(config.join("devices.json"))?);

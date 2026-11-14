@@ -1,4 +1,4 @@
-// automation.rs v1.16.553
+// automation.rs v1.16.557
 //! Compare links periodically; transfers always require explicit Play.
 use crate::{devices, environment, link_flow, peers, transfer_job};
 use serde_json::{Value, json};
@@ -36,13 +36,17 @@ fn launch(active: &mut HashMap<String, thread::JoinHandle<()>>, device: &str, wo
 }
 
 pub(crate) fn start(codex: PathBuf, config: PathBuf, job: Arc<Mutex<Value>>, connections: Arc<Mutex<Value>>, discovery: peers::Peers, transfers: bool) {
+    let skill_home=config.parent().unwrap().parent().unwrap().to_owned();
+    let skill_codex=codex.clone();
     let monitor_config = config.clone();
     let monitor_connections = connections.clone();
     let monitor_discovery = discovery.clone();
     thread::spawn(move || {
+        crate::skills::refresh(&skill_home,&skill_codex);
         let mut reclaimed = Instant::now();
         loop {
             if reclaimed.elapsed() >= Duration::from_secs(60) {
+                crate::skills::refresh(&skill_home,&skill_codex);
                 crate::memory::release();
                 reclaimed = Instant::now();
             }
