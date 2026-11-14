@@ -1,4 +1,4 @@
-// terminal-format.js v1.42.302
+// terminal-format.js v1.42.311
 "use strict";
 const OaclisTerminal = (() => {
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
@@ -100,13 +100,8 @@ const OaclisTerminal = (() => {
   }
 function consoleScreen(value){
  const lines=String(value??'').split('\n');
- let last=lines.findLastIndex(line=>line.trim());
- // Only terminal chrome at the screen edges; never remove mentions in messages.
- if(last>=0&&/^\s{2,}← for agents · \? for shortcuts(?:\s+⚠ \d+ warnings? · f2 to view)?\s*$/.test(lines[last]))lines.splice(last,1);
- last=lines.findLastIndex(line=>line.trim());
- if(last>=0&&/^\s{2,}(?:GPT-[\w.-]+|gpt-[\w.-]+|o\d[\w.-]*)\b.*(?: · .* · |context left.*(?:shortcuts|agents))/.test(lines[last]))lines.splice(last,1);
- last=lines.findLastIndex(line=>line.trim());
- if(last>=0&&/^\s*[›>]\s*Ask Codex to do anything[.!?]?\s*$/i.test(lines[last]))lines.splice(last,1);
+ const prompt=lines.findLastIndex(line=>/^\s*[›>]\s*Ask Codex to do anything[.!?]?\s*$/i.test(line));
+ if(prompt>=0)lines.splice(prompt);
  for(let i=0;i<Math.min(12,lines.length);i++){
   if(!/^\s*[╭┌].*[╮┐]\s*$/.test(lines[i])||!/^\s*[│┃]\s*>_ OpenAI Codex\b/.test(lines[i+1]||''))continue;
   const end=lines.findIndex((line,index)=>index>i&&index<=i+12&&/^\s*[╰└].*[╯┘]\s*$/.test(line));
