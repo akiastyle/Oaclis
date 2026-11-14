@@ -1,4 +1,4 @@
-// skills.rs v1.0.0
+// skills.rs v1.0.2
 //! Read-only skill availability and upstream version checks, cached between background scans.
 use serde_json::{Value,json};
 use std::{collections::BTreeMap,fs,path::Path,sync::{Mutex,OnceLock},time::{Duration,Instant,SystemTime,UNIX_EPOCH}};
@@ -19,7 +19,7 @@ pub(crate) fn refresh(home:&Path,root:&Path) {
         let mut cache=CACHE.get().unwrap().lock().unwrap();cache.running=false;cache.checked=Some(Instant::now());
         match result {
             Ok(items)=>cache.value=json!({"state":"ready","checked_at":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),"items":items}),
-            Err(_)=>{if cache.value.is_null(){cache.value=json!({"items":[]});}cache.value["state"]=json!("unavailable");}
+            Err(error)=>{if cache.value.is_null(){cache.value=json!({"items":[]});}cache.value["state"]=json!("unavailable");cache.value["error"]=json!(error.to_string());}
         }
     });
 }

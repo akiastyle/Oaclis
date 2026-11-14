@@ -1,4 +1,4 @@
-// catalog.rs v2.43.1899
+// catalog.rs v2.43.1902
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -316,6 +316,9 @@ fn native<T>(home:&Path,root:&Path,release:bool,work:impl FnOnce(&mut NativeClie
     result
 }
 pub(crate) fn skills(home:&Path,root:&Path)->io::Result<Value> {
+    if let Ok(mut socket)=crate::assistant_stream::connect(root){
+        return crate::assistant_stream::rpc(&mut socket,1,"skills/list",json!({"cwds":[home],"forceReload":true}));
+    }
     let executable=root.join("packages/app-server-daemon/current/bin/codex");
     let executable=if executable.is_file(){executable}else{crate::terminal::codex(home)?};
     let mut client=NativeClient::start(root,&executable)?;
