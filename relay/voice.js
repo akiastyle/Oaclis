@@ -1,4 +1,4 @@
-// voice.js v2.61.1458
+// voice.js v2.61.1466
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -96,7 +96,7 @@ window.OaclisVoice=(()=>{
     for(let i=event.resultIndex;i<event.results.length;i++){
      if(!fresh())break;
      const result=event.results[i];
-     if(/[\p{L}\p{N}]/u.test(result[0].transcript)){reader?.setDictating(true);if(!speaking)reader?.setDictating(false);}
+     if(/[\p{L}\p{N}]/u.test(result[0].transcript))reader?.setDictating(true);
      if(result.isFinal){
       trace('recognition:final',{index:i});
       if(i<=consumed)continue;consumed=i;preview.textContent='';
@@ -112,7 +112,11 @@ window.OaclisVoice=(()=>{
      }
      else {trace('recognition:interim',{index:i});cancelAutoSend();interim.push(result[0].transcript);}
     }
-    if(fresh()){preview.textContent=interim.join(' ');schedulePhrase();}
+    if(fresh()){
+     preview.textContent=interim.join(' ');speaking=!!preview.textContent.trim();
+     if(!speaking)reader?.setDictating(false);
+     schedulePhrase();
+    }
    };
    current.onerror=event=>{
     trace('recognition:error',{error:event.error,message:event.message,wanted});
