@@ -1,4 +1,4 @@
-// voice.js v2.61.1466
+// voice.js v2.61.1474
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -51,7 +51,7 @@ window.OaclisVoice=(()=>{
    const text=phrase.trim(),currentRevision=phraseRevision;clearPhrase();
    if(!text||currentRevision!==revision||!wanted)return;
    const words=text.split(/\s+/),last=parse(words.at(-1));
-   if(words.length>1&&last.type==='command'&&last.id==='send'){
+   if(!paused&&words.length>1&&last.type==='command'&&last.id==='send'){
     await route(words.slice(0,-1).join(' '),true);await route(words.at(-1));
    }else await route(text);
   }
@@ -96,7 +96,7 @@ window.OaclisVoice=(()=>{
     for(let i=event.resultIndex;i<event.results.length;i++){
      if(!fresh())break;
      const result=event.results[i];
-     if(/[\p{L}\p{N}]/u.test(result[0].transcript))reader?.setDictating(true);
+     if(!paused&&/[\p{L}\p{N}]/u.test(result[0].transcript))reader?.setDictating(true);
      if(result.isFinal){
       trace('recognition:final',{index:i});
       if(i<=consumed)continue;consumed=i;preview.textContent='';
@@ -231,13 +231,14 @@ window.OaclisVoice=(()=>{
   async function route(segment,literal=false){
    const result=literal?{type:'dictation',text:segment}:parse(segment);
    trace('route:'+result.type,{command:result.id,args:result.args});
+   if(paused&&result.type!=='command')return;
    const audio=result.type==='command'&&['readOn','readOff','readStop','selectPane'].includes(result.id);
    const media=result.type==='command'&&['takePhoto','pickImage','removeImage'].includes(result.id);
    if(result.type==='command'){
     cancelAutoSend();dictated=false;
     if(result.id==='stop'){stop(false);return;}
     if(result.id==='pauseRec'){setPaused(true,true);return;}
-    if(result.id==='resumeRec'){setPaused(false,true);return;}
+    if(result.id==='resumeRec'){reader?.skip();setPaused(false,true);return;}
     if(result.id==='help'){if(help.open)help.close();else showHelp();return;}
    }
    if(audio){
@@ -250,7 +251,6 @@ window.OaclisVoice=(()=>{
     return;
    }
    if(media){await action(()=>adapter.view.command(result.id));return;}
-   if(paused)return;
    if(pending){
     const value=normalize(segment).replace(new RegExp('^'+grammar.explicit+' '),'');
     if(grammar.cancel.includes(value)){clearPending();feedback('Operazione annullata');return;}
