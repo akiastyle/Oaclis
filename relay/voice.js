@@ -1,4 +1,4 @@
-// voice.js v2.61.1456
+// voice.js v2.61.1458
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -57,7 +57,7 @@ window.OaclisVoice=(()=>{
   }
   function schedulePhrase(){
    clearTimeout(phraseTimer);phraseTimer=null;
-   if(phrase&&!preview.textContent.trim())phraseTimer=setTimeout(()=>{flushPhrase().catch(error=>feedback(error.message));},250);
+   if(phrase&&!speaking&&!preview.textContent.trim())phraseTimer=setTimeout(()=>{flushPhrase().catch(error=>feedback(error.message));},250);
   }
   const valid=field=>field?.isConnected&&!field.disabled&&!field.readOnly&&adapter?.fields().includes(field)&&['textarea','input'].includes(field.localName)&&field.type!=='password';
   const feedback=text=>{trace('feedback',{text});if(status)status.textContent=locale.text(text);};
