@@ -1,4 +1,4 @@
-// locale.js v1.3.621
+// locale.js v1.3.623
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -16,7 +16,7 @@ window.OaclisSettings=(()=>{
   "Skill aggiornate":"Skills updated",
   "Skill da aggiornare":"Skill updates available",
   "Dispositivo non raggiungibile":"Device unreachable",
-  "Rilevamento skill non disponibile su questo device":"Skill detection unavailable on this device",
+  "Aggiorna Oaclis su questo device per rilevare le skill":"Update Oaclis on this device to detect skills",
   "Verifica skill in corso…":"Checking skills…",
   "Verifica skill non riuscita":"Skill check failed",
   "Nessuna skill installata":"No skills installed",

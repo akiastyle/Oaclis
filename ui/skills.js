@@ -1,4 +1,4 @@
-// skills.js v1.0.29
+// skills.js v1.0.34
 'use strict';
 window.OaclisSkills=(()=>{
  const text=value=>OaclisSettings.text(value);
@@ -16,7 +16,7 @@ window.OaclisSkills=(()=>{
    const section=document.createElement('section'),heading=document.createElement('h3');section.className='skills-device';heading.textContent=device.name;section.append(heading);
    const status=document.createElement('small');status.className='jobs-message';status.setAttribute('role','status');
    if(runtime?.available===false)status.textContent=text('Dispositivo non raggiungibile');
-   else if(!skills)status.textContent=text('Rilevamento skill non disponibile su questo device');
+   else if(!skills)status.textContent=text('Aggiorna Oaclis su questo device per rilevare le skill');
    else if(skills.state==='updating')status.textContent=text('Aggiornamento skill in corso…');
    else if(skills.state==='checking')status.textContent=text('Verifica skill in corso…');
    else if(skills.state==='unavailable')status.textContent=text('Verifica skill non riuscita');
@@ -50,7 +50,8 @@ window.OaclisSkills=(()=>{
    const report=runtime.skills;if(!report)continue;
    const token=JSON.stringify([report.state,report.checked_at]);if(notified.get(id)===token)continue;notified.set(id,token);
    const name=state.appearance?.['device:'+id]?.label||(state.devices||[]).find(d=>d.id===id)?.name||text('Questo dispositivo');
-   if(report.state==='updating')notice(text('Aggiornamento skill in corso…')+' · '+name,true);
+   if(report.state==='unavailable')notice(text('Verifica skill non riuscita')+' · '+name+(report.error?': '+text(report.error):''));
+   else if(report.state==='updating')notice(text('Aggiornamento skill in corso…')+' · '+name,true);
    else if(report.state==='ready'){
     const outdated=(report.items||[]).filter(s=>s.update==='outdated').length;
     if(report.update_failed)notice(text('Aggiornamento skill non riuscito')+' · '+name);

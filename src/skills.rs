@@ -1,4 +1,4 @@
-// skills.rs v1.7.83
+// skills.rs v1.8.107
 //! Startup skill checks, cached reports and opt-in native plugin updates.
 use serde_json::{Value,json};
 use std::{collections::BTreeMap,fs,path::Path,sync::{Arc,Mutex,OnceLock},time::{Duration,SystemTime,UNIX_EPOCH}};
@@ -26,7 +26,7 @@ pub(crate) fn refresh(home:&Path,root:&Path) {
             let failed=failed||!update_candidates(&fresh).is_empty();
             (fresh,true,failed)
         });
-        let mut cache=CACHE.get().unwrap().lock().unwrap();cache.running=false;cache.checked=true;
+        let mut cache=CACHE.get().unwrap().lock().unwrap();cache.running=false;cache.checked=result.is_ok();
         match result {
             Ok((items,updated,failed))=>cache.value=json!({"state":"ready","updated":updated,"update_failed":failed,"checked_at":SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs(),"items":items}),
             Err(error)=>{if cache.value.is_null(){cache.value=json!({"items":[]});}cache.value["state"]=json!("unavailable");cache.value["error"]=json!(error.to_string());}
@@ -102,6 +102,28 @@ fn collect(inventory:&Value)->Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn startup_failure_can_recover_and_a_success_is_not_rechecked(){
+        use std::os::unix::fs::PermissionsExt;
+        let root=std::env::temp_dir().join(format!("oaclis-skill-startup-{}",std::process::id()));
+        let binary=root.join("packages/app-server-daemon/current/bin/codex");let config=root.join(".config/oaclis");
+        fs::create_dir_all(binary.parent().unwrap()).unwrap();fs::write(&binary,"#!/bin/sh\nexit 1\n").unwrap();fs::set_permissions(&binary,fs::Permissions::from_mode(0o700)).unwrap();
+        *CACHE.get_or_init(Default::default).lock().unwrap()=Cache::default();
+        let wait=||{let until=std::time::Instant::now()+Duration::from_secs(3);while CACHE.get().unwrap().lock().unwrap().running {assert!(std::time::Instant::now()<until);std::thread::sleep(Duration::from_millis(10));}};
+        refresh(&root,&root);wait();assert_eq!(snapshot(&config)["state"],"unavailable");assert!(!CACHE.get().unwrap().lock().unwrap().checked);
+        let script=r#"#!/bin/sh
+while IFS= read -r line; do
+ case "$line" in
+  *'"method":"initialize"'*) echo '{"id":0,"result":{}}' ;;
+  *'"method":"skills/list"'*) echo '{"id":1,"result":{"data":[{"skills":[{"name":"test-skill","enabled":true,"path":"/missing/SKILL.md"}],"errors":[]}]}}' ;;
+ esac
+done
+"#;
+        fs::write(&binary,script).unwrap();refresh(&root,&root);wait();let ready=snapshot(&config);assert_eq!(ready["state"],"ready");assert_eq!(ready["items"][0]["name"],"test-skill");
+        fs::write(&binary,"#!/bin/sh\nexit 1\n").unwrap();refresh(&root,&root);assert!(!CACHE.get().unwrap().lock().unwrap().running);assert_eq!(snapshot(&config),ready);
+        fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn auto_update_is_opt_in_and_preserves_existing_settings(){
         let root=std::env::temp_dir().join(format!("oaclis-skill-setting-{}",std::process::id()));
