@@ -1,4 +1,4 @@
-// terminal-format.js v1.42.311
+// terminal-format.js v1.42.318
 "use strict";
 const OaclisTerminal = (() => {
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
@@ -101,7 +101,12 @@ const OaclisTerminal = (() => {
 function consoleScreen(value){
  const lines=String(value??'').split('\n');
  const prompt=lines.findLastIndex(line=>/^\s*[›>]\s*Ask Codex to do anything[.!?]?\s*$/i.test(line));
- if(prompt>=0)lines.splice(prompt);
+ if(prompt>=0){
+  let end=prompt+1;
+  while(end<lines.length&&!lines[end].trim())end++;
+  while(end<lines.length&&lines[end].trim())end++;
+  lines.splice(prompt,end-prompt);
+ }
  for(let i=0;i<Math.min(12,lines.length);i++){
   if(!/^\s*[╭┌].*[╮┐]\s*$/.test(lines[i])||!/^\s*[│┃]\s*>_ OpenAI Codex\b/.test(lines[i+1]||''))continue;
   const end=lines.findIndex((line,index)=>index>i&&index<=i+12&&/^\s*[╰└].*[╯┘]\s*$/.test(line));
