@@ -1,4 +1,4 @@
-// voice.js v2.61.1474
+// voice.js v2.61.1476
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -98,7 +98,7 @@ window.OaclisVoice=(()=>{
      const result=event.results[i];
      if(!paused&&/[\p{L}\p{N}]/u.test(result[0].transcript))reader?.setDictating(true);
      if(result.isFinal){
-      trace('recognition:final',{index:i});
+      trace('recognition:final',{index:i,...(paused?{text:result[0].transcript}:{})});
       if(i<=consumed)continue;consumed=i;preview.textContent='';
       let transcript=result[0].transcript;
       if(lastFinal){
