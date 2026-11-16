@@ -74,7 +74,7 @@ Il confronto individua le differenze e propone il verso del trasferimento. Usa l
 - Un collegamento bidirezionale continua a confrontare le copie; le differenze si trasferiscono con Play.
 - Se un dispositivo è offline, il collegamento resta in attesa.
 
-L’installazione delle App copre i tipi supportati dal modulo, fra cui Node.js/npm e dipendenze Node con un lockfile coerente. Le dipendenze non supportate, per esempio pacchetti Python o di sistema, vengono segnalate: non sono dichiarate installate automaticamente.
+L’installazione delle App gestisce Node.js/npm e le dipendenze Node con un lockfile coerente, verifica le versioni presenti e registra l’esito sulla destinazione.
 
 I file viaggiano tramite rsync su SSH, con avanzamento reale. Il trasferimento dei percorsi non usa `--delete`. La copia all'origine viene conservata; eliminare una chat è un'azione separata e confermata, distinta dalla rimozione di un collegamento.
 
@@ -144,17 +144,16 @@ Il pannello **Motori AI** centralizza scelta del motore, modello predefinito e c
 | --- | --- |
 | ChatGPT · Codex | Operativo per creazione, ripresa e gestione delle chat tramite Codex installato. |
 | llama.cpp | Chat testuali con modelli locali: catalogo, storico separato, streaming e interruzione dalla console desktop e PWA. |
-| Claude | Configurazione predisposta; conversazioni non ancora abilitate. |
 
 Le nuove chiavi sono conservate nel file privato `~/.config/oaclis/engines.json`, fuori dal repository. Codex mantiene la propria autenticazione. Le chiavi non vengono inviate al browser, al relay o replicate sugli altri dispositivi.
 
-Dettagli e limiti: [collegamento llama.cpp e motori](docs/LLAMA.md).
+Documentazione operativa: [collegamento llama.cpp e motori](docs/LLAMA.md).
 
 ## Gestione del computer
 
 Dalla mappa si possono richiamare riavvio e aggiornamento di Oaclis sul dispositivo. I controlli energia permettono, dove supportato, di mantenere attivo il sistema, spegnere il monitor senza standby o ripristinare il comportamento normale. Le capacità effettive dipendono da Linux, WSL/Windows o macOS; nei container l'energia resta gestita dall'host.
 
-Oaclis rileva RustDesk e offre il collegamento al desktop remoto con le autorizzazioni previste da RustDesk. La preparazione è disponibile separatamente; l’inclusione nel setup standard è prevista nella [TODO](docs/TASKS.md).
+Oaclis rileva RustDesk e offre il collegamento al desktop remoto con le autorizzazioni previste da RustDesk. La preparazione è disponibile tramite `bash run.sh --desktop-test`.
 
 
 ## Interfaccia, log e risorse
@@ -209,12 +208,12 @@ Guida completa, rete WSL, SSH e installazioni avanzate: [INSTALLAZIONE.md](docs/
 
 ### Ambienti di esecuzione e preparazione
 
-| Ambiente | Stato e limiti |
+| Ambiente | Modalità di esecuzione e preparazione |
 | --- | --- |
 | Linux / Ubuntu / Jetson | Percorso operativo nativo; installazione automatica delle dipendenze prevista per Ubuntu/Debian. |
 | Windows con WSL | Percorso operativo; rete e browser sono gestiti anche dal lato Windows. |
-| macOS | Preparazione nativa tramite Homebrew prevista; manca la configurazione dell’avvio automatico. Il percorso Linux in Docker segue i requisiti dei container. |
-| Container Linux | Esecuzione in ambiente Linux. Mancano Dockerfile/Compose e predisposizione automatica di rete, SSH, volumi persistenti e politica di riavvio. |
+| macOS | Preparazione nativa tramite `run.sh` e Homebrew, oppure ambiente Linux in container. |
+| Container Linux | Eseguire `run.sh` dentro il container, predisponendo rete, SSH, volumi persistenti e politica di riavvio nell’ambiente ospitante. |
 | Browser desktop/mobile | Interfaccia web; Chrome richiesto per le funzioni vocali. |
 
 ## Dati, sicurezza e architettura

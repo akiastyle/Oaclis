@@ -3,19 +3,18 @@
 Questa guida descrive le attività disponibili e come avviarle.
 Per installazione e rete: [INSTALLAZIONE.md](INSTALLAZIONE.md).
 
-## Quali attività può svolgere ogni motore
+## Attività operative
 
-| Attività | Codex | llama.cpp locale | Come si usa |
-| --- | --- | --- | --- |
-| Conversare, tradurre, riassumere o analizzare un testo | Sì | Sì | Aprire una chat del motore scelto, scrivere o dettare la richiesta e inviare. La qualità dipende dal modello selezionato. |
-| Conservare e riprendere la conversazione | Sì | Sì | Riaprire la stessa chat dall'elenco. Gli archivi dei due motori sono separati. |
-| Lavorare sui file del progetto ed eseguire comandi | Sì, secondo autorizzazioni e strumenti Codex | No | Per Codex scegliere la cartella di lavoro e le autorizzazioni nelle impostazioni della chat. Una chat llama.cpp risponde solo con testo. |
-| Inviare immagini | Sì, con modello compatibile | No nel collegamento attuale | Usare selezione file, trascinamento o incolla nella console. |
-| Cambiare modello nella conversazione | Sì | Sì | Premere Mod; in llama.cpp inviare poi `/model NOME-MODELLO` fra quelli elencati. |
-| Usare la chat dalla PWA | Sì | Sì | Concedere la chat al telefono dal master e aprirla nell'elenco mobile. |
-| Trasferire l'archivio della chat fra computer | Sì, tramite il collegamento configurato | Non ancora | Usare il flusso Chat/Percorsi/App e Play per gli archivi Codex. |
-| Pubblicare l'avanzamento di uno script | Indipendente dal motore AI | Indipendente dal motore AI | Lo script invia il proprio stato all'endpoint statistiche Oaclis, associandolo alla chat. |
-| Usare Claude | Non disponibile come motore operativo | — | La configurazione è predisposta; le conversazioni Claude non sono abilitate. |
+| Attività realizzata | Motore o componente | Come si usa |
+| --- | --- | --- |
+| Conversazione, traduzione, riassunto e analisi del testo | Codex e llama.cpp | Aprire una chat, scegliere il modello, scrivere o dettare la richiesta e inviare. |
+| Storico e ripresa della conversazione | Codex e llama.cpp | Riaprire la stessa chat dall'elenco. Ogni motore conserva il proprio archivio. |
+| Lavoro sui file ed esecuzione di comandi | Codex | Scegliere la cartella del progetto e le autorizzazioni della chat, quindi chiedere l'operazione nella console. |
+| Invio di immagini | Codex, con modello compatibile | Usare selezione file, trascinamento o incolla nella console. |
+| Cambio del modello | Codex e llama.cpp | Premere Mod; in llama.cpp inviare poi `/model NOME-MODELLO` fra quelli elencati. |
+| Accesso mobile alla chat | Codex e llama.cpp | Concedere la chat al telefono dal master e aprirla nella PWA. |
+| Trasferimento e sincronizzazione degli archivi | Chat Codex | Configurare Chat/Percorsi/App e premere Play. |
+| Avanzamento di script e calcoli | Endpoint statistiche Oaclis | Lo script pubblica testo e percentuale associati alla propria chat. |
 
 ## Configurare motore e modello
 
@@ -30,9 +29,7 @@ Sul master attuale è configurato `Qwen3-4B-Q4_K_M`.
 Le chiavi già presenti si conservano lasciando vuoto il campo password.
 Cambiare il motore predefinito non converte le chat esistenti.
 
-Il pannello viene proposto su un'installazione vuota. Il setup unico che
-raccolga anche posizione delle chat e indirizzo della PWA è ancora nella
-[TODO](TASKS.md); non è una procedura già completata.
+Il pannello viene proposto su un'installazione vuota e resta accessibile dalla barra principale.
 
 ## Creare e aprire una chat
 
@@ -99,8 +96,8 @@ La mappa consente di spostare dispositivi e icone senza avviare trasferimenti.
 L'invio monodirezionale conclude il lavoro dopo una copia riuscita.
 La sincronizzazione bidirezionale continua a confrontare le copie, ma i
 trasferimenti richiedono Play. L'origine viene conservata.
-Il modulo App installa soltanto i tipi di dipendenza supportati;
-quelli non supportati vengono segnalati, non dichiarati installati.
+Il modulo App installa Node.js/npm e le dipendenze Node previste dal progetto,
+verificando le versioni e registrando l’esito dell’installazione.
 
 ## Abilitare il telefono e scegliere le chat
 

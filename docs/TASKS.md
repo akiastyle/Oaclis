@@ -13,3 +13,8 @@
 - [ ] Rivedere e mantenere aggiornato l’installatore delle dipendenze dei progetti: ampliare i tipi supportati e verificare le versioni sulla destinazione.
 
 - [ ] Riunire la configurazione del primo avvio: motori/modelli, posizione delle chat e indirizzo della PWA, riusando i pannelli esistenti. L’endpoint delle statistiche (`POST /api/jobs/status`) è incluso di default nel runtime Oaclis, senza installazioni per chat; i tool vengono associati tramite `chat_id` e `id`. La configurazione del servizio llama.cpp è separata.
+
+- [ ] Estendere le chat llama.cpp agli strumenti operativi sui progetti e agli allegati immagine, mantenendo la console condivisa.
+- [ ] Collegare gli archivi llama.cpp al trasferimento e alla sincronizzazione fra computer.
+- [ ] Predisporre Dockerfile/Compose con rete, SSH, volumi persistenti e politica di riavvio.
+- [ ] Completare la configurazione dell’avvio automatico nativo su macOS e il collaudo su macchina reale.
