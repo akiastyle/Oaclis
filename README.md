@@ -6,6 +6,8 @@ Oaclis è un'applicazione Rust con interfaccia web locale e accesso mobile trami
 
 Il programma gira sui propri dispositivi. I trasferimenti fra computer usano SSH e rsync; Git distribuisce il codice di Oaclis, non gli archivi delle chat. La PWA aggiunge un accesso remoto tramite un relay PHP e richiede che il computer che serve la console sia raggiungibile dal sistema.
 
+Per sapere **quali attività sono possibili e come eseguirle**, leggere la [guida operativa](docs/USO.md), con distinzione fra Codex, llama.cpp, desktop e PWA.
+
 ## Funzionalità
 
 | Area | Cosa offre |
@@ -243,6 +245,7 @@ cargo run -- serve
 
 Alcuni strumenti e test di integrazione separati sono locali all'ambiente di sviluppo e non vengono distribuiti nel repository. I test Rust integrati nei moduli restano disponibili; non sono eseguiti nella build release.
 
+- [Guida operativa: attività e comandi](docs/USO.md)
 - [Installazione e rete](docs/INSTALLAZIONE.md)
 - [Relay e PWA](relay/README.md)
 - [Integrazione dei tool](docs/TOOL-INTEGRATION.md)
