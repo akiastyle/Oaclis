@@ -58,3 +58,30 @@ una richiesta esplicita al catalogo llama.cpp segnala il collegamento assente.
 
 Protocollo verificato sul servizio installato e nella
 [documentazione llama.cpp](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md).
+
+## Test interno sul Jetson
+
+Verificato il 16 novembre 2026 tramite il tunnel esistente su loopback:
+14 modelli disponibili e inferenza reale con `Qwen3-4B-Q4_K_M`.
+La prova invia due messaggi: il primo riceve una risposta normale, il secondo
+riceve una risposta SSE in streaming e recupera correttamente il codice
+fornito nel primo messaggio.
+
+Per ripetere esplicitamente la prova dalla repository Oaclis:
+
+```bash
+cargo test --lib llama::tests::installed_jetson_conversation -- --ignored --nocapture
+```
+
+Usa le credenziali private già configurate in Oaclis/AI-LAB. Carica il modello
+di test sul servizio esistente; non installa modelli o servizi e non modifica
+gli archivi delle chat. Se il catalogo segnala un altro modello caricato, la
+prova si ferma prima dell’inferenza per non provocarne la sostituzione.
+Non è una prenotazione del servizio: eseguire il test quando gli altri tool
+non lo stanno usando. Il modello può restare caricato secondo le regole del
+server esistente.
+
+Il test è interno e non parte con i test ordinari. Verifica il collegamento,
+l’inferenza e il contesto inviato dal client, non la persistenza di una chat
+Oaclis. La creazione delle conversazioni llama.cpp nell’interfaccia resta da
+collegare a storico, streaming, annullamento e coda condivisa.

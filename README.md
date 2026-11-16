@@ -86,7 +86,7 @@ L'accesso viene predisposto dal master tramite invito e abbinamento. Sul disposi
 
 Il master decide quali chat concedere e può revocare l'accesso. La passkey protegge l'accesso web; una chiave del telefono firma le richieste, che il master verifica rispetto ai permessi locali. Il relay non può concedersi autonomamente accesso alle chat.
 
-Chat e risposte della console non vengono conservate nella cache del service worker. La PWA non è una copia offline delle conversazioni: richiede la connessione al relay e al computer che esegue la console.
+Chat e risposte della console non vengono conservate nella cache del service worker. La PWA è un client autonomo: gestisce la propria interfaccia e comunica con Oaclis tramite il relay. L’esecuzione delle chat resta sul computer associato.
 
 Configurazione e dettagli del relay: [relay/README.md](relay/README.md).
 
@@ -98,7 +98,7 @@ Fra i comandi disponibili ci sono invio, cambio chat per nome o numero, pausa e 
 
 Dopo l'invio la scrittura può restare in pausa mantenendo l'ascolto dei comandi. «Riprendi» riabilita la dettatura. Il riconoscimento e la riproduzione vocale condividono un workflow che distingue dettatura, pausa e lettura delle risposte.
 
-Il riconoscimento usa `SpeechRecognition`/`webkitSpeechRecognition` del browser; la lettura usa le voci esposte dal browser e dal sistema. Disponibilità, qualità delle voci e continuità del servizio dipendono dal browser e dal dispositivo. La dettatura non è garantita offline e il browser può interrompere una sessione di riconoscimento anche se l'ascolto è ancora richiesto.
+Per usare la voce è richiesto **Google Chrome**. Il riconoscimento usa `SpeechRecognition`/`webkitSpeechRecognition`; la lettura usa le voci esposte da Chrome e dal sistema.
 
 ## Avanzamento dei tool
 
@@ -141,20 +141,19 @@ Il pannello **Motori AI** centralizza scelta del motore, modello predefinito e c
 | Motore | Stato |
 | --- | --- |
 | ChatGPT · Codex | Operativo per creazione, ripresa e gestione delle chat tramite Codex installato. |
-| llama.cpp | Configurazione e lettura del catalogo dei modelli tramite il collegamento predisposto; conversazioni non ancora abilitate. |
+| llama.cpp | Collegamento al Jetson, catalogo dei modelli e test interno di inferenza, contesto e streaming verificati. Conversazioni nell’interfaccia ancora da collegare. |
 | Claude | Configurazione predisposta; conversazioni non ancora abilitate. |
 
 Le nuove chiavi sono conservate nel file privato `~/.config/oaclis/engines.json`, fuori dal repository. Codex mantiene la propria autenticazione. Le chiavi non vengono inviate al browser, al relay o replicate sugli altri dispositivi.
 
 Dettagli e limiti: [collegamento llama.cpp e motori](docs/LLAMA.md).
 
-## Gestione del computer e focus
+## Gestione del computer
 
 Dalla mappa si possono richiamare riavvio e aggiornamento di Oaclis sul dispositivo. I controlli energia permettono, dove supportato, di mantenere attivo il sistema, spegnere il monitor senza standby o ripristinare il comportamento normale. Le capacità effettive dipendono da Linux, WSL/Windows o macOS; nei container l'energia resta gestita dall'host.
 
-Quando RustDesk è installato e viene rilevato, Oaclis offre il collegamento al desktop remoto. RustDesk deve essere disponibile anche sulla destinazione, con le proprie autorizzazioni.
+Oaclis rileva RustDesk e offre il collegamento al desktop remoto con le autorizzazioni previste da RustDesk. La preparazione è disponibile separatamente; l’inclusione nel setup standard è prevista nella [TODO](docs/TASKS.md).
 
-Il pannello **Controllo sguardo** è sperimentale: selezione della webcam, mappa dei monitor Windows e calibrazione manuale degli occhi. Il focus automatico guidato dallo sguardo non è attivo. È disponibile uno script separato per verificare il focus delle sole finestre Oaclis tramite API Windows. Dettagli: [prove di focus e calibrazione](docs/window-focus.md).
 
 ## Interfaccia, log e risorse
 
@@ -206,16 +205,15 @@ La UI locale si apre su **http://localhost:23232/**. Per richiamarla dopo l'inst
 
 Guida completa, rete WSL, SSH e installazioni avanzate: [INSTALLAZIONE.md](docs/INSTALLAZIONE.md).
 
-### Compatibilità
+### Ambienti di esecuzione e preparazione
 
 | Ambiente | Stato e limiti |
 | --- | --- |
 | Linux / Ubuntu / Jetson | Percorso operativo nativo; installazione automatica delle dipendenze prevista per Ubuntu/Debian. |
 | Windows con WSL | Percorso operativo; rete e browser sono gestiti anche dal lato Windows. |
-| Windows nativo | Non è attualmente un percorso di esecuzione completo del nucleo Oaclis. |
-| macOS | Script di preparazione previsto; collaudo completo ancora da fare. |
-| Container Linux | Richiede rete, SSH, volumi persistenti e gestione dell'avvio; setup Docker completo non automatizzato. |
-| Browser desktop/mobile | Le funzioni web di base e quelle dipendenti da API specifiche hanno requisiti diversi: la disponibilità della voce, della gestione monitor e dei permessi va verificata sul browser usato. |
+| macOS | Preparazione nativa tramite Homebrew prevista; manca la configurazione dell’avvio automatico. Il percorso Linux in Docker segue i requisiti dei container. |
+| Container Linux | Esecuzione in ambiente Linux. Mancano Dockerfile/Compose e predisposizione automatica di rete, SSH, volumi persistenti e politica di riavvio. |
+| Browser desktop/mobile | Interfaccia web; Chrome richiesto per le funzioni vocali. |
 
 ## Dati, sicurezza e architettura
 
@@ -225,7 +223,7 @@ Lo stato operativo viene caricato in memoria e persistito in JSON sotto `~/.conf
 
 Le API operative locali accettano richieste loopback con Host locale. SSH protegge i collegamenti fra computer; passkey, abbinamento, firme e autorizzazioni per chat proteggono il percorso mobile. I permessi della console restano quelli configurati: il canale SSH vincolato non costituisce una sandbox dei percorsi.
 
-La sincronizzazione non copia implicitamente tutta la home, le chiavi private SSH o l'autenticazione Codex. I dati che passano dal relay mobile non hanno una garanzia aggiuntiva di cifratura end-to-end. Servizi AI, riconoscimento vocale, verifiche online degli aggiornamenti e accesso mobile possono richiedere Internet; il trasferimento fra computer avviene nella LAN tramite SSH.
+La sincronizzazione non copia implicitamente tutta la home, le chiavi private SSH o l'autenticazione Codex. Servizi AI, riconoscimento vocale, verifiche online degli aggiornamenti e accesso mobile possono richiedere Internet; il trasferimento fra computer avviene nella LAN tramite SSH.
 
 | Directory | Contenuto |
 | --- | --- |
@@ -250,7 +248,6 @@ Alcuni strumenti e test di integrazione separati sono locali all'ambiente di svi
 - [Integrazione dei tool](docs/TOOL-INTEGRATION.md)
 - [Statistiche dei tool](docs/JOBS.md)
 - [Motori AI e llama.cpp](docs/LLAMA.md)
-- [Focus Windows e calibrazione](docs/window-focus.md)
 - [Architettura del nucleo Rust](docs/RUST-CORE.md)
 
 I documenti di progetto e i resoconti delle prime prove possono descrivere fasi precedenti. Per lo stato delle funzionalità usare questa presentazione e le guide operative collegate.
