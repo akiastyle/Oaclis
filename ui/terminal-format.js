@@ -1,4 +1,4 @@
-// terminal-format.js v1.42.318
+// terminal-format.js v1.42.324
 "use strict";
 const OaclisTerminal = (() => {
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
@@ -201,15 +201,15 @@ function consoleScreen(value){
    const view=document.createElement('section');view.className='oaclis-console';
    view.innerHTML=OaclisSettings.html('<div class="console-panes"></div><form class="terminal-input"><div class="console-draft"><div class="console-attachment" hidden><img alt=""><button type="button" data-console-action="remove-image" aria-label="Rimuovi immagine">'+OaclisIcon('close')+'</button></div><textarea name="text" maxlength="8000" aria-label="Messaggio" rows="2" placeholder="Scrivi un messaggio" disabled></textarea></div><button type="submit" class="console-send icon-button" data-console-action="send" aria-label="Invia messaggio" aria-haspopup="menu" aria-expanded="false" disabled>'+OaclisIcon('arrowUp')+'</button></form><div class="terminal-keys"></div>');
    const keys=view.querySelector('.terminal-keys');
-   for(const [key,label]of [['Escape','Esc'],['1','1'],['2','2'],['3','3'],['C-c','Ctrl+C']]){
-    const button=document.createElement('button');button.type='button';button.className='icon-button';button.textContent=label;button.dataset.key=key;button.setAttribute('aria-label',label);keys.append(button);
+   for(const [key,label]of [['Escape','Esc'],['1','1'],['2','2'],['3','3'],['C-c','Ctrl+C'],['?','?'],['Tab','Tab'],['/model','Model']]){
+    const button=document.createElement('button');button.type='button';button.className='icon-button';button.textContent=label;button.dataset.key=key;button.title=key==='/model'?'/model':label;button.setAttribute('aria-label',label);keys.append(button);
    }
    const voice=document.createElement('span');voice.className='voice-controls';keys.append(voice);
    view.command=(action,value,chat=view.activeConsole)=>{
     switch(action){
      case 'send':return chat.send('input',{text:view.querySelector('textarea').value,key:'Enter'});
      case 'stopConsole':return chat.send('stop',{});
-     case 'key':return chat.send(value==='C-c'?'stop':'input',{key:value});
+     case 'key':return value==='/model'?chat.send('command',{text:'/model',key:'Enter'}):chat.send(value==='C-c'?'stop':'input',{key:value});
      case 'clearDraft':{const field=view.querySelector('textarea');field.value='';field.dispatchEvent(new Event('input',{bubbles:true}));view.files.remove();return;}
      case 'takePhoto':return view.files.pick(true);
      case 'pickImage':return view.files.pick(false);

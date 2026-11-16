@@ -1,4 +1,4 @@
-// console.js v3.142.2462
+// console.js v3.142.2470
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -185,7 +185,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", OaclisSettings.text("Console Codex · ") + deviceName(deviceId));
   const chatIcon=OaclisTerminal.chatIcon({...connection.entry,...appearance(connection.entry),name:chatLabel(connection.entry)});
-  const pane=OaclisTerminal.createPane({id:connection.entry.id,name:chatLabel(connection.entry)+' · '+deviceName(deviceId),icon:chatIcon},(action,body)=>action==='stop'?stopConsole():Object.hasOwn(body,'text')?submit():send({action,...body}));
+  const pane=OaclisTerminal.createPane({id:connection.entry.id,name:chatLabel(connection.entry)+' · '+deviceName(deviceId),icon:chatIcon},(action,body)=>action==='stop'?stopConsole():action==='command'?submit(body.text):Object.hasOwn(body,'text')?submit():send({action,...body}));
   const chat=pane.console;panel.activeConsole=chat;panel.querySelector('.console-panes').append(pane);
   const close=document.createElement('button');close.type='button';close.className='icon-button popover-close';close.setAttribute('aria-label',OaclisSettings.text('Chiudi chat'));close.innerHTML=OaclisIcon('close');panel.querySelector('h2').append(close);
   document.body.append(panel);
@@ -303,12 +303,12 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   };
   panel.terminalVisibility=()=>{clearTimeout(panel.terminalTimer);if(!document.hidden)pollTerminal();};
   document.addEventListener('visibilitychange',panel.terminalVisibility);
-  const submit = async () => {
+  const submit = async command => {
     if (!ready || submitting || chat.preparingImage) return false;
-    const text = form.elements.text.value, attachment=chat.image; submitting = true;
+    const text = command??form.elements.text.value, attachment=command?null:chat.image; submitting = true;
     try {
       const sent=await send({action:"input",text,key:"Enter",...(attachment?{image:attachment}:{})});
-      if(sent){if(chat.image===attachment)files.remove();form.elements.text.value=OaclisTerminal.remainingDraft(form.elements.text.value,text);panel.sendWindowDraft?.();window.OaclisLocalVoice?.sent(panel);}
+      if(sent&&!command){if(chat.image===attachment)files.remove();form.elements.text.value=OaclisTerminal.remainingDraft(form.elements.text.value,text);panel.sendWindowDraft?.();window.OaclisLocalVoice?.sent(panel);}
       return sent;
     } finally {submitting=false;}
   };

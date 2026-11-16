@@ -1,4 +1,4 @@
-// mobile_auth.rs v1.52.736
+// mobile_auth.rs v1.52.738
 //! Local mobile authority: QR-bound keys, chat grants and signed, non-replayable requests.
 use crate::invalid;
 use ring::{hmac, rand::{SecureRandom, SystemRandom}, signature};
@@ -133,7 +133,7 @@ impl Store {
             || command.issued>current+5 || current.saturating_sub(command.issued)>30
             || !phone.chats.contains(&command.chat_id) || command.text.chars().count()>8000 || command.text.contains('\0')
             || !matches!(command.action.as_str(),"open"|"read"|"stop"|"input"|"create"|"engines"|"models")
-            || !matches!(command.key.as_str(),""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c"|"1"|"2"|"3")
+            || !matches!(command.key.as_str(),""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c"|"1"|"2"|"3"|"?")
             || (!matches!(command.action.as_str(),"input"|"create") && (!command.text.is_empty() || !command.key.is_empty() || command.image.is_some()))
             || (command.action=="create" && (!command.key.is_empty() || command.image.is_some() || command.text.trim().is_empty() || command.text.chars().count()>160))
             || (command.action!="create"&&(!command.icon.is_empty()||!command.model.is_empty()||!command.engine.is_empty())) {

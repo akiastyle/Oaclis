@@ -1,4 +1,4 @@
-// app.js v2.131.1285
+// app.js v2.131.1294
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -149,7 +149,7 @@ async function openConsole(chat,adjacent=false){
   files.paint();bindVoice(pane.chat);form.querySelectorAll('textarea,button').forEach(element=>element.disabled=!pane.ready||pane.console.preparingImage===true);layout();return true;
  }
  function add(selected,index=panes.length){
-  const element=OaclisTerminal.createPane({id:selected.id,name:selected.name,icon:OaclisTerminal.chatIcon(selected)},(action,body)=>action==='stop'?stopConsole(pane):submit(pane,body.key));
+  const element=OaclisTerminal.createPane({id:selected.id,name:selected.name,icon:OaclisTerminal.chatIcon(selected)},(action,body)=>action==='stop'?stopConsole(pane):submit(pane,body.key,action==='command'?body:null));
   const title=element.querySelector('.console-title'),name=element.querySelector('.console-name');
   const jobs=document.createElement("span");title.append(jobs);const jobsStatus=OaclisJobs.inline(jobs);
   const saved=consolePositions.get(selected.id),pane={chat:selected,element,title,name,jobsStatus,screen:element.querySelector('pre'),console:element.console,ready:false,closed:false,saved};
@@ -182,7 +182,7 @@ async function openConsole(chat,adjacent=false){
   if(pane===active){form.querySelectorAll('textarea,button').forEach(element=>element.disabled=pane.console.preparingImage===true);if(request.operation==='input'&&typeof request.text==='string')voice.afterSend();}
   return true;
  }
- function send(pane,operation,body={}){
+ function send(pane,operation,body={},command=false){
   const task=queue.then(async()=>{
    if(closed||pane.closed||operation==='read'&&inputBusy)return false;
    let controller=null;
@@ -193,7 +193,7 @@ async function openConsole(chat,adjacent=false){
     if(pane.reconnecting&&!document.hidden){try{navigator.vibrate?.(100);}catch{}}
     const currentReader=pane===active?voice.reader:null,speechGeneration=currentReader?.stamp();
     const request=await api('console',{chat_id:pane.chat.id,operation,...(operation==='read'&&pane.console.revision?{screen_revision:pane.console.revision}:{}),...body,...currentReader?.request()});
-    pending={...request,pane,operation,text:body.text,image:body.image,reader:currentReader,speechGeneration,deadline:Date.now()+23000};
+    pending={...request,pane,operation,text:command?undefined:body.text,image:body.image,reader:currentReader,speechGeneration,deadline:Date.now()+23000};
     if(operation==='read'){
      controller=new AbortController();reading=controller;
      if(inputBusy||document.hidden)controller.abort();
@@ -219,8 +219,9 @@ async function openConsole(chat,adjacent=false){
   try{return await task();}
   finally{inputBusy=false;schedulePoll();}
  }
- async function submit(pane=active,key='Enter'){
+ async function submit(pane=active,key='Enter',command=null){
   if(inputBusy||closed||!pane?.ready||pane.console.preparingImage)return false;
+  if(command)return runInput(()=>send(pane,'input',command,true));
   const value=pane===active?text.value:drafts.get(pane.chat.id)||'';saveDraft(pane.chat.id,value);
   return runInput(()=>send(pane,'input',key==='Enter'?{text:value,key,...(pane.console.image?{image:pane.console.image}:{})}:{key}));
  }
