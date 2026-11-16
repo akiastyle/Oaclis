@@ -1,4 +1,4 @@
-// mobile.rs v1.24.641
+// mobile.rs v1.24.646
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -14,7 +14,10 @@ fn invitation_qr(url: &str) -> io::Result<String> {
     if code.len() != 64 || !code.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(invalid("Invito mobile non valido"));
     }
-    Ok(QrCode::new(url).map_err(io::Error::other)?
+    use sha2::{Digest,Sha256};
+    let id:String=Sha256::digest(code.as_bytes()).iter().map(|byte|format!("{byte:02x}")).collect();
+    let target=format!("https://oaclis.krprojects.it/auth/{id}#pair={code}");
+    Ok(QrCode::new(target).map_err(io::Error::other)?
         .render::<svg::Color>().min_dimensions(288, 288).build())
 }
 

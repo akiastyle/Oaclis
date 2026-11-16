@@ -1,4 +1,5 @@
+# .htaccess v1.0.0
 DirectoryIndex index.php
 Options -Indexes
 RewriteEngine On
-RewriteRule ^auth/?$ index.php [L]
+RewriteRule ^auth(?:/[a-f0-9]{64})?/?$ index.php [L]

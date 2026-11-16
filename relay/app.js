@@ -1,10 +1,10 @@
-// app.js v2.131.1275
+// app.js v2.131.1285
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
 window.addEventListener('hashchange',()=>{if(location.hash)location.reload();});
 const fragment=new URLSearchParams(location.hash.slice(1));
-const authPage=location.pathname.replace(/\/$/,'')==='/auth';
+const authPage=/^\/auth(?:\/[a-f0-9]{64})?\/?$/.test(location.pathname);
 if(location.hash&&!authPage)location.replace('/auth'+location.hash);
 sessionStorage.removeItem('oaclis-test-admin');
 let invite=fragment.get('pair')||sessionStorage.getItem('oaclis-test-invite')||'';
@@ -271,10 +271,8 @@ async function protectedView(){
 async function deviceView(){
  if(!await OaclisMobileSecurity.hasKey(code)){show('');return;}
  const x=await api('status');
- if(x.status==='pending'){show('');timer=setInterval(async()=>{try{const s=await api('status');if(s.status==='approved'){clearInterval(timer);await deviceView();}}catch{clearInterval(timer);app.hidden=true;app.replaceChildren();}},3000);return;}
- show(OaclisSettings.html('<button id="login" type="button">Accedi con passkey</button>'));
- document.getElementById('login').onclick=e=>run(e.currentTarget,async()=>{
-  const data=await api('login-options');const c=await navigator.credentials.get(options(data));await api('login',credential(c));location.replace('/');
- });
+ show('');
+ if(x.status!=='approved'){location.replace('/auth');return;}
+ const data=await api('login-options');const c=await navigator.credentials.get(options(data));await api('login',credential(c));location.replace('/');
 }
 (async()=>{try{if(invite)await registerView();else if(code){if(authPage)await deviceView();else try{await protectedView();}catch(e){if(e.status===403)location.replace('/auth');else throw e;}}}catch(e){if(invite){show(OaclisSettings.html('<h1>Abbina questo telefono</h1>'));message(e.message,true);}else{voice.stop();show('');}}})();

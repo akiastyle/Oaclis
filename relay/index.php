@@ -1,5 +1,5 @@
 <?php
-// index.php v1.8.740
+// index.php v1.9.808
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -9,16 +9,12 @@ header('Referrer-Policy: no-referrer');
 header("Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; manifest-src 'self'; img-src 'self' data:; media-src 'self'; worker-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
 header('Permissions-Policy: publickey-credentials-create=(self), publickey-credentials-get=(self), screen-wake-lock=(self), microphone=(self)');
 if (($_SERVER['HTTP_HOST'] ?? '') !== 'oaclis.krprojects.it') { http_response_code(404); exit; }
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    header('Content-Type: application/json');
-    if (($_SERVER['HTTP_ORIGIN'] ?? '') !== ORIGIN || !str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') || (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 1048576) { http_response_code(403); exit; }
-    umask(0077);
-    $config = require PRIVATE_DIR . '/config.php';
-    $cookieKey=hash('sha256','oaclis-cookie-v1:'.$config['admin_hash'],true);
-    spl_autoload_register(function ($class) {
-        $prefix = 'lbuchs\\WebAuthn\\';
-        if (str_starts_with($class, $prefix)) require PRIVATE_DIR . '/library/src/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
-    });
+$path=parse_url($_SERVER['REQUEST_URI']??'/',PHP_URL_PATH);
+$invitation=preg_match('~^/auth/([a-f0-9]{64})/?$~D',$path,$match)?$match[1]:'';
+if ($_SERVER['REQUEST_METHOD']==='GET' && empty($_COOKIE['__Host-OaclisDevice']) && empty($_COOKIE['__Host-Oaclis']) && $invitation==='') exit;
+umask(0077);
+$config=require PRIVATE_DIR.'/config.php';
+$cookieKey=hash('sha256','oaclis-cookie-v1:'.$config['admin_hash'],true);
     function readCookie(mixed $value,string $key): array {
         if (!is_string($value) || !str_starts_with($value,'v1.') || strlen($value)>3800) return [];
         $raw=base64_decode(strtr(substr($value,3),'-_','+/'),true);
@@ -27,6 +23,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($plain===false) return [];
         try {$decoded=json_decode($plain,true,16,JSON_THROW_ON_ERROR);return is_array($decoded)?$decoded:[];} catch (Throwable) {return [];}
     }
+    function readState(): string {
+        $path=PRIVATE_DIR.'/state.json';
+        for ($attempt=0;$attempt<5;$attempt++) {
+            clearstatcache(true,$path);
+            $raw=@file_get_contents($path);
+            if (is_string($raw) && $raw!=='') return $raw;
+            if ($attempt<4) usleep(20000);
+        }
+        throw new RuntimeException('Relay state temporarily unreadable');
+    }
+function rememberDevice(string $device,bool $locked=false): void {
+    global $cookieKey;
+    $claim=$device.'.'.(int)$locked;
+    $value='v1.'.$claim.'.'.hash_hmac('sha256','oaclis-device-v1:'.$claim,$cookieKey);
+    if (($_COOKIE['__Host-OaclisDevice']??'')===$value) return;
+    if (!setcookie('__Host-OaclisDevice',$value,['expires'=>time()+31536000,'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Strict'])) throw new RuntimeException('Unable to remember device');
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    if (($_SERVER['HTTP_ORIGIN'] ?? '') !== ORIGIN || !str_starts_with($_SERVER['CONTENT_TYPE'] ?? '', 'application/json') || (int)($_SERVER['CONTENT_LENGTH'] ?? 0) > 1048576) { http_response_code(403); exit; }
+    spl_autoload_register(function ($class) {
+        $prefix = 'lbuchs\\WebAuthn\\';
+        if (str_starts_with($class, $prefix)) require PRIVATE_DIR . '/library/src/' . str_replace('\\', '/', substr($class, strlen($prefix))) . '.php';
+    });
     function writeCookie(): void {
         global $session,$originalSession,$cookieKey;
         if ($session===$originalSession) return;
@@ -43,16 +63,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $originalSession=$session;
     }
     function respond(array $value, int $code=200): never { writeCookie(); http_response_code($code); echo json_encode($value, JSON_THROW_ON_ERROR); exit; }
-    function readState(): string {
-        $path=PRIVATE_DIR.'/state.json';
-        for ($attempt=0;$attempt<5;$attempt++) {
-            clearstatcache(true,$path);
-            $raw=@file_get_contents($path);
-            if (is_string($raw) && $raw!=='') return $raw;
-            if ($attempt<4) usleep(20000);
-        }
-        throw new RuntimeException('Relay state temporarily unreadable');
-    }
     function decode(string $s): string {
         if (strlen($s)>18000 || !preg_match('/^[A-Za-z0-9_-]+$/D', $s)) throw new RuntimeException();
         $v=base64_decode(strtr($s,'-_','+/'), true);
@@ -106,6 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $state=$originalState;
         if (($state['jobs_received']??0)<time()-3600) unset($state['jobs'],$state['jobs_received']);
         $record=$state['devices'][$deviceId]??null;
+        if (($record['status']??'')==='approved') rememberDevice($deviceId);
         $authenticated=$authenticated && ($record['status']??'')==='approved' && is_string($session['auth']['nonce']??null) && hash_equals($record['auth_token']??'',hash('sha256',$session['auth']['nonce']));
         if (!$authenticated) unset($session['auth']);
         $result=[];
@@ -187,6 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!hash_equals($data->credentialId,decode($input['id']??''))) throw new RuntimeException();
             $state['devices'][$deviceId]=['name'=>$pending['name'],'status'=>'pending','created'=>gmdate('c'),'credential'=>base64_encode($data->credentialId),'key'=>$data->credentialPublicKey,'counter'=>$data->signatureCounter??0,'pairing'=>$pending['pairing']];
             unset($state['invitations'][$invite]);
+            rememberDevice($deviceId);
             $result=['status'=>'pending'];
             break;
         case 'status':
@@ -231,6 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $originalState=json_decode($raw,true,64,JSON_THROW_ON_ERROR);
                     $state=$originalState;
                     $record=$state['devices'][$deviceId]??null;
+        if (($record['status']??'')==='approved') rememberDevice($deviceId);
                     $job=$record['console']??[];
                     if (!$record || $record['status']!=='approved' || $authUntil<time() || !hash_equals($record['auth_token']??'',hash('sha256',$session['auth']['nonce'])) ||
                         !in_array($chat,array_column($record['chats']??[],'id'),true)) respond([],403);
@@ -339,6 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         case 'logout':
             if ($authenticated) {$state['devices'][$deviceId]['lastSeen']=0;unset($state['devices'][$deviceId]['auth_token'],$state['devices'][$deviceId]['console']);}
             unset($session['auth'],$session['challenge']);
+            if (($record['status']??'')==='approved') rememberDevice($deviceId,true);
             $result=['ok'=>true];
             break;
         default: respond([],404);
@@ -360,6 +374,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     exit;
 }
 if ($_SERVER['REQUEST_METHOD']!=='GET') {http_response_code(405);exit;}
+$hint=$_COOKIE['__Host-OaclisDevice']??'';
+$known='';$locked=false;
+if (is_string($hint) && preg_match('/^v1\.([a-f0-9]{64})\.([01])\.([a-f0-9]{64})$/D',$hint,$parts) && hash_equals(hash_hmac('sha256','oaclis-device-v1:'.$parts[1].'.'.$parts[2],$cookieKey),$parts[3])) {
+    $known=$parts[1];$locked=$parts[2]==='1';
+} else {
+    $legacy=readCookie($_COOKIE['__Host-Oaclis']??null,$cookieKey);
+    $known=$legacy['auth']['device']??'';
+}
+try {$navigationState=json_decode(readState(),true,64,JSON_THROW_ON_ERROR);} catch (Throwable) {http_response_code(503);exit;}
+$approved=is_string($known) && ($navigationState['devices'][$known]['status']??'')==='approved';
+$invited=$invitation!=='' && ($navigationState['invitations'][$invitation]['until']??0)>=time();
+if (!$approved && !$invited) exit;
+if ($approved) {rememberDevice($known);if ($locked) exit;}
+
 function pwaVersion(): string {
     $sums=[0,0,0]; $counts=[0,0,0];
     foreach (['index.php','app.js','style.css','voice.js','read-aloud.js','security.js','sw.js','locale.js','engines.js','jobs.js','jobs.css','icons.js','terminal-format.js','console.css'] as $file) {
