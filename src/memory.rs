@@ -1,4 +1,4 @@
-// memory.rs v1.3.43
+// memory.rs v1.3.44
 //! Return unused allocator pages without discarding application state.
 #[cfg(all(target_os = "linux", target_env = "gnu"))]
 unsafe extern "C" {
@@ -19,6 +19,7 @@ pub(crate) fn release() {
     crate::state_transport::expire();
     crate::catalog::expire();
     crate::terminal::expire();
+    crate::local_chat::expire();
     crate::assistant_stream::expire();
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     // SAFETY: malloc_trim releases only free pages; live Rust allocations remain valid.

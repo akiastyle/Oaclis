@@ -1,4 +1,4 @@
-// panels.js v3.143.2906
+// panels.js v3.143.2908
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -904,7 +904,7 @@ async function openEngineSettings(anchor){
       const section=document.createElement('details');section.dataset.engine=provider.id;
       const summary=document.createElement('summary');summary.textContent=OaclisEngines.names[provider.id];section.append(summary);
       const enabled=document.createElement('label');enabled.className='engine-enabled';const check=document.createElement('input');check.type='checkbox';check.name='enabled';check.value=provider.id;check.checked=provider.enabled;enabled.append(check,document.createTextNode(OaclisSettings.text('Abilitato')));section.append(enabled);
-      const state=document.createElement('small');state.textContent=OaclisSettings.text(provider.id==='codex'?(provider.credentials?'Autenticazione Codex presente':'Accedi da Codex per usare questo motore.'):'Chat per questo motore non ancora disponibili');section.append(state);
+      const state=document.createElement('small');state.textContent=OaclisSettings.text(provider.id==='codex'?(provider.credentials?'Autenticazione Codex presente':'Accedi da Codex per usare questo motore.'):provider.id==='llamacpp'?(provider.credentials?'Già configurata · lascia vuoto per conservarla':'Configura questo motore nelle impostazioni.'):'Chat per questo motore non ancora disponibili');section.append(state);
       if(provider.id!=='codex'){
         const label=document.createElement('label');label.className='field';label.textContent=OaclisSettings.text('Chiave API');const key=document.createElement('input');key.name='key_'+provider.id;key.type='password';key.autocomplete='new-password';key.maxLength=4096;key.placeholder=OaclisSettings.text(provider.credentials?'Già configurata · lascia vuoto per conservarla':'Inserisci chiave');label.append(key);section.append(label);
       }

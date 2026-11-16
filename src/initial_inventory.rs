@@ -1,4 +1,4 @@
-// initial_inventory.rs v2.24.1276
+// initial_inventory.rs v2.24.1278
 //! One initial inventory per local chat; saved results remain cached.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid};
 use serde_json::{Value,json};
@@ -18,6 +18,7 @@ pub(crate) fn start(codex: PathBuf, config: PathBuf, active: Arc<Mutex<std::coll
         if let Ok(chats) = catalog(&codex) {
             if let Err(error)=crate::catalog::number_chats(&config,&chats){eprintln!("Oaclis: numerazione chat: {error}");}
             for chat in chats {
+                if chat["engine"]=="llamacpp" {continue;}
                 let Some(id) = chat["id"].as_str() else { continue; };
                 let Ok(key) = environment::key("master", id) else { continue; };
                 let revision = environment::revision(&chat, None);
@@ -85,6 +86,7 @@ pub(crate) fn request(config: &Path, codex: &Path, analyses: &Arc<Mutex<std::col
     if matches!(cached["status"].as_str(), Some("ready" | "failed")) && v["force"] != true {
         return Ok(cached);
     }
+    if chat["engine"]=="llamacpp" {return Err(crate::invalid("La chat llama.cpp non usa l’ambiente Codex"));}
     let path = chat["path"].as_str().ok_or_else(||invalid("Archivio chat mancante"))?.to_owned();
     if !reserve(analyses,&key)? { return environment::database(config,&key,"analysis-get",None); }
     let pending = match environment::database(config,&key,"analysis-save",Some(&json!({"status":"pending","revision":revision}))) {

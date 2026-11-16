@@ -1,4 +1,4 @@
-// chat_deletion.rs v1.12.177
+// chat_deletion.rs v1.12.181
 //! Irreversible chat deletion; only UUIDs and peer acknowledgements remain for offline delivery.
 use crate::{invalid, state_store::{self,State}};
 use serde_json::{Value,json};
@@ -53,6 +53,10 @@ pub(crate) fn purge_records(records:&mut Value,deleted:&[String]) {
 }
 pub(crate) fn purge(state:&mut State,files:&mut Value) {
     let deleted=ids(state);if deleted.is_empty(){return;}
+    if deleted.iter().any(|id|state.conversations.contains_key(id)) {
+        for id in &deleted {crate::local_chat::stop(id);}
+        Arc::make_mut(&mut state.conversations).retain(|id,_|!deleted.contains(id));
+    }
     if deleted.iter().any(|id|state.appearance.contains_key(&format!("chat:{id}"))) {
         Arc::make_mut(&mut state.appearance).retain(|key,_|key.strip_prefix("chat:").is_none_or(|id|!deleted.iter().any(|v|v==id)));
     }

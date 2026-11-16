@@ -1,4 +1,4 @@
-// engines.js v1.3.37
+// engines.js v1.3.43
 'use strict';
 window.OaclisEngines=(()=>{
  const names={codex:'ChatGPT · Codex',claude:'Claude',llamacpp:'llama.cpp'};
@@ -16,9 +16,9 @@ window.OaclisEngines=(()=>{
     try{
      const reply=await loadModels();if(token!==generation||!form.isConnected)return;
      for(const model of reply.models||[]){const option=document.createElement('option');option.value=model.id;option.textContent=model.id;select.append(option);}
-     if([...select.options].some(option=>option.value===(drafts.llamacpp||provider.model)))select.value=drafts.llamacpp||provider.model;
-     select.disabled=!select.options.length;
-     status.textContent=OaclisSettings.text(select.options.length?'Chat per questo motore non ancora disponibili':'Nessun modello disponibile');
+     if([...select.options].some(option=>option.value===(drafts.llamacpp||provider.model||(reply.models||[]).find(model=>model.loaded)?.id)))select.value=drafts.llamacpp||provider.model||(reply.models||[]).find(model=>model.loaded)?.id;
+     select.disabled=!select.options.length;submit.disabled=select.disabled;
+     status.textContent=select.options.length?'':OaclisSettings.text('Nessun modello disponibile');
     }catch(_){if(token===generation)status.textContent=OaclisSettings.text('Collegamento llama.cpp non disponibile');}
    }else{
     const input=document.createElement('input');input.name='model';input.maxLength=160;input.value=drafts[engine.value]??provider?.model??'';input.placeholder=OaclisSettings.text('Predefinito Codex');slot.append(input);

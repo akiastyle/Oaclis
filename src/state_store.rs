@@ -1,4 +1,4 @@
-// state_store.rs v2.40.1412
+// state_store.rs v2.40.1420
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -34,6 +34,8 @@ impl Default for Presentation {
 #[serde(deny_unknown_fields)]
 pub(crate) struct State {
     pub schema: u32,
+    #[serde(default)]
+    pub conversations: Arc<BTreeMap<String, Arc<Value>>>,
     pub appearance: Arc<BTreeMap<String, Arc<Presentation>>>,
     pub analysis: Arc<BTreeMap<String, Value>>,
     pub links: Arc<BTreeMap<String, Value>>,
@@ -45,6 +47,7 @@ impl Default for State {
     fn default() -> Self {
         Self {
             schema: 1,
+            conversations: Default::default(),
             appearance: Default::default(),
             analysis: Default::default(),
             links: Default::default(),
@@ -150,6 +153,7 @@ pub(crate) fn store(config: &Path) -> io::Result<Arc<Store>> {
 fn read_tables(config: &Path) -> io::Result<State> {
     Ok(State {
         schema: 1,
+        conversations: serde_json::from_value(read_json(&config.join("llama-chats.json"), json!({}))?)?,
         appearance: serde_json::from_value(read_json(&config.join("appearance.json"), json!({}))?)?,
         analysis: serde_json::from_value(read_json(&config.join("analysis.json"), json!({}))?)?,
         links: serde_json::from_value(read_json(&config.join("chat_links.json"), json!({}))?)?,
@@ -246,6 +250,7 @@ fn recover_commit(config: &Path) -> io::Result<()> {
         .ok_or_else(|| invalid("Salvataggio JSON interrotto non valido"))?;
     if files.keys().any(|name| {
         ![
+            "llama-chats.json",
             "appearance.json",
             "analysis.json",
             "chat_links.json",
@@ -273,6 +278,7 @@ fn persist(
     related: Value,
 ) -> io::Result<()> {
     let changed = [
+        ("llama-chats.json", before.conversations != after.conversations),
         ("appearance.json", force || before.appearance != after.appearance),
         ("analysis.json", force || before.analysis != after.analysis),
         ("chat_links.json", force || before.links != after.links),
@@ -285,6 +291,7 @@ fn persist(
         let name = changed.iter().find(|(_, dirty)| *dirty).unwrap().0;
         let path = config.join(name);
         return match name {
+            "llama-chats.json" => staging::save_json(&path, &after.conversations),
             "appearance.json" => staging::save_json(&path, &after.appearance),
             "analysis.json" => staging::save_json(&path, &after.analysis),
             "chat_links.json" => staging::save_json(&path, &after.links),
@@ -295,6 +302,7 @@ fn persist(
     for (name, dirty) in changed {
         if dirty {
             files[name] = match name {
+                "llama-chats.json" => serde_json::to_value(&after.conversations)?,
                 "appearance.json" => serde_json::to_value(&after.appearance)?,
                 "analysis.json" => serde_json::to_value(&after.analysis)?,
                 "chat_links.json" => serde_json::to_value(&after.links)?,

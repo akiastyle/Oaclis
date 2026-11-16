@@ -11,3 +11,5 @@
 - [ ] Includere la preparazione di RustDesk nel setup standard, riutilizzando il supporto esistente e le autorizzazioni del desktop del sistema ospitante.
 
 - [ ] Rivedere e mantenere aggiornato l’installatore delle dipendenze dei progetti: ampliare i tipi supportati e verificare le versioni sulla destinazione.
+
+- [ ] Riunire la configurazione del primo avvio: motori/modelli, posizione delle chat e indirizzo della PWA, riusando i pannelli esistenti. Distinguere la configurazione del servizio llama.cpp dai report dei tool; l’endpoint locale standard è incluso nel runtime Oaclis.

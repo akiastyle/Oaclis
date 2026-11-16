@@ -1,4 +1,4 @@
-// catalog.rs v2.43.1902
+// catalog.rs v2.43.1904
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -152,6 +152,7 @@ pub(crate) fn local_at(root: &Path, config: &Path) -> io::Result<Vec<Value>> {
     directories.retain(|path, _|visited.contains(path));
     drop(index);
     let state = state_store::snapshot(config)?;
+    chats.extend(state.conversations.values().map(|chat|crate::local_chat::entry(chat)));
     let id = state_store::identity(config)?;
     for chat in &mut chats {
         let chat_id = chat["id"].as_str().unwrap().to_owned();
@@ -285,6 +286,7 @@ impl NativeClient {
     }
 }
 pub(crate) fn rename(home: &Path, root: &Path, id: &str, name: &str) -> io::Result<()> {
+    if crate::local_chat::contains(&home.join(".config/oaclis"),id)? {return crate::local_chat::rename(&home.join(".config/oaclis"),id,name);}
     if id.len() != 36 || !id.bytes().enumerate().all(|(i,b)|if [8,13,18,23].contains(&i) {b==b'-'} else {b.is_ascii_hexdigit()}) {
         return Err(crate::invalid("Identificativo chat non valido"));
     }

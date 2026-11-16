@@ -1,4 +1,4 @@
-// engines.rs v1.10.118
+// engines.rs v1.10.125
 //! Private provider settings. Native Codex authentication remains owned by Codex.
 use crate::invalid;
 use serde::{Deserialize, Serialize};
@@ -47,7 +47,7 @@ fn public(settings: &Settings, home: &Path) -> Value {
     json!({"configured":settings.configured,"default_engine":settings.default_engine,"providers":[
         {"id":"codex","enabled":settings.enabled.iter().any(|id|id=="codex"),"available":crate::terminal::codex(home).is_ok(),"credentials":codex_home.join("auth.json").is_file(),"model":settings.models.get("codex").map(String::as_str).unwrap_or("")},
         {"id":"claude","enabled":settings.enabled.iter().any(|id|id=="claude"),"available":false,"credentials":!key(settings,home,"claude").is_empty(),"model":settings.models.get("claude").map(String::as_str).unwrap_or("")},
-        {"id":"llamacpp","enabled":settings.enabled.iter().any(|id|id=="llamacpp"),"available":false,"credentials":!key(settings,home,"llamacpp").is_empty(),"model":settings.models.get("llamacpp").map(String::as_str).unwrap_or("")}
+        {"id":"llamacpp","enabled":settings.enabled.iter().any(|id|id=="llamacpp"),"available":!key(settings,home,"llamacpp").is_empty(),"credentials":!key(settings,home,"llamacpp").is_empty(),"model":settings.models.get("llamacpp").map(String::as_str).unwrap_or("")}
     ]})
 }
 pub(crate) fn settings(home: &Path) -> io::Result<Value> {
@@ -89,7 +89,7 @@ pub(crate) fn creation(home: &Path, value: &Value) -> io::Result<String> {
     let settings=store.settings.lock().unwrap();
     let engine=value.get("engine").map(|v|v.as_str().filter(|id|known(id)).ok_or_else(||invalid("Motore non valido"))).transpose()?.unwrap_or("codex");
     // Older callers remain Codex; an unsupported provider must never create a Codex archive.
-    if engine!="codex" {return Err(invalid("Chat per questo motore non ancora disponibili"));}
+    if engine=="claude" {return Err(invalid("Chat per questo motore non ancora disponibili"));}
     if value.get("engine").is_some() && settings.configured && !settings.enabled.iter().any(|id|id==engine) {return Err(invalid("Motore disattivato"));}
     Ok(settings.models.get(engine).cloned().unwrap_or_default())
 }
@@ -109,7 +109,8 @@ mod tests {
         assert_eq!(std::fs::metadata(home.join(".config/oaclis/engines.json")).unwrap().permissions().mode()&0o777,0o600);
         let mut empty=input.clone();empty["keys"]=json!({"llamacpp":""});save(&home,&empty).unwrap();
         assert_eq!(llama_key(&home).unwrap(),"fixture-secret");
-        assert!(creation(&home,&json!({"engine":"llamacpp"})).is_err());
+        assert!(creation(&home,&json!({"engine":"llamacpp"})).is_ok());
+        assert!(creation(&home,&json!({"engine":"claude"})).is_err());
         assert!(creation(&home,&json!({"engine":"unknown"})).is_err());
         assert_eq!(creation(&home,&json!({})).unwrap(),"gpt-6.1-sol");
         empty["keys"]=json!({"llamacpp":"bad\nkey"});assert!(save(&home,&empty).is_err());

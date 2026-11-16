@@ -1,4 +1,4 @@
-// link_flow.rs v1.21.399
+// link_flow.rs v1.21.400
 //! Link lifecycle: compare immutable proofs, persist intent, never transfer from a poll.
 use crate::{devices::Device, environment, invalid, catalog};
 use serde_json::{Value, json};
@@ -118,6 +118,7 @@ fn match_modules(link: &Value, flow: &mut Value, source: Option<&Value>, target:
 }
 
 pub(crate) fn inspect(config: &Path, codex: &Path, device: &Device, link: &Value, catalogs: &mut catalog::Catalogs) -> io::Result<Value> {
+    if link["entry"]["engine"]=="llamacpp" {return Err(invalid("Il trasferimento degli archivi llama.cpp non è ancora disponibile"));}
     let id = link["entry"]["id"].as_str().ok_or_else(||invalid("Chat richiesta"))?;
     let find = |list: &[Value]| list.iter().find(|chat|chat["id"] == id).cloned();
     let local = find(catalog::cached(catalogs, "master", || catalog::local_at(codex, config))?);

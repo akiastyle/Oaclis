@@ -1,4 +1,4 @@
-// terminal.rs v1.35.612
+// terminal.rs v1.35.637
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -18,7 +18,7 @@ pub(crate) fn validate_model(model:&str)->io::Result<()> {
 }
 fn validate(value: &Value) -> io::Result<&str> {
     if let Some(engine)=value.get("engine") {
-        if engine!="codex" {return Err(invalid("Chat per questo motore non ancora disponibili"));}
+        if engine!="codex" && engine!="llamacpp" {return Err(invalid("Chat per questo motore non ancora disponibili"));}
     }
     if let Some(model)=value.get("model"){validate_model(model.as_str().ok_or_else(||invalid("Modello non valido"))?)?;}
     if let Some(access)=value.get("access") { access_flags(access.as_str().ok_or_else(||invalid("Autorizzazione console non valida"))?)?; }
@@ -34,7 +34,7 @@ fn validate(value: &Value) -> io::Result<&str> {
             let text = value.get("text").map_or(Some(""),Value::as_str).ok_or_else(||invalid("Messaggio non valido"))?;
             if text.chars().count()>8000 || text.contains('\0') { return Err(invalid("Messaggio non valido")); }
             let key = value.get("key").map_or(Some(""),Value::as_str).ok_or_else(||invalid("Tasto non valido"))?;
-            if !matches!(key,""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c"|"1"|"2"|"3"|"?") { return Err(invalid("Tasto non valido")); }
+            if !matches!(key,""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c"|"1"|"2"|"3"|"S-Left") { return Err(invalid("Tasto non valido")); }
         },
         _ => return Err(invalid("Azione non valida")),
     }
@@ -103,6 +103,9 @@ fn archive(root: &Path, chat: &str) -> io::Result<PathBuf> {
 }
 fn working_directory(home:&Path,root:&Path,chat:&str)->io::Result<PathBuf> {
     if chat=="new-chat" {return Ok(home.into());}
+    if let Some(conversation)=crate::state_store::snapshot(&home.join(".config/oaclis"))?.conversations.get(chat) {
+        return conversation["cwd"].as_str().map(PathBuf::from).ok_or_else(||invalid("Cartella chat non valida"));
+    }
     let path=archive(root,chat)?;
     let (file,_)=crate::open_regular(&path)?;
     let mut line=String::new();
@@ -168,6 +171,15 @@ fn mark_open(chat: &str, open: bool) {
 }
 pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let chat=validate(value)?;
+    let local_home=env::var_os("HOME").map(PathBuf::from).ok_or_else(||invalid("HOME non definita"))?;
+    let local_config=local_home.join(".config/oaclis");
+    if !matches!(value["action"].as_str(),Some("create"|"engines"|"models")) && crate::local_chat::contains(&local_config,chat)? {
+        if matches!(value["action"].as_str(),Some("read"|"input")) && STOPPED_CHATS.get_or_init(Default::default).lock().unwrap().contains_key(chat) {return Ok(json!({"stopped":true}));}
+        let result=crate::local_chat::request(&local_home,value)?;
+        if value["action"]=="open" {mark_open(chat,true);}
+        if value["action"]=="stop" {mark_open(chat,false);}
+        return Ok(result);
+    }
     if value["action"]=="reset" || value["action"]=="stop" {
         let lock=session_lock(chat)?;
         let mut capture=lock.lock().map_err(|_|io::Error::other("Console non disponibile"))?;
@@ -195,7 +207,8 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         }
         let name=value["text"].as_str().unwrap_or("").trim();
         let default_model=crate::engines::creation(&home,value)?;
-        let mut entry=crate::catalog::create(&home,&root,&cwd,name,value["model"].as_str().filter(|v|!v.is_empty()).unwrap_or(&default_model))?;
+        let selected=value["model"].as_str().filter(|v|!v.is_empty()).unwrap_or(&default_model);
+        let mut entry=if value["engine"]=="llamacpp" {crate::local_chat::create(&home,&cwd,name,selected)?} else {crate::catalog::create(&home,&root,&cwd,name,selected)?};
         let config=home.join(".config/oaclis");
         crate::catalog::number_chats(&config,std::slice::from_ref(&entry))?;
         entry["number"]=crate::state_store::snapshot(&config)?.appearance[&format!("chat:{}",entry["id"].as_str().unwrap())].sync["chat_number"].clone();
@@ -204,7 +217,7 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
         let preferences=crate::state_store::database(&config,"","preferences-get",None)?;
         let access=value["access"].as_str().or_else(||preferences["preferences"][chat]["console_access"].as_str()).unwrap_or("default");
         crate::state_store::database(&config,id,"chat-settings",Some(&json!({"value":appearance,"console_access":access,"console_model":entry["model"]})))?;
-        return Ok(json!({"new_chat":{"id":id,"number":entry["number"],"name":name,"icon":value["icon"].as_str().unwrap_or(""),"color":value["color"].as_str().unwrap_or(""),"console_access":access,"model":entry["model"]}}));
+        return Ok(json!({"new_chat":{"id":id,"number":entry["number"],"name":name,"icon":value["icon"].as_str().unwrap_or(""),"color":value["color"].as_str().unwrap_or(""),"console_access":access,"model":entry["model"],"engine":entry["engine"].as_str().unwrap_or("codex")}}));
     }
     let session_lock = session_lock(chat)?;
     let mut capture = session_lock.lock().map_err(|_|io::Error::other("Console non disponibile"))?;
@@ -255,7 +268,7 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
     if value["speech"]==true {result["speech"]=crate::assistant_stream::snapshot(chat,value["speech_cursor"].as_u64());}
     Ok(result)
 }
-fn screen_response(plain: &str, ansi: &str, known: &Value, read: bool) -> Value {
+pub(crate) fn screen_response(plain: &str, ansi: &str, known: &Value, read: bool) -> Value {
     use sha2::{Digest,Sha256};
     let revision=Sha256::digest(ansi.as_bytes()).iter().map(|byte|format!("{byte:02x}")).collect::<String>();
     if read && known.as_str()==Some(revision.as_str()) {json!({"screen_revision":revision,"unchanged":true})}
@@ -414,7 +427,7 @@ mod tests {
     fn step4_terminal_rejects_invalid_actions_keys_and_ids_before_commands() {
         for value in [json!({"action":"open","chat_id":"x;touch bad"}),json!({"action":"read","chat_id":"../chat"}),json!({"action":"input","chat_id":"chat-1","key":"run-shell"}),json!({"action":"input","chat_id":"chat-1","text":true}),json!({"action":"input","chat_id":"chat-1","text":"nul\0"}),json!({"action":"input","chat_id":"chat-1","text":"x".repeat(8001)}),json!({"action":"delete","chat_id":"chat-1"})] { assert!(request(None,&value).is_err()); }
         assert!(validate(&json!({"action":"input","chat_id":"chat-1","text":"$(touch bad)","key":"Enter"})).is_ok());
-        for key in ["1","2","3","?","Tab"] {assert!(validate(&json!({"action":"input","chat_id":"chat-1","key":key})).is_ok());}
+        for key in ["1","2","3","S-Left","Tab"] {assert!(validate(&json!({"action":"input","chat_id":"chat-1","key":key})).is_ok());}
         assert!(validate(&json!({"action":"input","chat_id":"chat-1","key":"4"})).is_err());
     }
     #[test]

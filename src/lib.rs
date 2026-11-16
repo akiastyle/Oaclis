@@ -1,4 +1,4 @@
-// lib.rs v1.3.104
+// lib.rs v1.3.105
 pub mod state_store;
 mod chat_deletion;
 mod state_migration;
@@ -10,6 +10,7 @@ mod memory;
 mod link_flow;
 mod catalog;
 mod llama;
+mod local_chat;
 mod engines;
 mod jobs;
 mod skills;

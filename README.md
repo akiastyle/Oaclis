@@ -47,9 +47,9 @@ I comandi rapidi condivisi sono:
 | Esc | Invia Escape alla console. |
 | 1 · 2 · 3 | Risponde alle scelte numerate del programma. |
 | Ctrl+C | Termina la sessione selezionata e chiude le relative viste. |
-| ? | Invia il tasto `?`, per richiamare le indicazioni o le domande previste dal programma nella console. |
+| ⇧← | Invia Shift + freccia sinistra per rispondere alle domande in attesa di Codex. |
 | Tab | Invia Tab alla console. |
-| Model | Invia `/model` e Invio per aprire la selezione del modello in Codex. |
+| Mod | Invia `/model` e Invio per aprire la selezione del modello in Codex. |
 | ⓘ | Apre guida e impostazioni dei comandi vocali. |
 
 Chiudere una finestra e terminare la sessione sono operazioni distinte: la chiusura della vista consente di riaprire la console; Ctrl+C richiede l'arresto della sessione.
@@ -141,7 +141,7 @@ Il pannello **Motori AI** centralizza scelta del motore, modello predefinito e c
 | Motore | Stato |
 | --- | --- |
 | ChatGPT · Codex | Operativo per creazione, ripresa e gestione delle chat tramite Codex installato. |
-| llama.cpp | Collegamento al Jetson, catalogo dei modelli e test interno di inferenza, contesto e streaming verificati. Conversazioni nell’interfaccia ancora da collegare. |
+| llama.cpp | Chat testuali con modelli locali: catalogo, storico separato, streaming e interruzione dalla console desktop e PWA. |
 | Claude | Configurazione predisposta; conversazioni non ancora abilitate. |
 
 Le nuove chiavi sono conservate nel file privato `~/.config/oaclis/engines.json`, fuori dal repository. Codex mantiene la propria autenticazione. Le chiavi non vengono inviate al browser, al relay o replicate sugli altri dispositivi.
@@ -219,7 +219,7 @@ Guida completa, rete WSL, SSH e installazioni avanzate: [INSTALLAZIONE.md](docs/
 
 Il nucleo operativo è scritto in Rust. L'interfaccia usa HTML, CSS e JavaScript senza framework o bundler; console, controlli, icone e traduzioni sono condivisi fra desktop e PWA. Il relay remoto resta PHP. Oaclis non richiede Python per la propria esecuzione.
 
-Lo stato operativo viene caricato in memoria e persistito in JSON sotto `~/.config/oaclis/`. Gli archivi delle chat restano in `~/.codex` o nel `CODEX_HOME` configurato. La telemetria dei tool è temporanea; non è uno storico permanente dei calcoli.
+Lo stato operativo viene caricato in memoria e persistito in JSON sotto `~/.config/oaclis/`. Gli archivi Codex restano in `~/.codex` o nel `CODEX_HOME` configurato; le conversazioni llama.cpp hanno il proprio archivio `llama-chats.json`, gestito dallo stesso proprietario Rust dello stato. La telemetria dei tool è temporanea; non è uno storico permanente dei calcoli.
 
 Le API operative locali accettano richieste loopback con Host locale. SSH protegge i collegamenti fra computer; passkey, abbinamento, firme e autorizzazioni per chat proteggono il percorso mobile. I permessi della console restano quelli configurati: il canale SSH vincolato non costituisce una sandbox dei percorsi.
 

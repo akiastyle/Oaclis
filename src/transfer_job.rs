@@ -1,4 +1,4 @@
-// transfer_job.rs v2.30.1690
+// transfer_job.rs v2.30.1691
 //! Executes an authorized transfer; independent of routes and scheduling.
 use crate::{catalog::{local as catalog,remote as remote_catalog},devices,environment,invalid,rules};
 use serde_json::{Value,json};
@@ -58,6 +58,7 @@ fn finish(config: &Path, transfer_key: Option<&str>, flow_key: Option<&str>, gen
 
 pub(crate) fn start(v: Value, codex: &Path, config: &Path, job: &Arc<Mutex<Value>>) -> io::Result<Value> {
     if let Some(id)=v["chat_id"].as_str() {if crate::chat_deletion::blocked(config,id)? {return Err(invalid("Chat eliminata definitivamente"));}}
+    if v["entry"]["engine"]=="llamacpp" || v["chat_id"].as_str().is_some_and(|id|crate::local_chat::contains(config,id).unwrap_or(false)) {return Err(invalid("Il trasferimento degli archivi llama.cpp non è ancora disponibile"));}
     let ds = devices::load(config.join("devices.json"))?;
     let rule = if let Some(id) = v["rule_id"].as_str() {
         Some(
