@@ -224,3 +224,19 @@ I contatori delle richieste anonime sono distinti dall'autenticazione: sull'host
 senza APCu restano i 256 bucket fissi gia' esistenti, riusati e di dimensione
 limitata, non un file per chiamata o accesso. Non viene introdotto un servizio
 Redis/Memcached sul server passivo.
+
+## Riconoscimento all’apertura della PWA
+
+Il cookie firmato `__Host-OaclisDevice` riconosce il telefono approvato prima
+di servire l’interfaccia. Usa Secure, HttpOnly e SameSite=Lax: accompagna anche
+l’ingresso da un collegamento esterno. Non autentica le richieste della chat.
+Il cookie di autenticazione `__Host-Oaclis` resta SameSite=Strict; passkey,
+scadenza, revoche e firme delle richieste restano invariati.
+
+Il formato v2 aggiorna gli attributi del riconoscimento e accetta anche il
+precedente v1, senza rifare l’abbinamento. Se il vecchio cookie Strict lascia
+la PWA bianca entrando dall’esterno, aprire Chrome e inserire direttamente
+`https://oaclis.krprojects.it/auth` nella barra degli indirizzi una volta.
+Questo primo accesso aggiorna il cookie; i successivi ingressi usano Lax.
+Il ricaricamento di una pagina già arrivata senza cookie può conservare il
+contesto precedente: l’accesso diretto è il percorso di migrazione verificato.

@@ -1,5 +1,5 @@
 <?php
-// index.php v1.9.812
+// index.php v1.9.819
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -36,9 +36,10 @@ $cookieKey=hash('sha256','oaclis-cookie-v1:'.$config['admin_hash'],true);
 function rememberDevice(string $device,bool $locked=false): void {
     global $cookieKey;
     $claim=$device.'.'.(int)$locked;
-    $value='v1.'.$claim.'.'.hash_hmac('sha256','oaclis-device-v1:'.$claim,$cookieKey);
+    $value='v2.'.$claim.'.'.hash_hmac('sha256','oaclis-device-v1:'.$claim,$cookieKey);
     if (($_COOKIE['__Host-OaclisDevice']??'')===$value) return;
-    if (!setcookie('__Host-OaclisDevice',$value,['expires'=>time()+31536000,'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Strict'])) throw new RuntimeException('Unable to remember device');
+    // Recognition accompanies top-level entry; the authentication cookie remains Strict.
+    if (!setcookie('__Host-OaclisDevice',$value,['expires'=>time()+31536000,'path'=>'/','secure'=>true,'httponly'=>true,'samesite'=>'Lax'])) throw new RuntimeException('Unable to remember device');
 }
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
@@ -376,7 +377,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD']!=='GET') {http_response_code(405);exit;}
 $hint=$_COOKIE['__Host-OaclisDevice']??'';
 $known='';$locked=false;
-if (is_string($hint) && preg_match('/^v1\.([a-f0-9]{64})\.([01])\.([a-f0-9]{64})$/D',$hint,$parts) && hash_equals(hash_hmac('sha256','oaclis-device-v1:'.$parts[1].'.'.$parts[2],$cookieKey),$parts[3])) {
+if (is_string($hint) && preg_match('/^v[12]\.([a-f0-9]{64})\.([01])\.([a-f0-9]{64})$/D',$hint,$parts) && hash_equals(hash_hmac('sha256','oaclis-device-v1:'.$parts[1].'.'.$parts[2],$cookieKey),$parts[3])) {
     $known=$parts[1];$locked=$parts[2]==='1';
 } else {
     $legacy=readCookie($_COOKIE['__Host-Oaclis']??null,$cookieKey);
