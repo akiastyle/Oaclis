@@ -1,4 +1,4 @@
-// local_chat.rs v1.0.0
+// local_chat.rs v1.0.1
 //! llama.cpp conversations, owned by the existing state store and shared console transport.
 use crate::{invalid, state_store};
 use serde_json::{Value,json};
@@ -191,6 +191,7 @@ pub(crate) fn request(home:&Path,value:&Value)->io::Result<Value> {
     let mut screen=format!("llama.cpp · {}\n\n",chat["model"].as_str().unwrap());
     for message in chat["messages"].as_array().unwrap() {
         let text=if message["status"]=="running"&&output.running&&message["id"]==output.turn {output.partial.as_str()}else{message["content"].as_str().unwrap_or("")};
+        let text=if message["role"]=="assistant" {text.trim_start()}else{text};
         if !text.is_empty(){screen.push_str(if message["role"]=="user"{"› "}else{"• "});screen.push_str(text);screen.push_str("\n\n");}
         if let Some(error)=message["error"].as_str().filter(|e|!e.is_empty()){screen.push_str(error);screen.push_str("\n\n");}
         if message["status"]=="running"&&(!output.running||message["id"]!=output.turn) {screen.push_str("Generazione interrotta. Puoi inviare un nuovo messaggio.\n\n");}
