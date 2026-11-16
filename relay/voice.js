@@ -1,4 +1,4 @@
-// voice.js v2.61.1476
+// voice.js v2.61.1484
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -30,7 +30,7 @@ window.OaclisVoice=(()=>{
  function create(){
   const Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
   let session=null,restartTimer=null,retries=0;
-  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,utteranceRevision=0,recognitionIssue=null,speaking=false,dictated=false;
+  let adapter=null,revision=0,target=null,pending=null,pendingTimer,wanted=false,initialized=false,paused=false,state='idle',disposed=false,recognitionIssue=null,speaking=false,dictated=false;
   let button,status,preview,options,help,root,autoSendTimer,reader=null,controls=null,info=null;
   let phrase='',lastFinal='',phraseTimer=null,phraseRevision=0;
   const events=[];
@@ -81,16 +81,16 @@ window.OaclisVoice=(()=>{
   function startRecognition(reason){
    const current=session=new Recognition();
    let consumed=-1;
-   recognitionIssue=null;utteranceRevision=revision;state='starting';
+   recognitionIssue=null;state='starting';
    current.lang=locale.speechLanguage;current.continuous=true;current.interimResults=true;current.maxAlternatives=1;
    trace('recognition:config',{continuous:current.continuous,interimResults:current.interimResults,language:current.lang});
    const fresh=()=>wanted&&!disposed&&session===current;
    current.onstart=()=>{trace('recognition:start');if(fresh()){state='listening';paint();}};
-   current.onspeechstart=()=>{trace('recognition:speechstart');if(fresh()){speaking=true;clearTimeout(phraseTimer);phraseTimer=null;cancelAutoSend();utteranceRevision=revision;}};
+   current.onspeechstart=()=>{trace('recognition:speechstart');if(fresh()){speaking=true;clearTimeout(phraseTimer);phraseTimer=null;cancelAutoSend();}};
    current.onspeechend=()=>{trace('recognition:speechend');if(fresh()){speaking=false;reader?.setDictating(false);schedulePhrase();scheduleAutoSend();}};
    for(const name of ['audiostart','audioend','soundstart','soundend'])current['on'+name]=()=>trace('recognition:'+name);
    current.onresult=event=>{
-    if(!fresh()||!adapter||utteranceRevision!==revision){trace('recognition:result-ignored',{wanted,revision,utteranceRevision});return;}
+    if(!fresh()||!adapter){trace('recognition:result-ignored',{wanted});return;}
     retries=0;
     const interim=[];
     for(let i=event.resultIndex;i<event.results.length;i++){
