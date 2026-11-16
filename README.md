@@ -2,18 +2,20 @@
 
 **Chat, console e progetti su più dispositivi, da un'unica interfaccia.**
 
-Oaclis è un'applicazione Rust con interfaccia web locale e accesso mobile tramite PWA. Permette di aprire e riprendere chat Codex, collegare computer, trasferire o sincronizzare chat e file di progetto, usare dettatura e comandi vocali e seguire l'avanzamento degli strumenti collegati alle chat.
+Abbiamo realizzato Oaclis come applicazione Rust con interfaccia desktop nel browser e accesso mobile tramite PWA. Riunisce chat Codex e conversazioni con modelli locali llama.cpp, collegamenti fra computer, trasferimento e sincronizzazione dei progetti, dettatura, lettura vocale e avanzamento dei tool.
 
-Il programma gira sui propri dispositivi. I trasferimenti fra computer usano SSH e rsync; Git distribuisce il codice di Oaclis, non gli archivi delle chat. La PWA aggiunge un accesso remoto tramite un relay PHP e richiede che il computer che serve la console sia raggiungibile dal sistema.
+Il nucleo Rust esegue le operazioni sui dispositivi collegati. SSH e rsync trasportano chat e file fra computer; la PWA comunica con Oaclis attraverso il relay PHP. Git distribuisce il programma e la documentazione.
 
-Per sapere **quali attività sono possibili e come eseguirle**, leggere la [guida operativa](docs/USO.md), con distinzione fra Codex, llama.cpp, desktop e PWA.
+La [guida operativa](docs/USO.md) descrive i passaggi per usare le funzioni realizzate, sul desktop e nella PWA.
 
-## Funzionalità
+Le immagini sono catture dell’interfaccia reale. Nomi, identificativi, riferimenti e contenuti delle conversazioni sono oscurati prima della cattura.
+
+## Cosa abbiamo realizzato
 
 | Area | Cosa offre |
 | --- | --- |
 | Dispositivi | Rilevamento in LAN, abbinamento approvato, mappa interattiva e stato dei collegamenti. |
-| Chat | Catalogo, ricerca, ordinamento alfabetico, numerazione condivisa desktop/mobile, creazione e ripresa delle sessioni Codex. |
+| Chat | Catalogo, ricerca, ordinamento alfabetico, numerazione condivisa desktop/mobile, creazione e ripresa di chat Codex e llama.cpp. |
 | Console | Più console aperte, finestre interne o separate, geometria persistente e comandi rapidi. |
 | Trasferimenti | Copia e sincronizzazione di chat, percorsi e componenti dell'ambiente, con direzione e avanzamento visibili. |
 | Mobile | PWA con passkey, chat autorizzate, console singola o doppia e controlli condivisi con il desktop. |
@@ -32,11 +34,13 @@ Nomi, colori, icone, posizioni e impostazioni dei collegamenti vengono condivisi
 
 La mappa indica direzione e attività delle comunicazioni. Per le chat accessibili dal telefono, le animazioni identificano la destinazione e usano il colore della chat; quando lo spazio non basta, le chat vengono raccolte in un badge numerico.
 
+![Mappa desktop con dispositivi e collegamenti; nomi e riferimenti oscurati](docs/images/desktop-mappa.png)
+
 ## Chat e console
 
-Oaclis legge il catalogo Codex dell'utente configurato e permette di riprendere una chat sul dispositivo che la ospita. Le liste sono ordinate e i numeri delle chat restano coerenti fra desktop e PWA.
+Oaclis riunisce il catalogo Codex dell’utente configurato e le conversazioni llama.cpp. Ogni chat si riprende sul dispositivo che la ospita. Le liste sono ordinate e i numeri delle chat restano coerenti fra desktop e PWA.
 
-Dalla creazione di una chat si scelgono nome, motore disponibile, modello e cartella di lavoro. Colori, icona e autorizzazioni della console sono configurabili. La cartella di lavoro è quella del progetto: gli archivi della conversazione restano gestiti da Codex.
+Dalla creazione di una chat si scelgono nome, motore disponibile, modello e cartella di lavoro. Colori, icona e autorizzazioni della console sono configurabili. La cartella di lavoro è quella del progetto. Codex conserva i propri archivi; Oaclis gestisce separatamente lo storico delle conversazioni llama.cpp.
 
 Sul desktop si possono aprire più console contemporaneamente, portarle in primo piano, ridimensionarle, affiancarle o staccarle in finestre del browser. Posizione, dimensioni e modalità di apertura vengono ricordate. Il bordo evidenzia la console effettivamente in focus.
 
@@ -55,6 +59,8 @@ I comandi rapidi condivisi sono:
 | ⓘ | Apre guida e impostazioni dei comandi vocali. |
 
 Chiudere una finestra e terminare la sessione sono operazioni distinte: la chiusura della vista consente di riaprire la console; Ctrl+C richiede l'arresto della sessione.
+
+![Console desktop con campo messaggio e comandi condivisi; titolo e contenuto oscurati](docs/images/desktop-console.png)
 
 ## Copia e sincronizzazione
 
@@ -91,6 +97,8 @@ Il master decide quali chat concedere e può revocare l'accesso. La passkey prot
 Chat e risposte della console non vengono conservate nella cache del service worker. La PWA è un client autonomo: gestisce la propria interfaccia e comunica con Oaclis tramite il relay. L’esecuzione delle chat resta sul computer associato.
 
 Configurazione e dettagli del relay: [relay/README.md](relay/README.md).
+
+<img src="docs/images/pwa-console.png" width="360" alt="Console PWA con comandi su due righe; titolo e contenuto della conversazione oscurati">
 
 ## Dettatura e lettura vocale
 
