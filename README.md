@@ -102,7 +102,7 @@ Per usare la voce è richiesto **Google Chrome**. Il riconoscimento usa `SpeechR
 
 ## Avanzamento dei tool
 
-Script di traduzione, calcolo o elaborazione possono pubblicare uno stato minimale, indipendente dal motore AI. Ogni tool invia l'ID della chat, un proprio ID stabile, un testo e una percentuale:
+L’endpoint delle statistiche è incluso di default con Oaclis e condiviso dalle chat, senza installazioni aggiuntive. Script di traduzione, calcolo o elaborazione possono pubblicare uno stato minimale, indipendente dal motore AI. Ogni tool invia l'ID della chat, un proprio ID stabile, un testo e una percentuale:
 
 ```http
 POST http://127.0.0.1:23232/api/jobs/status

@@ -6,6 +6,10 @@ le autorizzazioni o il funzionamento del calcolo.
 
 ## Dove inviare
 
+L’endpoint delle statistiche è incluso di default con Oaclis ed è disponibile
+quando l’applicazione è avviata. È condiviso dalle chat: non si installano
+servizi aggiuntivi per ogni chat. Ogni tool si associa tramite `chat_id` e `id`.
+
 ```text
 POST http://127.0.0.1:23232/api/jobs/status
 Content-Type: application/json

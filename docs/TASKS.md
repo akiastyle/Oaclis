@@ -12,4 +12,4 @@
 
 - [ ] Rivedere e mantenere aggiornato l’installatore delle dipendenze dei progetti: ampliare i tipi supportati e verificare le versioni sulla destinazione.
 
-- [ ] Riunire la configurazione del primo avvio: motori/modelli, posizione delle chat e indirizzo della PWA, riusando i pannelli esistenti. Distinguere la configurazione del servizio llama.cpp dai report dei tool; l’endpoint locale standard è incluso nel runtime Oaclis.
+- [ ] Riunire la configurazione del primo avvio: motori/modelli, posizione delle chat e indirizzo della PWA, riusando i pannelli esistenti. L’endpoint delle statistiche (`POST /api/jobs/status`) è incluso di default nel runtime Oaclis, senza installazioni per chat; i tool vengono associati tramite `chat_id` e `id`. La configurazione del servizio llama.cpp è separata.
