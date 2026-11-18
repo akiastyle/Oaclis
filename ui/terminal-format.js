@@ -1,4 +1,4 @@
-// terminal-format.js v1.43.350
+// terminal-format.js v1.44.379
 "use strict";
 const OaclisTerminal = (() => {
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
@@ -222,17 +222,12 @@ function consoleScreen(value){
    view.querySelector('textarea').onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();view.querySelector('form').requestSubmit();}};
    return view;
   }
-  function createPane({id,name,icon},transport){
-   const pane=document.createElement('article');pane.className='console-pane';pane.setAttribute('aria-label',name);
-   pane.innerHTML=OaclisSettings.html('<h2 class="console-title"><span class="console-name"></span></h2><pre class="console-screen" tabindex="0" aria-label="Console">Connessione…</pre>');
-   pane.querySelector('.console-name').textContent=name;if(icon)pane.querySelector('h2').prepend(icon);
-   const project=document.createElement('button');project.type='button';project.className='icon-button console-project-button';project.innerHTML=OaclisIcon('folder');project.title=OaclisSettings.text('File del progetto');project.setAttribute('aria-label',project.title);pane.querySelector('h2').append(project);
-   project.onclick=()=>{
-    const existing=pane.querySelector('.console-project');if(existing){existing.querySelector('button').focus();return;}
-    const panel=document.createElement('section');panel.className='console-project';panel.setAttribute('popover','manual');panel.setAttribute('role','dialog');panel.setAttribute('aria-label',project.title);
-    panel.innerHTML=OaclisSettings.html('<header><strong>File del progetto</strong><button type="button" class="icon-button" aria-label="Chiudi">'+OaclisIcon('close')+'</button></header><div class="console-project-content" aria-live="polite"></div>');
-    panel.querySelector('header button').onclick=()=>panel.remove();pane.append(panel);panel.showPopover();
-    const rect=project.getBoundingClientRect();panel.style.left=Math.max(8,Math.min(rect.right-440,innerWidth-448))+'px';panel.style.top=Math.max(8,Math.min(rect.bottom+8,innerHeight-280))+'px';
+  function projectFiles(transport,{mode='dialog',container=document.body,onClose}={}){
+   const existing=container.querySelector('.console-project');if(existing){existing.querySelector('button').focus();return existing;}
+   const panel=document.createElement(mode==='dialog'?'dialog':'section');panel.className='console-project'+(mode==='dialog'?' voice-dialog':' console-project-'+mode);panel.setAttribute('aria-label',OaclisSettings.text('File del progetto'));
+   panel.innerHTML=OaclisSettings.html('<header><strong>File del progetto</strong><button type="button" class="icon-button" aria-label="Chiudi">'+OaclisIcon('close')+'</button></header><div class="console-project-content" aria-live="polite"></div>');
+   panel.querySelector('header button').onclick=()=>{panel.remove();onClose?.();};panel.addEventListener('cancel',event=>event.preventDefault());container.append(panel);
+   if(mode==='dialog')panel.showModal();
     const content=panel.querySelector('.console-project-content');
     async function load(path=''){
      content.textContent=OaclisSettings.text('Caricamento…');
@@ -246,8 +241,14 @@ function consoleScreen(value){
       if(data.more){const more=document.createElement('small');more.textContent=OaclisSettings.text('Sono mostrati i primi 200 elementi');content.append(more);}
      }catch(error){if(panel.isConnected)content.textContent=OaclisSettings.text('Lettura del progetto non riuscita');}
     }
-    load();
-   };
+    load();return panel;
+  }
+  function createPane({id,name,icon,openProject},transport){
+   const pane=document.createElement('article');pane.className='console-pane';pane.setAttribute('aria-label',name);
+   pane.innerHTML=OaclisSettings.html('<h2 class="console-title"><span class="console-name"></span></h2><pre class="console-screen" tabindex="0" aria-label="Console">Connessione…</pre>');
+   pane.querySelector('.console-name').textContent=name;if(icon)pane.querySelector('h2').prepend(icon);
+   const project=document.createElement('button');project.type='button';project.className='icon-button console-project-button';project.innerHTML=OaclisIcon('folder');project.title=OaclisSettings.text('File del progetto');project.setAttribute('aria-label',project.title);pane.querySelector('h2').append(project);
+   project.onclick=()=>openProject?openProject():projectFiles(transport,{container:pane});
    const screen=pane.querySelector('pre');
    const chat=pane.console={id,send:transport,follow:true,revision:'',image:null,preparingImage:false,closed:false,
     render(result,operation='read',saved=null){
@@ -267,5 +268,5 @@ function consoleScreen(value){
    return pane;
   }
   function remainingDraft(value,sent){return sent&&value.startsWith(sent)?value.slice(sent.length).trimStart():value;}
-  return {remainingDraft,sortChats,render,renderConsole,parse,consoleScreen,imageData,attachImages,attachSendMenu,chatIcon,createConsole,createPane};
+  return {remainingDraft,sortChats,render,renderConsole,parse,consoleScreen,imageData,attachImages,attachSendMenu,chatIcon,createConsole,createPane,projectFiles};
 })();

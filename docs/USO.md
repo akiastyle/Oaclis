@@ -44,7 +44,7 @@ Per una chat esistente, usare **Apri console** nella riga della chat o nei
 collegamenti della mappa. Per una chat condivisa scegliere il dispositivo
 sul quale aprirla quando viene richiesto.
 
-**PWA:** premere + nell'elenco o nella console, scegliere nome, motore e modello
+**PWA:** premere + nell'elenco, scegliere nome, motore e modello
 e premere **Crea chat**. La creazione avviene sul computer associato;
 la cartella viene ereditata dal contesto della chat da cui si crea.
 
@@ -52,7 +52,7 @@ la cartella viene ereditata dal contesto della chat da cui si crea.
 
 | Azione | Comando | Risultato |
 | --- | --- | --- |
-| Vedere i file del progetto | Icona cartella nella barra della chat | Apre il pannello dei file in sola lettura; le cartelle sono navigabili. Mostra anche l’URL associato, quando presente nel registro locale dei progetti. |
+| Vedere i file del progetto | Icona cartella nella barra della chat | Apre i file in sola lettura: affiancati alla chat desktop, in una finestra autonoma per una console esterna, come pannello comandi sulla PWA. Le cartelle sono navigabili. Mostra anche l’URL associato, quando presente nel registro locale dei progetti. |
 | Inviare un messaggio | Pulsante freccia oppure Invio | Il testo viene inviato alla console selezionata. Shift+Invio inserisce un a capo. |
 | Rispondere a una scelta numerata | 1, 2 o 3 | Il tasto viene inoltrato al programma nella console. |
 | Aprire una domanda Codex in attesa | ⇧← | Invia Shift+freccia sinistra, come indicato da Codex con `shift+← to answer`. |

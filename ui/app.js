@@ -1,9 +1,9 @@
-// app.js v4.167.3227
+// app.js v4.167.3230
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
 try{if(location.hash.startsWith('#console=')){const value=JSON.parse(decodeURIComponent(location.hash.slice(9)));if(value&&typeof value.id==='string'&&/^[\w-]{1,160}$/.test(value.id)&&typeof value.device==='string'&&/^[\w-]{1,160}$/.test(value.device))consoleWindow=value;}}catch{}
-if(consoleWindow)document.documentElement.dataset.consoleWindow='true';
+if(consoleWindow)document.documentElement.dataset[consoleWindow.project===true?'projectWindow':'consoleWindow']='true';
 const $ = (s) => document.querySelector(s);
 sessionStorage.removeItem('oaclis-local-access');
 if (/^#access=/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
@@ -452,6 +452,7 @@ window.onresize = () => {
 guard(async () => {
   data = await api("state");
   if(consoleWindow){
+    if(consoleWindow.project===true){openProjectFilesWindow(consoleWindow);return;}
     sourceId=consoleWindow.device;visibleChats=data.chats||[];
     const entry=visibleChats.find(chat=>chat.id===consoleWindow.id)||{id:consoleWindow.id,name:typeof consoleWindow.name==='string'?consoleWindow.name.slice(0,160):'Chat'};
     openChatTerminal({entry},null,sourceId);
