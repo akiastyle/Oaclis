@@ -1,4 +1,4 @@
-// panels.js v3.143.2908
+// panels.js v3.144.2930
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -299,8 +299,21 @@ async function removeConnection(connection, panel) {
   } finally { removingPresentation = false; }
 }
 
+function placePanel(panel,left,top){
+  if(panel.matches('.chat-terminal')){
+    const heading=panel.querySelector('.console-title'),handle=heading.querySelector('.console-name');
+    const visible=Math.min(80,handle.offsetWidth,innerWidth-16);
+    panel.style.left=Math.max(8+visible-handle.offsetLeft-handle.offsetWidth,Math.min(left,innerWidth-8-visible-handle.offsetLeft))+'px';
+    panel.style.top=Math.max(8-heading.offsetTop,Math.min(top,innerHeight-8-heading.offsetTop-heading.offsetHeight))+'px';
+  }else{
+    panel.style.left=Math.max(8,Math.min(left,innerWidth-panel.offsetWidth-8))+'px';
+    panel.style.top=Math.max(8,Math.min(top,innerHeight-panel.offsetHeight-8))+'px';
+  }
+}
+
 function positionContext(popover, anchor) {
   popover.classList.add("context-popover");
+  if(popover.dataset.moved==="true"&&popover.matches(".chat-terminal")){placePanel(popover,popover.offsetLeft,popover.offsetTop);return;}
   const opener = anchor || document.activeElement || $("#add-device");
   if (opener.isConnected) {
     popover.anchorRect = opener.getBoundingClientRect();
@@ -330,8 +343,10 @@ function bindPanelDrag(panel, reference = false) {
       const rect = panel.getBoundingClientRect();
       if(event.clientX<rect.right-18||event.clientY<rect.bottom-18)return;
       if(panel.dataset.snap){delete panel.dataset.snap;panel.freeGeometry=null;}
-      const width = Math.max(0, innerWidth - rect.left - 8), height = Math.max(0, innerHeight - rect.top - 8);
-      panel.style.minWidth = Math.min(280, width) + "px";
+      const consolePanel=panel.matches(".chat-terminal"),handle=consolePanel?panel.querySelector(".console-name"):null;
+      const minWidth=consolePanel?Math.max(280,panel.offsetWidth-handle.offsetWidth+Math.max(80,88-rect.left-handle.offsetLeft)):280;
+      const width = Math.max(consolePanel?minWidth:0, innerWidth - rect.left - 8), height = Math.max(consolePanel?320:0, innerHeight - rect.top - 8);
+      panel.style.minWidth = Math.min(minWidth, width) + "px";
       panel.style.minHeight = Math.min(panel.matches(".chat-terminal")?320:240, height) + "px";
       panel.style.maxWidth = width + "px";
       panel.style.maxHeight = height + "px";
@@ -342,8 +357,7 @@ function bindPanelDrag(panel, reference = false) {
       panel.style.width = panel.offsetWidth + "px"; panel.style.right = "auto";
     }
     panel.dataset.moved = "true";
-    panel.style.left = Math.max(8, Math.min(left, innerWidth - panel.offsetWidth - 8)) + "px";
-    panel.style.top = Math.max(8, Math.min(top, innerHeight - panel.offsetHeight - 8)) + "px";
+    placePanel(panel,left,top);
   };
   heading.tabIndex = 0;
   heading.onkeydown = event => {

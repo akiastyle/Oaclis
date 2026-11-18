@@ -1,4 +1,4 @@
-// console.js v3.144.2504
+// console.js v3.144.2514
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -105,8 +105,7 @@ function bindConsoleSnap(panel) {
     panel.style.minWidth='min(280px, calc(100vw - 16px))';panel.style.minHeight='min(320px, calc(100dvh - 16px))';
     panel.style.maxWidth='calc(100vw - 16px)';panel.style.maxHeight='calc(100dvh - 16px)';
     for(const key of ['width','height'])panel.style[key]=Math.min(key==='width'?innerWidth-16:innerHeight-16,rect[key])+'px';
-    panel.style.left=Math.max(8,Math.min(rect.left,innerWidth-panel.offsetWidth-8))+'px';
-    panel.style.top=Math.max(8,Math.min(rect.top,innerHeight-panel.offsetHeight-8))+'px';panel.dataset.moved='true';
+    placePanel(panel,rect.left,rect.top);panel.dataset.moved='true';
   };
   panel.snapConsole=mode=>{
     if(mode==='restore'){
@@ -126,7 +125,8 @@ function bindConsoleSnap(panel) {
     apply({left:event.clientX-ratio*panel.offsetWidth,top:event.clientY-top,width:panel.offsetWidth,height:panel.offsetHeight});
   };
   panel.dragMove=event=>{
-    const x=event.clientX,y=event.clientY,left=x<=24,right=x>=innerWidth-24,top=y<=24,bottom=y>=innerHeight-24;
+    const x=event.clientX,y=event.clientY;if(x<0||x>innerWidth||y<0||y>innerHeight){panel.cancelSnap();return;}
+    const left=x<=24,right=x>=innerWidth-24,top=y<=24,bottom=y>=innerHeight-24;
     zone=(left||right)&&(y<innerHeight/4||y>innerHeight*3/4)?(y<innerHeight/2?'top-':'bottom-')+(left?'left':'right'):
       (top||bottom)&&(x<innerWidth/4||x>innerWidth*3/4)?(top?'top-':'bottom-')+(x<innerWidth/2?'left':'right'):
       left?'left':right?'right':top?'full':null;
@@ -223,8 +223,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
       const width=!saved.snap&&[842,panel.offsetWidth-20].includes(saved.width)?panel.offsetWidth:saved.width;
       panel.style.width=Math.min(innerWidth-16,Math.max(280,width))+'px';
       panel.style.height=Math.min(innerHeight-16,Math.max(320,saved.height))+'px';
-      panel.style.left=Math.max(8,Math.min(saved.left,innerWidth-panel.offsetWidth-8))+'px';
-      panel.style.top=Math.max(8,Math.min(saved.top,innerHeight-panel.offsetHeight-8))+'px';panel.dataset.moved='true';
+      placePanel(panel,saved.left,saved.top);panel.dataset.moved='true';
       if(['left','right','top-left','top-right','bottom-left','bottom-right','full'].includes(saved.snap))panel.dataset.snap=saved.snap;
       if(saved.restore&&['left','top','width','height'].every(key=>Number.isFinite(saved.restore[key]))&&saved.restore.width>0&&saved.restore.height>0)panel.freeGeometry=saved.restore;
     }
@@ -232,6 +231,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   let savedGeometry='';
   panel.saveGeometry=()=>{
     if(!panel.isConnected||!panel.matches(':popover-open'))return;
+    placePanel(panel,panel.offsetLeft,panel.offsetTop);
     const value=JSON.stringify({left:panel.offsetLeft,top:panel.offsetTop,width:panel.offsetWidth,height:panel.offsetHeight,snap:panel.dataset.snap||null,restore:panel.freeGeometry||null});
     if(value===savedGeometry)return;
     try{localStorage.setItem(geometryKey,value);savedGeometry=value;}catch{}
