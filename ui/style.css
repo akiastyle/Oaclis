@@ -1,4 +1,4 @@
-/* style.css v2.0.1664 */
+/* style.css v2.0.1668 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1010,7 +1010,7 @@ select {
   pointer-events: none;
 }
 
-.chat-terminal.context-popover { padding-top: 0; width: min(calc(820px + 2 * var(--space-12) + 4px + 2 * var(--space-20) + 2 * var(--border-width)), calc(100vw - 16px)); }
+.chat-terminal.context-popover { padding-top: var(--space-10); width: min(calc(820px + 2 * var(--space-12) + 4px + 2 * var(--space-20) + 2 * var(--border-width)), calc(100vw - 16px)); }
 
 .terminal-destinations { display: flex; flex-direction: column; gap: var(--space-8); }
 
@@ -1233,7 +1233,7 @@ select {
 .chat-terminal.resizable-panel:popover-open { display:grid; }
 .chat-terminal.resizable-panel { height: min(560px, calc(100dvh - 16px)); min-height: min(320px, calc(100dvh - 16px)); gap: var(--space-8); }
 .chat-terminal h2 { min-width: 0; padding-right: 0; }
-.chat-terminal .console-pane { row-gap: var(--space-20); }
+.chat-terminal .console-pane { row-gap: var(--space-10); }
 .chat-terminal .console-title > button { position: static; flex: none; width: 36px; height: 36px; padding: 7px; }
 .chat-terminal .console-title > button svg { width: 20px; height: 20px; }
 .chat-terminal[data-raised="true"]:popover-open { animation: none; }
