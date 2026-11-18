@@ -1,4 +1,4 @@
-/* console.css v2.0.1671 */
+/* console.css v2.0.1679 */
 .oaclis-console,.voice-controls,.voice-dialog{--console-ink:var(--ink,var(--text));--console-line:var(--line,#ffffff26);--console-soft:var(--soft,#394247);--console-accent:var(--accent,var(--ink));color:var(--console-ink)}
 .oaclis-console[popover]:not(:popover-open){display:none}
 .oaclis-console{display:grid;grid-template-rows:minmax(0,1fr) auto auto;gap:8px;--console-input-radius:8px;--console-send-background:#54caba;--console-send-ink:#08231f;min-width:0;min-height:0;overflow:hidden}
@@ -84,11 +84,11 @@
 @media(prefers-reduced-motion:reduce){.oaclis-console button:not(.voice-mic,.read-aloud){transition:none}}
 
 .console-title .console-project-button{flex:none;display:grid;place-items:center;width:36px;height:36px;padding:7px;border:0;border-radius:var(--radius-control,8px);background:transparent;color:inherit;cursor:pointer}.console-project-button svg{width:20px;height:20px}
-.console-project{box-sizing:border-box;color:var(--ink,var(--text));font:14px/1.5 ui-sans-serif,system-ui,sans-serif}
+.console-project{display:grid;grid-template-rows:auto minmax(0,1fr);overflow:hidden;box-sizing:border-box;color:var(--ink,var(--text));font:14px/1.5 ui-sans-serif,system-ui,sans-serif}
 .chat-terminal:has(>.console-project-docked){overflow:visible}
-.console-project-docked{position:absolute;left:100%;top:0;bottom:0;width:320px;margin:0;padding:16px;overflow:auto;border:1px solid var(--line,#ffffff26);border-radius:var(--radius-panel,14px);background:var(--bg,#111314);box-shadow:0 12px 30px #0003}.console-project-docked.is-left{left:auto;right:100%}
+.console-project-docked{position:absolute;left:100%;top:0;bottom:0;width:320px;margin:0;padding:16px;overflow:hidden;border:1px solid var(--line,#ffffff26);border-radius:var(--radius-panel,14px);background:var(--bg,#111314);box-shadow:0 12px 30px #0003}.console-project-docked.is-left{left:auto;right:100%}
 .chat-terminal:has(>.console-project-docked.is-inset){grid-template-columns:minmax(0,1fr) 260px;overflow:hidden}.chat-terminal:has(>.console-project-docked.is-inset)>.console-panes,.chat-terminal:has(>.console-project-docked.is-inset)>form,.chat-terminal:has(>.console-project-docked.is-inset)>.terminal-keys{grid-column:1}.console-project-docked.is-inset{position:static;grid-column:2;grid-row:1/4;width:auto;min-height:0;max-height:100%;box-shadow:none}
 html[data-project-window] body>:not(.console-project-window){display:none!important}
-html[data-project-window] body>.console-project-window{display:block!important;position:fixed;inset:0;overflow:auto;margin:0;padding:16px;background:var(--bg,#111314)}
+html[data-project-window] body>.console-project-window{display:grid!important;position:fixed;inset:0;overflow:hidden;margin:0;padding:16px;background:var(--bg,#111314)}
 .console-project header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.console-project header button{display:grid;place-items:center;width:32px;height:32px;padding:6px;border:0;border-radius:var(--radius-control,8px);background:transparent;color:inherit;cursor:pointer}.console-project header svg{width:20px;height:20px}
-.console-project-content{display:grid;gap:0}.console-project-path,.console-project-content>a{display:block;overflow-wrap:anywhere;margin-bottom:12px;color:inherit}.console-project-entry{display:block;box-sizing:border-box;width:100%;padding:8px 0;border:0;border-bottom:1px solid var(--line,#ffffff26);border-radius:0;background:transparent;color:inherit;text-align:left;overflow-wrap:anywhere;font:inherit}.console-project button.console-project-entry{cursor:pointer}.console-project button.console-project-entry:hover{background:var(--soft,#394247)}
+.console-project-content{display:grid;align-content:start;min-height:0;overflow:auto;gap:0}.console-project-path,.console-project-content>a{display:block;overflow-wrap:anywhere;margin-bottom:12px;color:inherit}.console-project-entry{display:block;box-sizing:border-box;width:100%;padding:8px 0;border:0;border-bottom:1px solid var(--line,#ffffff26);border-radius:0;background:transparent;color:inherit;text-align:left;overflow-wrap:anywhere;font:inherit}.console-project button.console-project-entry{cursor:pointer}.console-project button.console-project-entry:hover{background:var(--soft,#394247)}
