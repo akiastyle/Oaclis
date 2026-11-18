@@ -1,4 +1,4 @@
-// console.js v3.144.2490
+// console.js v3.144.2504
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -268,23 +268,19 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   }
   const screen = panel.querySelector("pre"), form = panel.querySelector("form");
   const payload = { device_id: deviceId, chat_id: connection.entry.id };
-  const status = document.createElement("small"); status.className = "terminal-state"; status.setAttribute("role", "status"); panel.querySelector("h2").append(status);
-  status.addEventListener("mouseenter",()=>{status.title=status.textContent;});
-  const jobs=document.createElement("span");panel.querySelector("h2").append(jobs);panel.jobsStatus=OaclisJobs.inline(jobs);
+  const jobs=document.createElement("span");panel.querySelector(".console-project-button").before(jobs);panel.jobsStatus=OaclisJobs.inline(jobs);
   let stopping=false,busy=false,ready=false,submitting=false,waitingInputs=0,idle=Promise.resolve();
   panel.resetTerminal=()=>{
     clearTimeout(panel.terminalTimer);ready=false;chat.reset();
     if(!panel.sessionStopped)fetch('/api/terminal',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...payload,action:'reset'}),keepalive:true}).catch(()=>{});
   };
   const send = async value => {
-    if (value.action !== "read") status.textContent = OaclisSettings.text("Ricevuto");
     if (value.action === "read") { if (busy || waitingInputs || document.documentElement.dataset.consoleWindow&&!panel.hasAttribute("data-window-active")) return false; }
     else { waitingInputs++; while (busy) await idle; waitingInputs--; }
     if (!panel.isConnected) return false;
     busy = true;
     let done; idle = new Promise(resolve => { done = resolve; });
     try {
-      if (value.action !== "read") status.textContent = OaclisSettings.text("Operazione in corso");
       const stamp = window.OaclisLocalVoice?.stamp(panel);
       const result = await api("terminal", { ...payload, ...(value.action==="read"&&chat.revision?{screen_revision:chat.revision}:{}), ...value, ...window.OaclisLocalVoice?.request(panel) });
       if (!panel.isConnected) return false;
@@ -296,12 +292,10 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
       panel.jobsStatus.update(result.jobs?.map(job=>job.device_id==='master'&&deviceId!=='master'?{...job,device_id:deviceId}:job));
       chat.render(result,value.action);
       window.OaclisLocalVoice?.update(panel,result,stamp,typeof value.text === "string");
-      if (value.action !== "read" || status.dataset.error) status.textContent=value.action === "input" ? "" : OaclisSettings.text("Collegato");
-      delete status.dataset.error;
       ready = true;
       form.querySelectorAll("textarea,button").forEach(e => e.disabled = false);
       return true;
-    } catch (error) { if (panel.isConnected) {panel.jobsStatus.stale();status.textContent=OaclisSettings.text(value.action === "input" ? "Invio non confermato" : "Collegamento temporaneamente non disponibile. Riprova.");status.dataset.error="true";} if (value.action === "open") ready = false; console.error(error);throw error; }
+    } catch (error) { if (panel.isConnected) panel.jobsStatus.stale(); if (value.action === "open") ready = false; console.error(error);throw error; }
     finally { busy = false; done(); }
   };
   let terminalPolling=false;
@@ -309,7 +303,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     if (document.hidden || terminalPolling || !panel.isConnected) return;
     terminalPolling=true;
     try { await send({ action: ready ? "read" : "open" }); }
-    catch { /* send() already displays the connection error; keep observing the session. */ }
+    catch { /* send() logs the failure; keep observing the session. */ }
     finally {
       terminalPolling=false;clearTimeout(panel.terminalTimer);
       if (panel.isConnected && !document.hidden) panel.terminalTimer=setTimeout(pollTerminal,1500);
@@ -351,7 +345,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   panel.openTerminal=async()=>{
     if(ready||busy)return;
     try{if(await send({action:'open'}))form.elements.text.focus();}
-    catch { /* send() displays the connection error; polling retries the opening. */ }
+    catch { /* send() logs the failure; polling retries the opening. */ }
     finally{pollTerminal();}
   };
   window.OaclisLocalVoice?.activate(panel);

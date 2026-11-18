@@ -1,4 +1,4 @@
-// locale.js v1.3.628
+// locale.js v1.3.630
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -137,10 +137,8 @@ window.OaclisSettings=(()=>{
   "Consenti l’apertura della finestra nel browser.":"Allow the window to open in your browser.",
   "Affianca chat":"Split chat",
   "Chat singola":"Single chat",
-  "Ricevuto":"Received",
   "Invio non confermato":"Send not confirmed",
   "Inviato":"Sent",
-  "Collegato":"Connected",
   "Aggiungi dispositivo": "Add device",
   "Aggiungi manualmente": "Add manually",
   "Aggiungi mobile": "Add mobile",

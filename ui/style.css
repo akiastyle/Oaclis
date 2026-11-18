@@ -1,4 +1,4 @@
-/* style.css v2.0.1654 */
+/* style.css v2.0.1661 */
 :root {
   color-scheme: light;
   /* Typography */
@@ -1232,8 +1232,9 @@ select {
 #orchestrator-log.resizable-panel:not([hidden]) { display: flex; flex-direction: column; }
 .chat-terminal.resizable-panel:popover-open { display:grid; }
 .chat-terminal.resizable-panel { height: min(560px, calc(100dvh - 16px)); min-height: min(320px, calc(100dvh - 16px)); gap: var(--space-8); }
-.chat-terminal h2 { min-width: 0; padding-right: calc((var(--size-20) + var(--space-9) * 2) * 2 + var(--space-8)); }
-.chat-terminal .console-detach { position: absolute; top: var(--space-4); right: calc(var(--size-20) + var(--space-9) * 2 + var(--space-4)); }
+.chat-terminal h2 { min-width: 0; padding-right: 0; }
+.chat-terminal .console-title > button { position: static; flex: none; width: 36px; height: 36px; padding: 7px; }
+.chat-terminal .console-title > button svg { width: 20px; height: 20px; }
 .chat-terminal[data-raised="true"]:popover-open { animation: none; }
 #orchestrator-log.resizable-panel { height: min(480px, calc(100dvh - 96px)); }
 .resizable-panel > h2, .resizable-panel > form, .resizable-panel > .terminal-keys { flex-shrink: 0; }
@@ -1335,7 +1336,7 @@ select {
 html[data-console-window] body > :not(.chat-terminal):not(.voice-panel):not(#notice) { display: none !important; }
 html[data-console-window] .chat-terminal:not([data-window-active]) { display: none !important; }
 html[data-console-window] .chat-terminal { inset: 8px !important; width: calc(100vw - 16px) !important; height: calc(100dvh - 16px) !important; min-width: 0; min-height: 0; max-width: none; max-height: none; resize: none; animation: none; }
-html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: var(--space-24); }
+html[data-console-window] .chat-terminal h2 { cursor: default; padding-right: 0; }
 
 .engine-editor { max-height: calc(100dvh - 32px); overflow-y: auto; }
 .engine-editor details { margin-block: 12px; }

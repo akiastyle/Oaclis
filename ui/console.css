@@ -1,4 +1,4 @@
-/* console.css v2.0.1670 */
+/* console.css v2.0.1671 */
 .oaclis-console,.voice-controls,.voice-dialog{--console-ink:var(--ink,var(--text));--console-line:var(--line,#ffffff26);--console-soft:var(--soft,#394247);--console-accent:var(--accent,var(--ink));color:var(--console-ink)}
 .oaclis-console[popover]:not(:popover-open){display:none}
 .oaclis-console{display:grid;grid-template-rows:minmax(0,1fr) auto auto;gap:8px;--console-input-radius:8px;--console-send-background:#54caba;--console-send-ink:#08231f;min-width:0;min-height:0;overflow:hidden}
@@ -42,7 +42,6 @@
 .console-send-menu button{display:flex;gap:12px;align-items:center;width:100%;height:44px;padding:10px 12px;border:0;border-radius:var(--radius-control,8px);background:transparent;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .console-send-menu button:hover,.console-send-menu button:focus-visible{background:var(--console-soft)}
 .console-send-menu button svg{width:20px;height:20px;flex:none}
-.terminal-state{flex:0 1 auto;max-width:45%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:12px;font-weight:400}
 .voice-panel{display:contents}.voice-sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .voice-dialog{position:fixed;inset:0;box-sizing:border-box;width:min(760px,calc(100% - 32px));max-width:none;max-height:calc(100dvh - 32px);margin:auto;padding:24px;border:1px solid var(--console-line);border-radius:var(--radius-panel,14px);background:var(--bg);color:var(--console-ink);font:inherit;overflow:auto}
 .voice-dialog::backdrop{background:rgb(0 0 0 / 55%)}.voice-dialog:not([open]){display:none}
