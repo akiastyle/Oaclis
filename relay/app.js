@@ -1,4 +1,4 @@
-// app.js v2.131.1294
+// app.js v2.131.1297
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -132,11 +132,10 @@ async function openConsole(chat,adjacent=false){
  const panes=[],container=document.getElementById('console-panes'),form=document.getElementById('console-input'),text=form.querySelector('textarea'),keys=document.getElementById('console-keys'),picker=document.getElementById('console-picker');
   let active=null,closed=false,pollTimer=null,queue=Promise.resolve(),pending=null,reading=null,inputBusy=false,polling=false;
  const split=document.createElement('button');split.type='button';split.className='console-split secondary';split.innerHTML=OaclisIcon('split');
- const createButton=document.createElement('button');createButton.type='button';createButton.className='console-new secondary';createButton.innerHTML=OaclisIcon('plus');createButton.title=OaclisSettings.text('Nuova chat');createButton.setAttribute('aria-label',createButton.title);createButton.onclick=newMobileChat;
  const fitConsole=()=>{const following=panes.filter(pane=>pane.console.follow);document.documentElement.style.setProperty('--console-height',(window.visualViewport?.height??innerHeight)+'px');requestAnimationFrame(()=>{if(!closed)for(const pane of following)if(!pane.closed){pane.console.follow=true;pane.screen.scrollTop=pane.screen.scrollHeight;}});};
  fitConsole();window.visualViewport?.addEventListener('resize',fitConsole);window.addEventListener('resize',fitConsole);
  function layout(){
-  fitConsole();container.dataset.split=String(panes.length===2);panes[0]?.title.append(createButton,split);
+  fitConsole();container.dataset.split=String(panes.length===2);panes[0]?.title.append(split);
   split.setAttribute('aria-pressed',String(panes.length===2));split.title=OaclisSettings.text(panes.length===2?'Chat singola':'Affianca chat');split.setAttribute('aria-label',split.title);
  }
  function remove(pane){saveDraft(pane.chat.id,pane===active?text.value:drafts.get(pane.chat.id)||'');consolePositions.set(pane.chat.id,pane.saved||{top:pane.screen.scrollTop,left:pane.screen.scrollLeft,follow:pane.console.follow});pane.closed=true;pane.console.closed=true;pane.jobsStatus.destroy();pane.element.remove();panes.splice(panes.indexOf(pane),1);}
