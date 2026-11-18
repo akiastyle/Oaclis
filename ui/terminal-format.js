@@ -1,4 +1,4 @@
-// terminal-format.js v1.42.328
+// terminal-format.js v1.43.350
 "use strict";
 const OaclisTerminal = (() => {
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
@@ -226,6 +226,28 @@ function consoleScreen(value){
    const pane=document.createElement('article');pane.className='console-pane';pane.setAttribute('aria-label',name);
    pane.innerHTML=OaclisSettings.html('<h2 class="console-title"><span class="console-name"></span></h2><pre class="console-screen" tabindex="0" aria-label="Console">Connessione…</pre>');
    pane.querySelector('.console-name').textContent=name;if(icon)pane.querySelector('h2').prepend(icon);
+   const project=document.createElement('button');project.type='button';project.className='icon-button console-project-button';project.innerHTML=OaclisIcon('folder');project.title=OaclisSettings.text('File del progetto');project.setAttribute('aria-label',project.title);pane.querySelector('h2').append(project);
+   project.onclick=()=>{
+    const existing=pane.querySelector('.console-project');if(existing){existing.querySelector('button').focus();return;}
+    const panel=document.createElement('section');panel.className='console-project';panel.setAttribute('popover','manual');panel.setAttribute('role','dialog');panel.setAttribute('aria-label',project.title);
+    panel.innerHTML=OaclisSettings.html('<header><strong>File del progetto</strong><button type="button" class="icon-button" aria-label="Chiudi">'+OaclisIcon('close')+'</button></header><div class="console-project-content" aria-live="polite"></div>');
+    panel.querySelector('header button').onclick=()=>panel.remove();pane.append(panel);panel.showPopover();
+    const rect=project.getBoundingClientRect();panel.style.left=Math.max(8,Math.min(rect.right-440,innerWidth-448))+'px';panel.style.top=Math.max(8,Math.min(rect.bottom+8,innerHeight-280))+'px';
+    const content=panel.querySelector('.console-project-content');
+    async function load(path=''){
+     content.textContent=OaclisSettings.text('Caricamento…');
+     try{
+      const {project:data}=await transport('project',{text:path});if(!panel.isConnected)return;
+      content.replaceChildren();const root=document.createElement('small');root.className='console-project-path';root.textContent=data.root+(data.path?'/'+data.path:'');content.append(root);
+      if(data.url){const link=document.createElement('a');const url=new URL(data.url);if(['http:','https:'].includes(url.protocol)){link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';link.textContent=data.url;content.append(link);}}
+      if(data.path){const up=document.createElement('button');up.type='button';up.className='console-project-entry';up.textContent='..';up.setAttribute('aria-label',OaclisSettings.text('Cartella superiore'));up.onclick=()=>load(data.path.split('/').slice(0,-1).join('/'));content.append(up);}
+      for(const entry of data.entries){const row=document.createElement(entry.directory?'button':'span');row.className='console-project-entry';row.textContent=entry.name+(entry.directory?'/':'');if(entry.directory){row.type='button';row.onclick=()=>load((data.path?data.path+'/':'')+entry.name);}content.append(row);}
+      if(!data.entries.length){const empty=document.createElement('p');empty.textContent=OaclisSettings.text('Cartella vuota');content.append(empty);}
+      if(data.more){const more=document.createElement('small');more.textContent=OaclisSettings.text('Sono mostrati i primi 200 elementi');content.append(more);}
+     }catch(error){if(panel.isConnected)content.textContent=OaclisSettings.text('Lettura del progetto non riuscita');}
+    }
+    load();
+   };
    const screen=pane.querySelector('pre');
    const chat=pane.console={id,send:transport,follow:true,revision:'',image:null,preparingImage:false,closed:false,
     render(result,operation='read',saved=null){

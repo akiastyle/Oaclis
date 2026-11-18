@@ -1,4 +1,4 @@
-// app.js v2.131.1297
+// app.js v2.131.1300
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -148,7 +148,7 @@ async function openConsole(chat,adjacent=false){
   files.paint();bindVoice(pane.chat);form.querySelectorAll('textarea,button').forEach(element=>element.disabled=!pane.ready||pane.console.preparingImage===true);layout();return true;
  }
  function add(selected,index=panes.length){
-  const element=OaclisTerminal.createPane({id:selected.id,name:selected.name,icon:OaclisTerminal.chatIcon(selected)},(action,body)=>action==='stop'?stopConsole(pane):submit(pane,body.key,action==='command'?body:null));
+  const element=OaclisTerminal.createPane({id:selected.id,name:selected.name,icon:OaclisTerminal.chatIcon(selected)},(action,body)=>action==='project'?runInput(()=>send(pane,'project',body)):action==='stop'?stopConsole(pane):submit(pane,body.key,action==='command'?body:null));
   const title=element.querySelector('.console-title'),name=element.querySelector('.console-name');
   const jobs=document.createElement("span");title.append(jobs);const jobsStatus=OaclisJobs.inline(jobs);
   const saved=consolePositions.get(selected.id),pane={chat:selected,element,title,name,jobsStatus,screen:element.querySelector('pre'),console:element.console,ready:false,closed:false,saved};
@@ -163,6 +163,7 @@ async function openConsole(chat,adjacent=false){
   if(closed)return false;
   if(result.pending){pending=null;throw Error(OaclisSettings.text('Collegamento temporaneamente non disponibile. Riprova.'));}
   pending=null;if(result.error)throw Error(result.error);
+  if(request.operation==='project')return result;
   if(request.operation==='create')return result.new_chat;
   if(request.operation==='engines'||request.operation==='models')return result;
   const pane=request.pane;if(pane.closed)return true;

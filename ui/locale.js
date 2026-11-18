@@ -1,4 +1,4 @@
-// locale.js v1.3.623
+// locale.js v1.3.628
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -8,6 +8,11 @@ window.OaclisSettings=(()=>{
  const speechLanguage=language==='it'?'it-IT':'en-US';
  document.documentElement.lang=language;
  const en={
+  "File del progetto":"Project files",
+  "Cartella superiore":"Parent folder",
+  "Cartella vuota":"Empty folder",
+  "Sono mostrati i primi 200 elementi":"Showing the first 200 entries",
+  "Lettura del progetto non riuscita":"Could not read project files",
   "La cartella esiste già:":"The folder already exists:",
   "Skill":"Skills",
   "Aggiorna automaticamente":"Update automatically",

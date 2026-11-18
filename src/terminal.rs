@@ -1,4 +1,4 @@
-// terminal.rs v1.35.637
+// terminal.rs v1.35.644
 //! Persistent tmux sessions; browser disconnects never stop Codex.
 use crate::{devices::Device, invalid};
 use serde_json::{Value, json};
@@ -28,7 +28,7 @@ fn validate(value: &Value) -> io::Result<&str> {
     let chat = value["chat_id"].as_str().filter(|s| !s.is_empty() && s.len()<=160 && s.bytes().all(|b|b.is_ascii_alphanumeric() || b"_-".contains(&b)))
         .ok_or_else(||invalid("Chat non valida"))?;
     match value["action"].as_str() {
-        Some("open"|"read"|"reset"|"stop"|"engines"|"models") => {},
+        Some("open"|"read"|"reset"|"stop"|"engines"|"models"|"project") => {},
         Some("create") => {crate::appearance::Appearance{label:value["text"].as_str().unwrap_or("").into(),icon:value["icon"].as_str().unwrap_or("").into(),color:value["color"].as_str().unwrap_or("").into(),..Default::default()}.validate()?;},
         Some("input") => {
             let text = value.get("text").map_or(Some(""),Value::as_str).ok_or_else(||invalid("Messaggio non valido"))?;
@@ -173,6 +173,11 @@ pub(crate) fn local(value: &Value) -> io::Result<Value> {
     let chat=validate(value)?;
     let local_home=env::var_os("HOME").map(PathBuf::from).ok_or_else(||invalid("HOME non definita"))?;
     let local_config=local_home.join(".config/oaclis");
+    if value["action"]=="project" {
+        let root=env::var_os("CODEX_HOME").map(PathBuf::from).unwrap_or_else(||local_home.join(".codex"));
+        let cwd=working_directory(&local_home,&root,chat)?;
+        return crate::project_files::listing(&cwd,value["text"].as_str().unwrap_or(""),&local_home.join("_path/index.html"));
+    }
     if !matches!(value["action"].as_str(),Some("create"|"engines"|"models")) && crate::local_chat::contains(&local_config,chat)? {
         if matches!(value["action"].as_str(),Some("read"|"input")) && STOPPED_CHATS.get_or_init(Default::default).lock().unwrap().contains_key(chat) {return Ok(json!({"stopped":true}));}
         let result=crate::local_chat::request(&local_home,value)?;

@@ -52,6 +52,7 @@ la cartella viene ereditata dal contesto della chat da cui si crea.
 
 | Azione | Comando | Risultato |
 | --- | --- | --- |
+| Vedere i file del progetto | Icona cartella nella barra della chat | Apre il pannello dei file in sola lettura; le cartelle sono navigabili. Mostra anche l’URL associato, quando presente nel registro locale dei progetti. |
 | Inviare un messaggio | Pulsante freccia oppure Invio | Il testo viene inviato alla console selezionata. Shift+Invio inserisce un a capo. |
 | Rispondere a una scelta numerata | 1, 2 o 3 | Il tasto viene inoltrato al programma nella console. |
 | Aprire una domanda Codex in attesa | ⇧← | Invia Shift+freccia sinistra, come indicato da Codex con `shift+← to answer`. |

@@ -1,4 +1,4 @@
-// console.js v3.142.2470
+// console.js v3.142.2473
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -185,7 +185,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", OaclisSettings.text("Console Codex · ") + deviceName(deviceId));
   const chatIcon=OaclisTerminal.chatIcon({...connection.entry,...appearance(connection.entry),name:chatLabel(connection.entry)});
-  const pane=OaclisTerminal.createPane({id:connection.entry.id,name:chatLabel(connection.entry)+' · '+deviceName(deviceId),icon:chatIcon},(action,body)=>action==='stop'?stopConsole():action==='command'?submit(body.text):Object.hasOwn(body,'text')?submit():send({action,...body}));
+  const pane=OaclisTerminal.createPane({id:connection.entry.id,name:chatLabel(connection.entry)+' · '+deviceName(deviceId),icon:chatIcon},(action,body)=>action==='project'?send({action,...body}):action==='stop'?stopConsole():action==='command'?submit(body.text):Object.hasOwn(body,'text')?submit():send({action,...body}));
   const chat=pane.console;panel.activeConsole=chat;panel.querySelector('.console-panes').append(pane);
   const close=document.createElement('button');close.type='button';close.className='icon-button popover-close';close.setAttribute('aria-label',OaclisSettings.text('Chiudi chat'));close.innerHTML=OaclisIcon('close');panel.querySelector('h2').append(close);
   document.body.append(panel);
@@ -274,6 +274,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
       const stamp = window.OaclisLocalVoice?.stamp(panel);
       const result = await api("terminal", { ...payload, ...(value.action==="read"&&chat.revision?{screen_revision:chat.revision}:{}), ...value, ...window.OaclisLocalVoice?.request(panel) });
       if (!panel.isConnected) return false;
+      if (value.action === "project") {status.textContent="";return result;}
       if (result.stopped === true) {
         const event={kind:'oaclis-console-stopped',chat_id:connection.entry.id,device_id:deviceId};
         consoleChannel?.postMessage(event);window.opener?.postMessage(event,location.origin);closeStoppedChatWindows(event);

@@ -1,4 +1,4 @@
-// mobile.rs v1.24.646
+// mobile.rs v1.24.648
 //! Explicit mobile invitations. Relay credentials never enter browser responses or logs.
 use crate::invalid;
 use qrcode::{QrCode, render::svg};
@@ -208,7 +208,7 @@ pub(crate) fn start(config: PathBuf, enabled: bool) -> Arc<Registry> {
                             result
                         });
                         let mut answer = json!({"device":device,"id":id});
-                        match result { Ok(value) if value["engines"].is_object() || value["models"].is_array()=>{if value["engines"].is_object(){answer["engines"]=value["engines"].clone();}else{answer["models"]=value["models"].clone();}}, Ok(value) if value["new_chat"].is_object()=>{answer["new_chat"]=value["new_chat"].clone();}, Ok(value) => { if let Some(jobs)=value.get("jobs") {answer["jobs"]=jobs.clone();} if let Some(speech)=value.get("speech") {answer["speech"]=speech.clone();} let screen=crate::terminal::mobile_screen(&value); answer.as_object_mut().unwrap().extend(screen.as_object().unwrap().clone()); }, Err(_) => answer["error"] = json!(true) }
+                        match result { Ok(value) if value["project"].is_object()=>{answer["project"]=value["project"].clone();}, Ok(value) if value["engines"].is_object() || value["models"].is_array()=>{if value["engines"].is_object(){answer["engines"]=value["engines"].clone();}else{answer["models"]=value["models"].clone();}}, Ok(value) if value["new_chat"].is_object()=>{answer["new_chat"]=value["new_chat"].clone();}, Ok(value) => { if let Some(jobs)=value.get("jobs") {answer["jobs"]=jobs.clone();} if let Some(speech)=value.get("speech") {answer["speech"]=speech.clone();} let screen=crate::terminal::mobile_screen(&value); answer.as_object_mut().unwrap().extend(screen.as_object().unwrap().clone()); }, Err(_) => answer["error"] = json!(true) }
                         if answer["screen"].is_string() {if let Some(chat)=chat_id {deliveries.push((device.into(),chat));}}
                         results.push(answer);
                     }

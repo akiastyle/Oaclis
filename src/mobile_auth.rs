@@ -1,4 +1,4 @@
-// mobile_auth.rs v1.52.740
+// mobile_auth.rs v1.52.748
 //! Local mobile authority: QR-bound keys, chat grants and signed, non-replayable requests.
 use crate::invalid;
 use ring::{hmac, rand::{SecureRandom, SystemRandom}, signature};
@@ -132,9 +132,10 @@ impl Store {
             || Some(command.id.as_str())!=envelope["id"].as_str() || unhex(&command.id,16).is_err()
             || command.issued>current+5 || current.saturating_sub(command.issued)>30
             || !phone.chats.contains(&command.chat_id) || command.text.chars().count()>8000 || command.text.contains('\0')
-            || !matches!(command.action.as_str(),"open"|"read"|"stop"|"input"|"create"|"engines"|"models")
+            || !matches!(command.action.as_str(),"open"|"read"|"stop"|"input"|"create"|"engines"|"models"|"project")
             || !matches!(command.key.as_str(),""|"Enter"|"Escape"|"Tab"|"Up"|"Down"|"Left"|"Right"|"BSpace"|"C-c"|"1"|"2"|"3"|"S-Left")
-            || (!matches!(command.action.as_str(),"input"|"create") && (!command.text.is_empty() || !command.key.is_empty() || command.image.is_some()))
+            || (!matches!(command.action.as_str(),"input"|"create"|"project") && (!command.text.is_empty() || !command.key.is_empty() || command.image.is_some()))
+            || (command.action=="project" && (!command.key.is_empty() || command.image.is_some()))
             || (command.action=="create" && (!command.key.is_empty() || command.image.is_some() || command.text.trim().is_empty() || command.text.chars().count()>160))
             || (command.action!="create"&&(!command.icon.is_empty()||!command.model.is_empty()||!command.engine.is_empty())) {
             return Err(invalid("Richiesta mobile non autorizzata dal master"));
@@ -194,10 +195,11 @@ mod tests {
         assert!(store.allow_created(&device,"not-allowed","new-chat").is_err());
         store.allow_created(&device,"allowed","new-chat").unwrap();assert_eq!(store.authority().phones[&device].chats,BTreeSet::from(["allowed".into(),"new-chat".into()]));
         assert!(store.command(&signed(&payload)).is_err());
-        for (action,nonce) in [("engines","6"),("models","7")] {
+        for (action,nonce) in [("engines","6"),("models","7"),("project","8")] {
             let mut query=payload.clone();query["action"]=json!(action);query["id"]=json!(nonce.repeat(32));
             assert!(store.command(&signed(&query)).is_err());
             for field in ["text","icon","model","engine"] {query[field]=json!("");}
+            if action=="project" {query["text"]=json!("subfolder");let mut invalid=query.clone();invalid["key"]=json!("Enter");assert!(store.command(&signed(&invalid)).is_err());}
             assert_eq!(store.command(&signed(&query)).unwrap()["action"],action);
             query["chat_id"]=json!("not-allowed");assert!(store.command(&signed(&query)).is_err());
         }

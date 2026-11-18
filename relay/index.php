@@ -1,5 +1,5 @@
 <?php
-// index.php v1.9.819
+// index.php v1.9.827
 declare(strict_types=1);
 const ORIGIN = 'https://oaclis.krprojects.it';
 const PRIVATE_DIR = __DIR__ . '/../../.ac6d0ce49a137e5490ba0324';
@@ -255,7 +255,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
             }
             $operation=$input['operation']??''; $text=$input['text']??''; $key=$input['key']??'';
-            if (!in_array($operation,['open','read','stop','input','create','engines','models'],true) || !is_string($text) || mb_strlen($text)>8000 || str_contains($text,"\0") || !in_array($key,['','Enter','Escape','Tab','Up','Down','Left','Right','BSpace','C-c','1','2','3','S-Left'],true)) throw new RuntimeException();
+            if (!in_array($operation,['open','read','stop','input','create','engines','models','project'],true) || !is_string($text) || mb_strlen($text)>8000 || str_contains($text,"\0") || !in_array($key,['','Enter','Escape','Tab','Up','Down','Left','Right','BSpace','C-c','1','2','3','S-Left'],true)) throw new RuntimeException();
             $signed=$input['signed']??null;
             if (!is_array($signed) || !is_string($signed['payload']??null) || strlen($signed['payload'])>786432 || !is_string($signed['signature']??null) || !preg_match('/^[a-f0-9]{128}$/D',$signed['signature'])) respond([],403);
             $packet=json_decode($signed['payload'],true,16,JSON_THROW_ON_ERROR);
@@ -271,7 +271,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             $previous=$record['console']??[];
             // Only observations can be superseded; pending inputs remain exclusive.
-            if (($previous['until']??0)>time() && !isset($previous['result']) && !(in_array($operation,['input','create','engines','models'],true) && ($previous['operation']??'')==='read')) respond(['error'=>'Attendi il completamento della richiesta.'],409);
+            if (($previous['until']??0)>time() && !isset($previous['result']) && !(in_array($operation,['input','create','engines','models','project'],true) && ($previous['operation']??'')==='read')) respond(['error'=>'Attendi il completamento della richiesta.'],409);
             $id=$packet['id'];
             $state['devices'][$deviceId]['console']=['id'=>$id,'chat_id'=>$chat,'operation'=>$operation,'until'=>min(time()+20,$session['auth']['until']),'signed'=>$signed];
             $result=['request_id'=>$id];
@@ -311,6 +311,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
                 if (($job['operation']??'')==='models' && is_array($answer['models']??null) && array_is_list($answer['models']) && strlen(json_encode($answer['models']))<=32768) {
                     $state['devices'][$target]['console']['result']=['models'=>$answer['models']];
+                    continue;
+                }
+                if (($job['operation']??'')==='project' && is_array($answer['project']??null) && strlen(json_encode($answer['project']))<=32768) {
+                    $state['devices'][$target]['console']['result']=['project'=>$answer['project']];
                     continue;
                 }
                 $packet=json_decode($job['signed']['payload']??'{}',true);
