@@ -1,4 +1,4 @@
-// skills.rs v1.8.107
+// skills.rs v1.8.109
 //! Startup skill checks, cached reports and opt-in native plugin updates.
 use serde_json::{Value,json};
 use std::{collections::BTreeMap,fs,path::Path,sync::{Arc,Mutex,OnceLock},time::{Duration,SystemTime,UNIX_EPOCH}};
@@ -97,7 +97,7 @@ fn collect(inventory:&Value)->Vec<Value> {
             rows.push(json!({"name":name,"enabled":false,"invalid":true,"update":"unknown"}));
         }
     }
-    rows.sort_by_key(|row|row["name"].as_str().unwrap_or("").to_lowercase());rows
+    rows.sort_by_cached_key(|row|row["name"].as_str().unwrap_or("").to_lowercase());rows
 }
 #[cfg(test)]
 mod tests {

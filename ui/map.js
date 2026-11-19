@@ -1,4 +1,4 @@
-// map.js v4.136.3601
+// map.js v4.136.3604
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -90,8 +90,9 @@ function renderMobileChatFlows(path,phone) {
 
 function renderActiveLinkFlows() {
   const online = id => id === 'master' || data.connections?.[id] === 'online';
+  const connections=new Map(chatLinks.map(value=>[JSON.stringify([value.entry.id,value.source,value.target]),value]));
   for (const layer of document.querySelectorAll('.chat-link')) {
-    const connection = chatLinks.find(value => JSON.stringify([value.entry.id, value.source, value.target]) === layer.dataset.renderKey);
+    const connection = connections.get(layer.dataset.renderKey);
     let directions = [];
     if (connection && online(connection.source) && online(connection.target) && !data.paused) {
       const pair = [connection.entry.id, ...[connection.source, connection.target].sort()].join(':');

@@ -1,4 +1,4 @@
-// jobs.rs v1.21.176
+// jobs.rs v1.23.218
 //! Volatile tool telemetry, independent of AI execution and persistent chat state.
 use crate::invalid;
 use serde::{Deserialize, Serialize};
@@ -66,21 +66,22 @@ impl Monitor {
         }
         self.peers.lock().unwrap().insert(device.id.clone(),PeerJobs{name:device.name.clone(),jobs,received:Instant::now()});Ok(())
     }
-    fn snapshot(&self)->Value {
-        json!({"jobs":self.jobs.lock().unwrap().values().map(|record|{
+    fn rows(&self,chat:Option<&str>)->Vec<Value> {
+        self.jobs.lock().unwrap().values().filter(|record|chat.is_none_or(|chat|record.update.chat_id==chat)).map(|record|{
             let mut value=serde_json::to_value(&record.update).unwrap();
             value["updated_at"]=json!(record.updated_at);
             value["stale"]=json!(record.update.progress!=Some(100.0)&&record.received.elapsed().as_secs()>=90);
             value
-        }).collect::<Vec<_>>()})
+        }).collect()
     }
-    fn for_chat(&self,chat:&str)->Value{json!(self.collected(None).into_iter().filter(|row|row["chat_id"]==chat).collect::<Vec<_>>())}
-    fn collected(&self,allowed:Option<&[crate::devices::Device]>)->Vec<Value> {
-        let mut rows=self.snapshot()["jobs"].as_array().unwrap().clone();
+    fn snapshot(&self)->Value {json!({"jobs":self.rows(None)})}
+    fn for_chat(&self,chat:&str)->Value{Value::Array(self.collected(None,Some(chat)))}
+    fn collected(&self,allowed:Option<&[crate::devices::Device]>,chat:Option<&str>)->Vec<Value> {
+        let mut rows=self.rows(chat);
         for row in &mut rows{row["device_id"]=json!("master");}
         for (device,peer) in self.peers.lock().unwrap().iter() {
             if allowed.is_some_and(|devices|!devices.iter().any(|item|&item.id==device)){continue;}
-            for (update,updated_at,stale) in &peer.jobs {
+            for (update,updated_at,stale) in peer.jobs.iter().filter(|(update,_,_)|chat.is_none_or(|chat|update.chat_id==chat)) {
                 let mut row=serde_json::to_value(update).unwrap();
                 row["device_id"]=json!(device);row["device_name"]=json!(peer.name);row["updated_at"]=json!(updated_at);
                 row["stale"]=json!(*stale||update.progress!=Some(100.0)&&peer.received.elapsed().as_secs()>=30);
@@ -93,10 +94,10 @@ impl Monitor {
 fn local()->&'static Monitor {static LOCAL:OnceLock<Monitor>=OnceLock::new();LOCAL.get_or_init(Default::default)}
 pub(crate) fn update(value:Value)->io::Result<Value>{local().update(value)}
 pub(crate) fn snapshot()->Value{local().snapshot()}
-pub(crate) fn reports()->Vec<Value>{local().collected(None)}
+pub(crate) fn reports()->Vec<Value>{local().collected(None,None)}
 pub(crate) fn expire(){local().expire()}
 pub(crate) fn receive(device:&crate::devices::Device,value:&Value)->io::Result<()>{local().receive(device,value)}
-pub(crate) fn all(devices:&[crate::devices::Device])->Value{json!({"jobs":local().collected(Some(devices))})}
+pub(crate) fn all(devices:&[crate::devices::Device])->Value{json!({"jobs":local().collected(Some(devices),None)})}
 pub(crate) fn for_chat(chat:&str)->Value{local().for_chat(chat)}
 pub(crate) fn retain(approved:&std::collections::BTreeSet<String>){local().peers.lock().unwrap().retain(|device,_|approved.contains(device));}
 
@@ -156,6 +157,21 @@ mod tests {
         monitor.update(json!({"chat_id":"chat-a","id":"tool","text":"Done","progress":100})).unwrap();assert_eq!(monitor.snapshot()["jobs"][0]["stale"],false);
     }
     #[test]
+    fn selected_chat_matches_full_list_with_many_other_tools() {
+        let monitor=Monitor::default();
+        for n in 0..200 {monitor.update(json!({"chat_id":format!("chat-{n}"),"id":"tool","text":"Working","progress":42})).unwrap();}
+        let peer=crate::devices::Device{id:"peer".into(),name:"Peer".into(),ssh_alias:"fixture".into()};
+        monitor.receive(&peer,&monitor.snapshot()).unwrap();
+        let full=monitor.collected(None,None);
+        for chat in ["chat-0","chat-199","missing"] {
+            let expected=full.iter().filter(|row|row["chat_id"]==chat).cloned().collect::<Vec<_>>();
+            assert_eq!(monitor.for_chat(chat),json!(expected));
+        }
+        let start=Instant::now();for _ in 0..100 {std::hint::black_box(monitor.collected(None,None).into_iter().filter(|row|row["chat_id"]=="chat-0").collect::<Vec<_>>());}let full_time=start.elapsed();
+        let start=Instant::now();for _ in 0..100 {std::hint::black_box(monitor.for_chat("chat-0"));}
+        eprintln!("400 tools, 100 reads: prepare all {:?}; select first {:?}",full_time,start.elapsed());
+    }
+    #[test]
     fn invalid_updates_are_atomic_and_peer_identity_cannot_be_forged() {
         let monitor=Monitor::default();let base=json!({"chat_id":"chat-a","id":"tool","text":"Working","progress":42});monitor.update(base.clone()).unwrap();
         for fields in [json!({"progress":101}),json!({"progress":-1}),json!({"device_id":"other"}),json!({"chat_id":"../chat"}),json!({"text":"bad\u{0}"})] {
@@ -163,9 +179,9 @@ mod tests {
         }
         let device=crate::devices::Device{id:"approved".into(),name:"Peer".into(),ssh_alias:"fixture".into()};
         let mut report=monitor.snapshot();report["jobs"][0]["device_id"]=json!("forged");monitor.receive(&device,&report).unwrap();
-        let rows=monitor.collected(Some(std::slice::from_ref(&device)));assert_eq!(rows[1]["device_id"],"approved");assert_eq!(rows[1]["device_name"],"Peer");
-        assert_eq!(monitor.collected(Some(&[])).len(),1);
-        report["jobs"][0]["progress"]=json!(101);assert!(monitor.receive(&device,&report).is_err());assert_eq!(monitor.collected(None)[1]["progress"].as_f64(),Some(42.0));
-        monitor.receive(&device,&Value::Null).unwrap();assert_eq!(monitor.collected(None).len(),1);
+        let rows=monitor.collected(Some(std::slice::from_ref(&device)),None);assert_eq!(rows[1]["device_id"],"approved");assert_eq!(rows[1]["device_name"],"Peer");
+        assert_eq!(monitor.collected(Some(&[]),None).len(),1);
+        report["jobs"][0]["progress"]=json!(101);assert!(monitor.receive(&device,&report).is_err());assert_eq!(monitor.collected(None,None)[1]["progress"].as_f64(),Some(42.0));
+        monitor.receive(&device,&Value::Null).unwrap();assert_eq!(monitor.collected(None,None).len(),1);
     }
 }

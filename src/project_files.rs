@@ -1,17 +1,17 @@
-// project_files.rs v1.0.0
+// project_files.rs v1.0.18
 //! On-demand, read-only project directory listings for the shared console.
 use crate::invalid;
 use serde_json::{Value,json};
-use std::{fs,io::{self,Read},path::{Component,Path}};
+use std::{fs,io::{self,Read},path::{Component,Path},sync::LazyLock};
 
 fn project_url(registry:&Path,root:&Path)->Option<String> {
     let mut html=String::new();fs::File::open(registry).ok()?.take(262144).read_to_string(&mut html).ok()?;
-    let rows=regex::Regex::new(r#"<tr>.*?<code>([^<]+)</code>.*?</td><td>(.*?)</td></tr>"#).unwrap();
-    let links=regex::Regex::new(r#"href="([^"]+)""#).unwrap();
-    rows.captures_iter(&html).filter_map(|row|{
+    static ROWS:LazyLock<regex::Regex>=LazyLock::new(||regex::Regex::new(r#"<tr>.*?<code>([^<]+)</code>.*?</td><td>(.*?)</td></tr>"#).unwrap());
+    static LINKS:LazyLock<regex::Regex>=LazyLock::new(||regex::Regex::new(r#"href="([^"]+)""#).unwrap());
+    ROWS.captures_iter(&html).filter_map(|row|{
         let path=fs::canonicalize(&row[1]).ok()?;
         if !root.starts_with(&path){return None;}
-        let link=links.captures(&row[2])?[1].to_owned();
+        let link=LINKS.captures(&row[2])?[1].to_owned();
         let url=if link.starts_with('/')&&!link.starts_with("//"){format!("http://localhost{link}")}else if link.starts_with("http://")||link.starts_with("https://"){link}else{return None;};
         Some((path.components().count(),url))
     }).max_by_key(|(depth,_)|*depth).map(|(_,url)|url)
@@ -26,10 +26,10 @@ pub(crate) fn listing(root:&Path,relative:&str,registry:&Path)->io::Result<Value
         let entry=entry?;let kind=entry.file_type()?;
         entries.push(json!({"name":entry.file_name().to_string_lossy(),"directory":kind.is_dir()}));
     }
-    entries.sort_by(|a,b|b["directory"].as_bool().cmp(&a["directory"].as_bool()).then_with(||a["name"].as_str().unwrap().to_lowercase().cmp(&b["name"].as_str().unwrap().to_lowercase())));
-    let mut selected=Vec::new();let mut bytes=0;
-    for entry in &entries {bytes+=serde_json::to_vec(entry)?.len();if selected.len()==200||bytes>20000{break;}selected.push(entry.clone());}
-    Ok(json!({"project":{"root":root,"path":relative,"url":project_url(registry,&root),"more":selected.len()<entries.len(),"entries":selected}}))
+    entries.sort_by_cached_key(|entry|(!entry["directory"].as_bool().unwrap(),entry["name"].as_str().unwrap().to_lowercase()));
+    let count=entries.len();let mut selected=Vec::new();let mut bytes=0;
+    for entry in entries {if selected.len()==200{break;}bytes+=serde_json::to_vec(&entry)?.len();if bytes>20000{break;}selected.push(entry);}
+    Ok(json!({"project":{"root":root,"path":relative,"url":project_url(registry,&root),"more":selected.len()<count,"entries":selected}}))
 }
 
 #[cfg(test)]

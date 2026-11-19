@@ -1,4 +1,4 @@
-// link_flow.rs v1.21.400
+// link_flow.rs v1.21.402
 //! Link lifecycle: compare immutable proofs, persist intent, never transfer from a poll.
 use crate::{devices::Device, environment, invalid, catalog};
 use serde_json::{Value, json};
@@ -67,7 +67,7 @@ fn module_signature(chat: Option<&Value>, module: &str) -> Option<Value> {
         for item in record["requirements"].as_array().into_iter().flatten() {items.push(json!([item["kind"],item["name"],item["version"]]));}
         for item in record["configs"].as_array().into_iter().flatten() {items.push(json!([item["service"],path_key(item["path"].as_str().unwrap_or("")),item["modules"]]));}
     }
-    items.sort_by_key(Value::to_string);
+    items.sort_by_cached_key(Value::to_string);
     Some(json!(items))
 }
 

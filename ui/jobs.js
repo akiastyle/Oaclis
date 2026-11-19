@@ -1,7 +1,8 @@
-// jobs.js v1.20.146
+// jobs.js v1.20.149
 'use strict';
 window.OaclisJobs=(()=>{
  const text=value=>OaclisSettings.text(value);
+ const percentFormat=new Intl.NumberFormat(OaclisSettings.language,{maximumFractionDigits:1});
  let panel,child,watch;
  const completions=new Map();
  function completed(job){
@@ -41,7 +42,7 @@ window.OaclisJobs=(()=>{
     const event=JSON.stringify([job.device_id,job.chat_id,job.id,job.updated_at]);
     if(doneEvent!==event){doneEvent=event;clearTimeout(doneTimer);completed(job).then(until=>{if(disposed||doneEvent!==event)return;const remaining=until-Date.now();if(remaining<=0){dismiss();return;}button.hidden=false;const row=button.closest('.job-row');if(row)row.hidden=false;const parent=button.parentElement;if(parent?.classList.contains('jobs-inline'))parent.hidden=false;button.classList.add('job-complete');doneTimer=setTimeout(dismiss,remaining);});}
    }else{doneEvent=null;clearTimeout(doneTimer);button.hidden=false;button.classList.remove('job-complete');}
-   const percent=typeof job.progress==='number'?new Intl.NumberFormat(OaclisSettings.language,{maximumFractionDigits:1}).format(Math.floor(job.progress*10)/10)+'%':null;
+   const percent=typeof job.progress==='number'?percentFormat.format(Math.floor(job.progress*10)/10)+'%':null;
    if(button.textContent!==(percent||''))button.textContent=percent||'';button.classList.toggle('job-dot',!percent);button.dataset.stale=String(job.stale===true);
    button.setAttribute('aria-label',job.id+' · '+(percent||text('Avanzamento non disponibile')));if(detail.textContent!==(job.text||''))detail.textContent=job.text||'';return !button.hidden;
   },destroy(){disposed=true;clearTimeout(doneTimer);hide();detail.remove();button.remove();}};

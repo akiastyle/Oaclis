@@ -1,4 +1,4 @@
-// catalog.rs v2.43.1904
+// catalog.rs v2.43.1906
 //! Read Codex archives; title edits use native Codex, Oaclis metadata stays in memory.
 use crate::{devices::Device, state_store};
 use serde_json::{Value, json};
@@ -50,7 +50,7 @@ pub(crate) fn number_chats(config: &Path, chats: &[Value]) -> io::Result<()> {
     entries.retain(|id,_|snapshot.shared["deletions"].get(id).is_none() && snapshot.appearance.get(&format!("chat:{id}")).is_none_or(|record|record.sync["chat_number"].as_u64().is_none()));
     if entries.is_empty(){return Ok(());}
     let mut entries:Vec<_>=entries.into_iter().collect();
-    entries.sort_by_key(|(id,name)|(snapshot.appearance.get(&format!("chat:{id}")).and_then(|r|r.value["label"].as_str()).filter(|s|!s.is_empty()).unwrap_or(name).to_lowercase(),id.clone()));
+    entries.sort_by_cached_key(|(id,name)|(snapshot.appearance.get(&format!("chat:{id}")).and_then(|r|r.value["label"].as_str()).filter(|s|!s.is_empty()).unwrap_or(name).to_lowercase(),id.clone()));
     state_store::change(config,|state|{
         let mut next=state.appearance.values().filter_map(|record|record.sync["chat_number"].as_u64().or(record.sync["next_chat_number"].as_u64())).max().unwrap_or(0);
         for (id,_) in entries {
