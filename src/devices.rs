@@ -1,4 +1,4 @@
-// devices.rs v1.6.66
+// devices.rs v1.6.68
 use crate::{invalid, open_regular};
 use serde::{Deserialize, Serialize};
 use std::io;
@@ -35,7 +35,7 @@ pub fn load(path: impl AsRef<Path>) -> io::Result<Vec<Device>> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(Vec::new()),
         Err(error) => return Err(error),
     };
-    let devices: Vec<Device> = serde_json::from_reader(file)?;
+    let devices: Vec<Device> = serde_json::from_reader(std::io::BufReader::new(file))?;
     validate(&devices)?;
     Ok(devices)
 }

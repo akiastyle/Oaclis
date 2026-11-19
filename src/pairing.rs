@@ -1,4 +1,4 @@
-// pairing.rs v1.54.733
+// pairing.rs v1.55.757
 //! Signed discovery and mutually approved SSH; persistent identities stay unchanged.
 use crate::{invalid, ssh_settings as ssh};
 use serde_json::{Value, json};
@@ -66,9 +66,14 @@ fn identity(config: &Path) -> io::Result<(PathBuf,String)> {
     Ok((key,value))
 }
 fn label(config: &Path) -> io::Result<String> {
-    let appearance=ssh::read(&config.join("appearance.json"),json!({}))?;
-    let record=&appearance["device:master"];
-    if let Some(label)=record.get("value").unwrap_or(record)["label"].as_str().filter(|s|!s.is_empty()) { return Ok(label.into()); }
+    let label=if let Some(state)=crate::state_store::owned_snapshot(config) {
+        state.appearance.get("device:master").and_then(|record|record.value["label"].as_str()).map(str::to_owned)
+    }else{
+        let appearance=ssh::read(&config.join("appearance.json"),json!({}))?;
+        let record=&appearance["device:master"];
+        record.get("value").unwrap_or(record)["label"].as_str().map(str::to_owned)
+    };
+    if let Some(label)=label.filter(|s|!s.is_empty()){return Ok(label);}
     ssh::text(&mut Command::new("hostname"),5)
 }
 fn linux_interfaces(interfaces: &Value, default: &str) -> io::Result<Vec<Value>> {
@@ -299,6 +304,19 @@ mod tests {
     fn card(config: &Path, index: u16) -> Value {
         let (_,key)=identity(config).unwrap();
         json!({"id":identifier(&key).unwrap(),"public_key":key,"name":format!("Device {index}"),"role":if index==0 {"master"} else {"client"},"ssh":{"address":"127.0.0.1","port":2200+index,"user":"root","host_key":key},"approved":[],"time":now().unwrap()})
+    }
+    #[test]
+    fn device_label_uses_the_current_owned_snapshot_and_keeps_legacy_reads() {
+        let root=fixture("owned-label");let config=root.0.join("config");fs::create_dir_all(&config).unwrap();
+        fs::write(config.join("appearance.json"),r#"{"device:master":{"label":"Legacy"}}"#).unwrap();
+        assert_eq!(label(&config).unwrap(),"Legacy");assert!(crate::state_store::owned_snapshot(&config).is_none());
+        crate::state_store::database(&config,"","save",Some(&json!({"device:master":{"label":"Initial"}}))).unwrap();
+        let before=crate::state_store::snapshot(&config).unwrap();
+        fs::write(config.join("appearance.json"),"not JSON").unwrap();
+        assert_eq!(label(&config).unwrap(),"Initial");
+        crate::state_store::database(&config,"","save",Some(&json!({"device:master":{"label":"Updated"}}))).unwrap();
+        assert_eq!(label(&config).unwrap(),"Updated");assert_eq!(before.appearance["device:master"].value["label"],"Initial");
+        assert!(!std::sync::Arc::ptr_eq(&before,&crate::state_store::snapshot(&config).unwrap()));
     }
     #[test]
     fn reading_pairing_state_does_not_wait_for_configuration_writes() {

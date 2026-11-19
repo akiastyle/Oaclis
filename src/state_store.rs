@@ -1,4 +1,4 @@
-// state_store.rs v2.40.1420
+// state_store.rs v2.43.1441
 //! Oaclis metadata: one in-process owner, memory reads and atomic JSON persistence.
 use crate::{invalid, staging};
 use serde::{Deserialize, Serialize};
@@ -75,9 +75,15 @@ pub(crate) fn cached_label(chat: &str) -> Option<String> {
     let stores=STORES.get()?.lock().ok()?;
     stores.values().find_map(|store|store.state.read().ok()?.appearance.get(&format!("chat:{chat}"))?.value["label"].as_str().filter(|name|!name.trim().is_empty()).map(str::to_owned))
 }
+pub(crate) fn owned_snapshot(config:&Path)->Option<Arc<State>> {
+    let stores=STORES.get()?.lock().ok()?;
+    let state=stores.get(config)?.state.read().ok()?;
+    Some(state.clone())
+}
+
 pub(crate) fn read_json(path: &Path, default: Value) -> io::Result<Value> {
     match crate::open_regular(path) {
-        Ok((file, _)) => serde_json::from_reader(file).map_err(io::Error::other),
+        Ok((file, _)) => serde_json::from_reader(io::BufReader::new(file)).map_err(io::Error::other),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(default),
         Err(error) => Err(error),
     }
@@ -173,6 +179,7 @@ fn external(config: &Path) -> bool {
     !owned && std::os::unix::net::UnixStream::connect(config.join("state.sock")).is_ok()
 }
 pub(crate) fn snapshot(config: &Path) -> io::Result<Arc<State>> {
+    if let Some(state)=owned_snapshot(config){return Ok(state);}
     if external(config) {
         return serde_json::from_value(crate::state_transport::local(
             config,
@@ -744,6 +751,18 @@ mod console_access_tests {
 #[cfg(test)]
 mod optimization_tests {
     use super::*;
+    #[test]
+    fn buffered_json_reads_keep_values_without_byte_by_byte_io() {
+        struct Counted { input:io::Cursor<Vec<u8>>, reads:usize }
+        impl io::Read for Counted {fn read(&mut self,buffer:&mut [u8])->io::Result<usize>{self.reads+=1;self.input.read(buffer)}}
+        let bytes=serde_json::to_vec(&json!({"label":"x".repeat(262144)})).unwrap();
+        let mut direct=Counted{input:io::Cursor::new(bytes.clone()),reads:0};
+        let expected:Value=serde_json::from_reader(&mut direct).unwrap();
+        let mut buffered=Counted{input:io::Cursor::new(bytes),reads:0};
+        let value:Value=serde_json::from_reader(io::BufReader::new(&mut buffered)).unwrap();
+        assert_eq!(expected,value);assert!(buffered.reads*1000<direct.reads);
+        eprintln!("JSON reader calls: {} -> {}",direct.reads,buffered.reads);
+    }
     #[test]
     fn status_cache_reuses_snapshots_and_invalidates_after_a_change() {
         let root=std::env::temp_dir().join(format!("oaclis-status-cache-{}",std::process::id()));

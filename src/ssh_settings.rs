@@ -1,4 +1,4 @@
-// ssh_settings.rs v1.23.371
+// ssh_settings.rs v1.23.377
 //! Managed OpenSSH hosts; preserve unrelated configuration and user keys.
 use crate::{invalid, staging::StagedFile};
 use serde_json::{Value, json};
@@ -47,11 +47,7 @@ pub(crate) fn atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 }
 
 pub(crate) fn read(path: &Path, default: Value) -> io::Result<Value> {
-    match crate::open_regular(path) {
-        Ok((file,_)) => serde_json::from_reader(file).map_err(io::Error::other),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(default),
-        Err(e) => Err(e),
-    }
+    crate::state_store::read_json(path,default)
 }
 
 pub(crate) fn lock(config: &Path) -> io::Result<File> {

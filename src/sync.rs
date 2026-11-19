@@ -1,4 +1,4 @@
-// sync.rs v1.7.312
+// sync.rs v1.7.314
 use crate::{
     chat::Chat,
     check_unchanged,
@@ -115,7 +115,7 @@ pub fn synchronize_with_direction(
         return Err(invalid("Checkpoint e origine devono essere distinti"));
     }
     let previous: Option<Checkpoint> = match open_regular(checkpoint) {
-        Ok((file, _)) => Some(serde_json::from_reader(file)?),
+        Ok((file, _)) => Some(serde_json::from_reader(std::io::BufReader::new(file))?),
         Err(error) if error.kind() == io::ErrorKind::NotFound => None,
         Err(error) => return Err(error),
     };

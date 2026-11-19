@@ -1,4 +1,4 @@
-// mobile_auth.rs v1.52.748
+// mobile_auth.rs v1.52.750
 //! Local mobile authority: QR-bound keys, chat grants and signed, non-replayable requests.
 use crate::invalid;
 use ring::{hmac, rand::{SecureRandom, SystemRandom}, signature};
@@ -51,7 +51,7 @@ pub(crate) fn at(config:&Path)->io::Result<Arc<Store>> {
     let config=config.canonicalize()?;
     let mut stores=STORES.get_or_init(Default::default).lock().unwrap();
     if let Some(store)=stores.get(&config){return Ok(store.clone());}
-    let settings:Settings=serde_json::from_reader(crate::open_regular(&config.join("mobile-relay.json"))?.0).map_err(|_|invalid("Collegamento mobile da configurare"))?;
+    let settings:Settings=serde_json::from_reader(std::io::BufReader::new(crate::open_regular(&config.join("mobile-relay.json"))?.0)).map_err(|_|invalid("Collegamento mobile da configurare"))?;
     unhex(&settings.admin_key,32)?;
     let store=Arc::new(Store{config:config.clone(),settings:RwLock::new(Arc::new(settings)),writer:Mutex::new(()),epoch:random()?,seen:Mutex::new(BTreeMap::new()),last_time:AtomicU64::new(now())});
     stores.insert(config,store.clone());Ok(store)
