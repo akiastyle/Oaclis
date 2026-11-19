@@ -1,4 +1,4 @@
-// terminal-format.js v1.44.392
+// terminal-format.js v1.44.393
 "use strict";
 const OaclisTerminal = (() => {
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
@@ -254,6 +254,7 @@ function consoleScreen(value){
     render(result,operation='read',saved=null){
      if(typeof result.screen_revision==='string')chat.revision=result.screen_revision;
      const selection=window.getSelection();
+     if(operation==='input'&&selection?.isCollapsed===false&&selection.containsNode(screen,true))selection.removeAllRanges();
      if(operation==='read'&&selection?.isCollapsed===false&&selection.containsNode(screen,true)){
       if(result.unchanged!==true)chat.pendingScreen={screen:result.screen,screen_ansi:result.screen_ansi};
       return;
