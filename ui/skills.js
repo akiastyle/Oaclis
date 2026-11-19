@@ -1,4 +1,4 @@
-// skills.js v1.0.34
+// skills.js v1.0.36
 'use strict';
 window.OaclisSkills=(()=>{
  const text=value=>OaclisSettings.text(value);
@@ -59,7 +59,7 @@ window.OaclisSkills=(()=>{
     else if(outdated)notice(text('Skill da aggiornare')+' · '+name+' ('+outdated+')');
    }
   }
- if(panel?.isConnected)render(panel.querySelector('.skills-list'),state);const count=Object.values(state.device_runtime||{}).reduce((n,r)=>n+(r.skills?.items||[]).filter(s=>s.update==='outdated').length,0);const button=document.getElementById('skills-monitor');if(button){button.dataset.updates=String(count);button.title=text('Skill')+(count?' · '+count+' '+text('Da aggiornare'):'');}}
+ if(panel?.isConnected)render(panel.querySelector('.skills-list'),state);const count=Object.values(state.device_runtime||{}).reduce((n,r)=>n+(r.skills?.items||[]).filter(s=>s.update==='outdated').length,0);const button=document.getElementById('skills-monitor');if(button&&button.dataset.updates!==String(count)){button.dataset.updates=String(count);button.title=text('Skill')+(count?' · '+count+' '+text('Da aggiornare'):'');}}
  function open(anchor){
   if(child&&!child.closed){child.focus();return;}
   if(panel?.isConnected){panel.hidePopover();panel.showPopover();return;}

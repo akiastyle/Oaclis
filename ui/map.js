@@ -1,4 +1,4 @@
-// map.js v4.136.3604
+// map.js v4.136.3607
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -209,9 +209,12 @@ function renderLink(force = false) {
     const force = linkForce;
     linkForce = false;
     renderLinkNow(force);
+    document.querySelectorAll('.panel-tether').forEach(tether=>tether.updateReference());
     if (performance.now() < mapMotionUntil) renderLink(true);
   });
 }
+
+document.addEventListener('scroll',event=>{if(event.target.closest?.('#map,#panel')&&document.querySelector('.panel-tether'))renderLink();},{capture:true,passive:true});
 
 document.addEventListener('visibilitychange', () => {
   cancelAnimationFrame(linkFrame);

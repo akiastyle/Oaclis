@@ -1,4 +1,4 @@
-// panels.js v3.144.2930
+// panels.js v3.144.2974
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 
@@ -154,7 +154,7 @@ function renderScopeDetails(panel, entry) {
   panel.scopeEntry = entry;
   const scopes = data.chat_settings?.[entry.id]?.scopes;
   if (scopes) panel.querySelectorAll('[data-scope]').forEach(button => {
-    if (!button.disabled) button.setAttribute('aria-pressed', String(scopes[button.dataset.scope] !== false));
+    const pressed=String(scopes[button.dataset.scope]!==false);if(!button.disabled&&button.getAttribute("aria-pressed")!==pressed)button.setAttribute("aria-pressed",pressed);
   });
   const origin = panel.dataset.sourceDevice || "master";
   const result = data.analyses?.[origin + ":" + entry.id] || entry.analysis || {}, manifest = result.manifest || {};
@@ -178,14 +178,15 @@ function renderScopeDetails(panel, entry) {
   changed = updateScopeText(panel.querySelector('[data-detail="apps"]'), panel.manualRefresh?.apps ? [OaclisSettings.text("Rilevamento requisiti in corso…")] : appCheckLines(data.app_checks?.[origin + ":" + entry.id])) || changed;
   for (const scope of ["chat", "paths", "apps"]) {
     const row = panel.querySelector('[data-detail="' + scope + '"]').parentElement;
-    row.querySelector(".operation-indicator")?.remove();
     const refresh = row.querySelector('[data-refresh]');
     const pending = scope === 'apps' ? data.app_checks?.[origin + ":" + entry.id]?.status === 'pending' : scope === 'paths' && result.status === 'pending';
     if (panel.manualRefresh?.[scope] && !pending) panel.manualRefresh[scope] = false;
-    if (refresh) refresh.disabled = pending;
-    const indicator = activityIndicator(entry, origin, scope);
-    if (panel.manualRefresh?.[scope]) { indicator.hidden = false; indicator.dataset.state = 'busy'; }
-    row.append(indicator);
+    if (refresh&&refresh.disabled!==pending) refresh.disabled = pending;
+    let indicator=row.querySelector('.operation-indicator');
+    if(!indicator){indicator=activityIndicator(entry,origin,scope);row.append(indicator);}
+    const activity=activityState(entry,origin,scope),state=panel.manualRefresh?.[scope]?'busy':activity.state;
+    if(indicator.dataset.state!==state){indicator.dataset.state=state;indicator.hidden=state==='idle';}
+    if(indicator.title!==activity.label){indicator.title=activity.label;indicator.setAttribute('aria-label',activity.label);}
   }
   if (changed) positionContext(panel, panel.opener);
 }
@@ -309,10 +310,12 @@ function placePanel(panel,left,top){
     panel.style.left=Math.max(8,Math.min(left,innerWidth-panel.offsetWidth-8))+'px';
     panel.style.top=Math.max(8,Math.min(top,innerHeight-panel.offsetHeight-8))+'px';
   }
+  if(panel.tether?.isConnected)followMapMotion();
 }
 
 function positionContext(popover, anchor) {
   popover.classList.add("context-popover");
+  if(popover.tether?.isConnected)followMapMotion();
   if(popover.dataset.moved==="true"&&popover.matches(".chat-terminal")){placePanel(popover,popover.offsetLeft,popover.offsetTop);return;}
   const opener = anchor || document.activeElement || $("#add-device");
   if (opener.isConnected) {
@@ -420,26 +423,26 @@ function bindPanelReference(panel) {
   };
   const update = () => {
     if (!panel.isConnected || panel.hidden || panel.tether !== tether) { tether.remove(); return; }
-    const object = resolve();
-    tether.style.visibility = object?.isConnected ? "visible" : "hidden";
+    const object = original.isConnected?original:resolve();
+    const visibility=object?.isConnected?"visible":"hidden";if(tether.style.visibility!==visibility)tether.style.visibility=visibility;
     if (object?.isConnected) {
       const a = object.getBoundingClientRect(), b = panel.getBoundingClientRect();
       const heading = panel.querySelector("h2, .panel-bar").getBoundingClientRect();
       const end = { x: a.left + a.width / 2 <= b.left + b.width / 2 ? b.left : b.right,
         y: heading.top + heading.height / 2 };
       const start = edge(a, end);
+      const geometry=[start.x,start.y,end.x,end.y].join(":");if(tether.geometry===geometry)return;tether.geometry=geometry;
       for (const [name, value] of Object.entries({ x1: start.x, y1: start.y, x2: end.x, y2: end.y })) line.setAttribute(name, value);
     }
-    requestAnimationFrame(update);
   };
-  requestAnimationFrame(update);
+  tether.updateReference=update;followMapMotion();
 }
 
 function closeDeviceSettings() {
   const popover = $("#device-settings");
   if (!popover) return;
   const anchor = popover.opener;
-  popover.remove();
+  popover.tether?.remove();popover.remove();
   if (anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
 
@@ -450,7 +453,7 @@ function closeConnectionPopover() {
   details.hidden = true;
   $("#panel").append(details);
   const anchor = popover.opener;
-  popover.remove();
+  popover.tether?.remove();popover.remove();
   selected = null;
   if (anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
@@ -459,7 +462,7 @@ function closeChatEditor(popover = document.activeElement?.closest(".chat-editor
   if (!popover) return;
   const anchor = popover.opener;
   clearInterval(popover.detailsTimer);
-  popover.remove();
+  popover.tether?.remove();popover.remove();
   if (anchor?.isConnected) anchor.focus({ preventScroll: true });
 }
 
@@ -499,6 +502,7 @@ function editChat(entry, anchor, origin = sourceId || "master", connection = nul
   panel.updateVisibility = updateVisibility;
   renderScopeDetails(panel, entry);
   panel.detailsTimer = setInterval(async () => {
+    if(document.hidden||sourceId===origin&&!$("#panel").hidden)return;
     try {
       const catalog = await api("catalog", { device_id: origin });
       const fresh = catalog.chats.find(c => c.id === entry.id);
@@ -719,14 +723,13 @@ const logPanel = document.querySelector("#orchestrator-log");
 let logPolling = false;
 bindPanelDrag(logPanel);
 async function refreshOrchestratorLog() {
-  if (logPanel.hidden || logPolling) return;
+  if (logPanel.hidden || document.hidden || logPolling) return;
   logPolling = true;
   try {
     const rows = await api("log");
     const pre = logPanel.querySelector("pre");
-    const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 24;
     const text = rows.map(row => new Date(row.time).toLocaleTimeString() + " " + row.text).join("\n");
-    if (pre.textContent !== text) { pre.textContent = text; if (atBottom) pre.scrollTop = pre.scrollHeight; }
+    if (pre.textContent !== text) {const atBottom=pre.scrollHeight-pre.scrollTop-pre.clientHeight<24;pre.textContent=text;if(atBottom)pre.scrollTop=pre.scrollHeight;}
   } catch (error) { console.error(error); }
   finally { logPolling = false; }
 }
@@ -739,7 +742,6 @@ logPanel.querySelector(".popover-close").onclick = () => {
   logPanel.hidden = true;
   document.querySelector("#toggle-log").setAttribute("aria-expanded", "false");
 };
-setInterval(refreshOrchestratorLog, 1000);
 
 
 function renderMobileApproval(panel, device) {
@@ -831,7 +833,7 @@ async function openMobileChats(device, anchor) {
   panel.setAttribute('popover', 'manual'); panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-label', OaclisSettings.text('Chat per ') + device.name);
   panel.innerHTML = OaclisSettings.html(('<button type="button" class="icon-button popover-close" aria-label="Chiudi">' + OaclisIcon('close') + '</button><h2>Chat autorizzate</h2><p>')) + esc(device.name) + OaclisSettings.html('</p><div class="mobile-chat-content"><p>Caricamento chat…</p></div>');
   document.body.append(panel); panel.showPopover(); positionContext(panel, anchor); bindPanelDrag(panel, true);
-  panel.querySelector('.popover-close').onclick = () => panel.remove();
+  panel.querySelector('.popover-close').onclick = () => {panel.tether?.remove();panel.remove();};
   panel.querySelector('h2').focus({preventScroll:true});
   const content = panel.querySelector('.mobile-chat-content');
   try {
@@ -846,7 +848,7 @@ async function openMobileChats(device, anchor) {
       event.preventDefault(); const button = content.querySelector('button[type="submit"]'); button.disabled = true;
       try {
         await api('mobile/chats', {id:device.id,chats:[...content.querySelectorAll('input[type="checkbox"]:checked')].map(input=>input.value)});
-        panel.remove(); notice(OaclisSettings.text('Chat autorizzate aggiornate'));
+        panel.tether?.remove();panel.remove(); notice(OaclisSettings.text('Chat autorizzate aggiornate'));
       } catch (_) { if (panel.isConnected) content.querySelector('.mobile-chat-status').textContent = OaclisSettings.text('Salvataggio non riuscito. Riprova.'); }
       finally { button.disabled = false; }
     };
@@ -857,12 +859,12 @@ async function openMobileChats(device, anchor) {
 
 
 async function openMobileAccess(anchor) {
-  document.querySelector('#mobile-access-qr')?.remove();
+  const previous=document.querySelector('#mobile-access-qr');previous?.tether?.remove();previous?.remove();
   const panel = document.createElement('div'); panel.id = 'mobile-access-qr'; panel.opener = anchor;
   panel.setAttribute('popover','manual'); panel.setAttribute('role','dialog'); panel.setAttribute('aria-label',OaclisSettings.text('QR accesso'));
   panel.innerHTML = OaclisSettings.html(('<button type="button" class="icon-button popover-close" aria-label="Chiudi">' + OaclisIcon('close') + '</button><h2>Apri Oaclis</h2><div class="mobile-access-content" aria-live="polite">Preparazione QR…</div>'));
   document.body.append(panel); panel.showPopover(); positionContext(panel,anchor); bindPanelDrag(panel,true);
-  panel.querySelector('.popover-close').onclick = () => panel.remove();
+  panel.querySelector('.popover-close').onclick = () => {panel.tether?.remove();panel.remove();};
   try {
     const result = await api('mobile/qr');
     if (panel.isConnected) { panel.querySelector('.mobile-access-content').innerHTML = OaclisSettings.html('<div class="mobile-qr" role="img" aria-label="QR accesso Oaclis">') + result.qr_svg + '</div>'; positionContext(panel,anchor); }

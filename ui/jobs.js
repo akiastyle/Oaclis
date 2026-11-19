@@ -1,4 +1,4 @@
-// jobs.js v1.20.149
+// jobs.js v1.20.157
 'use strict';
 window.OaclisJobs=(()=>{
  const text=value=>OaclisSettings.text(value);
@@ -36,7 +36,7 @@ window.OaclisJobs=(()=>{
    const parent=button.parentElement;if(parent?.classList.contains('jobs-inline')&&[...parent.children].every(item=>item.hidden))parent.hidden=true;
   }
   return {button,show,update(job){
-   const fingerprint=JSON.stringify([job.id,job.chat_id,job.device_id,job.progress,job.text,job.updated_at,job.stale]);
+   const fingerprint=JSON.stringify([job.id,job.chat_id,job.device_id,job.progress,job.text,job.progress===100?job.updated_at:null,job.stale]);
    if(lastUpdate===fingerprint&&button.dataset.stale===String(job.stale===true))return !button.hidden;lastUpdate=fingerprint;
    if(job.progress===100){
     const event=JSON.stringify([job.device_id,job.chat_id,job.id,job.updated_at]);
@@ -53,7 +53,7 @@ window.OaclisJobs=(()=>{
    const seen=new Set();
    for(const job of jobs){const key=JSON.stringify([job.device_id,job.chat_id,job.id]);seen.add(key);let entry=rows.get(key);if(!entry){entry=indicator();rows.set(key,entry);root.append(entry.button);}entry.update(job);}
    for(const [key,entry]of rows)if(!seen.has(key)){entry.destroy();rows.delete(key);}
-   root.hidden=[...rows.values()].every(entry=>entry.button.hidden);
+   const hidden=[...rows.values()].every(entry=>entry.button.hidden);if(root.hidden!==hidden)root.hidden=hidden;
   },stale(){for(const entry of rows.values())entry.button.dataset.stale='true';},destroy(){for(const entry of rows.values())entry.destroy();rows.clear();}};
  }
  function mount(root){
@@ -74,10 +74,10 @@ window.OaclisJobs=(()=>{
      else entry.icon.innerHTML=OaclisIcon(Object.hasOwn(OaclisIcons,job.icon)?job.icon:'chat');
      entry.icon.style.color=/^#[a-f0-9]{6}$/i.test(job.color||'')?job.color:'var(--ink)';
     }
-    entry.item.hidden=!entry.progress.update(job);
+    const hidden=!entry.progress.update(job);if(entry.item.hidden!==hidden)entry.item.hidden=hidden;
    }
    for(const [key,entry]of rows)if(!seen.has(key)){entry.progress.destroy();entry.item.remove();rows.delete(key);}
-   message.textContent=[...rows.values()].some(entry=>!entry.item.hidden)?'':text('Nessun dato disponibile');
+   const status=[...rows.values()].some(entry=>!entry.item.hidden)?'':text('Nessun dato disponibile');if(message.textContent!==status)message.textContent=status;
   }
   async function poll(){
    clearTimeout(timer);if(stopped||document.hidden||loading)return;loading=true;controller=new AbortController();

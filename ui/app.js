@@ -1,4 +1,4 @@
-// app.js v4.167.3230
+// app.js v4.167.3234
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -133,6 +133,8 @@ toolbarToggle.onclick=event=>{expandToolbar();if(event.detail===0)toolbarActions
 const powerOptions=[...document.querySelectorAll('#power-menu [data-power]')];
 function updatePowerMenu(){
   const runtime=data.device_runtime?.master,mode=runtime?.power_mode||(runtime?.active?'always':'normal');
+  const state=mode+':'+String(runtime?.power_applied!==false),trigger=$('#power');
+  if(trigger.dataset.powerState===state)return;trigger.dataset.powerState=state;
   for(const button of powerOptions)button.setAttribute('aria-checked',String(button.dataset.power===mode));
   const selected=powerOptions.find(button=>button.dataset.power===mode);
   if(selected){$('#power').innerHTML=selected.innerHTML;$('#power').title=OaclisSettings.text('Modalità energia')+' · '+selected.title+(runtime?.power_applied===false?' · '+OaclisSettings.text('Non applicata'):'');$('#power').setAttribute('aria-label',$('#power').title);}
@@ -224,6 +226,7 @@ function guard(fn) {
   };
 }
 function renderEye(button, crossed, label) {
+  const state=JSON.stringify([crossed,label]);if(button.dataset.eyeState===state)return;button.dataset.eyeState=state;
   button.innerHTML = OaclisIcon(crossed ? 'eyeOff' : 'eye');
   button.title = label; button.setAttribute("aria-label", label);
   button.setAttribute("aria-pressed", String(!crossed));
@@ -388,6 +391,7 @@ async function poll() {
   }
   if (next.discovery) await updateDiscovery(next.discovery);
   renderConnections();
+  refreshOrchestratorLog();
   for (const marker of document.querySelectorAll(".chat-link .link-badge[data-link-key]")) {
     const [id, source] = JSON.parse(marker.dataset.linkKey);
     const connection = chatLinks.find(value => value.entry.id === id && value.source === source && value.target === JSON.parse(marker.dataset.linkKey)[2]);
