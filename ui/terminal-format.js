@@ -1,4 +1,4 @@
-// terminal-format.js v1.44.379
+// terminal-format.js v1.44.392
 "use strict";
 const OaclisTerminal = (() => {
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
@@ -250,15 +250,22 @@ function consoleScreen(value){
    const project=document.createElement('button');project.type='button';project.className='icon-button console-project-button';project.innerHTML=OaclisIcon('folder');project.title=OaclisSettings.text('File del progetto');project.setAttribute('aria-label',project.title);pane.querySelector('h2').append(project);
    project.onclick=()=>openProject?openProject():projectFiles(transport,{container:pane});
    const screen=pane.querySelector('pre');
-   const chat=pane.console={id,send:transport,follow:true,revision:'',image:null,preparingImage:false,closed:false,
+   const chat=pane.console={id,send:transport,follow:true,revision:'',image:null,preparingImage:false,closed:false,pendingScreen:null,
     render(result,operation='read',saved=null){
+     if(typeof result.screen_revision==='string')chat.revision=result.screen_revision;
+     const selection=window.getSelection();
+     if(operation==='read'&&selection?.isCollapsed===false&&selection.containsNode(screen,true)){
+      if(result.unchanged!==true)chat.pendingScreen={screen:result.screen,screen_ansi:result.screen_ansi};
+      return;
+     }
+     if(result.unchanged===true&&chat.pendingScreen)result=chat.pendingScreen;
+     chat.pendingScreen=null;
      if(operation==='open'||operation==='input')chat.follow=saved?.follow??true;
      const top=saved?.top??screen.scrollTop,left=saved?.left??screen.scrollLeft;
      const changed=result.unchanged===true?false:renderConsole(screen,result.screen,result.screen_ansi);
-     if(typeof result.screen_revision==='string')chat.revision=result.screen_revision;
      if(changed||saved||operation!=='read'){if(chat.follow)screen.scrollTop=screen.scrollHeight;else{screen.scrollTop=top;screen.scrollLeft=left;}}
     },
-    reset(){chat.revision='';screen.replaceChildren();for(const key of ['consoleSource','consoleSourceAnsi','terminalText','terminalAnsi'])delete screen[key];}
+    reset(){chat.revision='';chat.pendingScreen=null;screen.replaceChildren();for(const key of ['consoleSource','consoleSourceAnsi','terminalText','terminalAnsi'])delete screen[key];}
    };
    screen.addEventListener('scroll',()=>{chat.follow=screen.scrollHeight-screen.clientHeight-screen.scrollTop<=24;},{passive:true});
    screen.onkeydown=event=>{
