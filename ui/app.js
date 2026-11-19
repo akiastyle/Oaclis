@@ -1,4 +1,4 @@
-// app.js v4.167.3234
+// app.js v4.167.3239
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -363,6 +363,11 @@ async function poll() {
     const previous = data.device_runtime[id];
     if (runtime.available !== false && (!previous?.observed_at || !runtime.observed_at || runtime.observed_at >= previous.observed_at)) {
       for (const chat of runtime.stopped_chats || []) if (!previous?.stopped_chats?.includes(chat)) closeStoppedChatWindows({kind:'oaclis-console-stopped',chat_id:chat,device_id:id});
+      if(id==='master')for(const chat of runtime.active_chats || []){
+        if(previous?.active_chats?.includes(chat)||document.querySelector('.chat-terminal[data-device-id="master"][data-chat-id="'+chat+'"]')||detachedConsoles.has(JSON.stringify(['master',chat])))continue;
+        const entry=(sourceId==='master'?visibleChats:[]).find(entry=>entry.id===chat)||data.chats.find(entry=>entry.id===chat)||{id:chat,name:'Chat'};
+        openChatTerminal({entry},null,'master');
+      }
     }
     if (previous?.update?.status === "running" && runtime.update?.status === "failed") { console.error("Oaclis update:", runtime.update.error); notice(OaclisSettings.text("Aggiornamento non riuscito")); }
     if (runtime.available === false || previous?.available === false || !previous?.observed_at || !runtime.observed_at || runtime.observed_at >= previous.observed_at) data.device_runtime[id] = runtime;
