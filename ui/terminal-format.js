@@ -1,4 +1,4 @@
-// terminal-format.js v1.44.393
+// terminal-format.js v1.44.403
 "use strict";
 const OaclisTerminal = (() => {
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
@@ -217,7 +217,15 @@ function consoleScreen(value){
      default:throw Error('Unknown console action: '+action);
     }
    };
-   keys.addEventListener('click',event=>{const key=event.target.closest('button[data-key]')?.dataset.key;if(key)view.command('key',key);});
+   keys.addEventListener('click',event=>{
+    const button=event.target.closest('button[data-key]');
+    if(!button)return;
+    view.command('key',button.dataset.key);
+    if(document.activeElement!==button)return;
+    const input=view.querySelector('textarea');
+    if(button.dataset.key==='C-c'||input.disabled||window.getSelection()?.isCollapsed===false)button.blur();
+    else input.focus({preventScroll:true});
+   });
    view.querySelector('form').onsubmit=event=>{event.preventDefault();view.command('send');};
    view.querySelector('textarea').onkeydown=event=>{if(event.key==='Enter'&&!event.shiftKey&&!event.isComposing){event.preventDefault();view.querySelector('form').requestSubmit();}};
    return view;
