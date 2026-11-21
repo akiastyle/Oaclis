@@ -1,4 +1,4 @@
-// jobs.js v1.20.157
+// jobs.js v1.20.163
 'use strict';
 window.OaclisJobs=(()=>{
  const text=value=>OaclisSettings.text(value);
@@ -53,6 +53,12 @@ window.OaclisJobs=(()=>{
    const seen=new Set();
    for(const job of jobs){const key=JSON.stringify([job.device_id,job.chat_id,job.id]);seen.add(key);let entry=rows.get(key);if(!entry){entry=indicator();rows.set(key,entry);root.append(entry.button);}entry.update(job);}
    for(const [key,entry]of rows)if(!seen.has(key)){entry.destroy();rows.delete(key);}
+   let next=root.firstChild;
+   for(const key of [...rows.keys()].sort()){
+    const button=rows.get(key).button;
+    if(button!==next)root.insertBefore(button,next);
+    next=button.nextSibling;
+   }
    const hidden=[...rows.values()].every(entry=>entry.button.hidden);if(root.hidden!==hidden)root.hidden=hidden;
   },stale(){for(const entry of rows.values())entry.button.dataset.stale='true';},destroy(){for(const entry of rows.values())entry.destroy();rows.clear();}};
  }

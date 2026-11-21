@@ -1,4 +1,4 @@
-// console.js v3.144.2514
+// console.js v3.144.2516
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -268,7 +268,7 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   }
   const screen = panel.querySelector("pre"), form = panel.querySelector("form");
   const payload = { device_id: deviceId, chat_id: connection.entry.id };
-  const jobs=document.createElement("span");panel.querySelector(".console-project-button").before(jobs);panel.jobsStatus=OaclisJobs.inline(jobs);
+  panel.jobsStatus=pane.jobsStatus;
   let stopping=false,busy=false,ready=false,submitting=false,waitingInputs=0,idle=Promise.resolve();
   panel.resetTerminal=()=>{
     clearTimeout(panel.terminalTimer);ready=false;chat.reset();

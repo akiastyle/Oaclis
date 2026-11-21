@@ -1,4 +1,4 @@
-// app.js v2.131.1300
+// app.js v2.131.1303
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -150,8 +150,7 @@ async function openConsole(chat,adjacent=false){
  function add(selected,index=panes.length){
   const element=OaclisTerminal.createPane({id:selected.id,name:selected.name,icon:OaclisTerminal.chatIcon(selected)},(action,body)=>action==='project'?runInput(()=>send(pane,'project',body)):action==='stop'?stopConsole(pane):submit(pane,body.key,action==='command'?body:null));
   const title=element.querySelector('.console-title'),name=element.querySelector('.console-name');
-  const jobs=document.createElement("span");title.append(jobs);const jobsStatus=OaclisJobs.inline(jobs);
-  const saved=consolePositions.get(selected.id),pane={chat:selected,element,title,name,jobsStatus,screen:element.querySelector('pre'),console:element.console,ready:false,closed:false,saved};
+  const saved=consolePositions.get(selected.id),pane={chat:selected,element,title,name,jobsStatus:element.jobsStatus,screen:element.querySelector('pre'),console:element.console,ready:false,closed:false,saved};
   panes.splice(index,0,pane);container.insertBefore(element,container.children[index]||null);
   pane.console.follow=saved?.follow??true;pane.console.image=imageDrafts.get(selected.id)||null;
   element.addEventListener('click',event=>{if(!event.target.closest('button'))activate(pane);});element.addEventListener('focusin',event=>{if(!event.target.closest('button'))activate(pane);});
