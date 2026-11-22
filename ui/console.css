@@ -1,4 +1,4 @@
-/* console.css v2.0.1679 */
+/* console.css v2.0.1683 */
 .oaclis-console,.voice-controls,.voice-dialog{--console-ink:var(--ink,var(--text));--console-line:var(--line,#ffffff26);--console-soft:var(--soft,#394247);--console-accent:var(--accent,var(--ink));color:var(--console-ink)}
 .oaclis-console[popover]:not(:popover-open){display:none}
 .oaclis-console{display:grid;grid-template-rows:minmax(0,1fr) auto auto;gap:8px;--console-input-radius:8px;--console-send-background:#54caba;--console-send-ink:#08231f;min-width:0;min-height:0;overflow:hidden}
@@ -92,3 +92,7 @@ html[data-project-window] body>:not(.console-project-window){display:none!import
 html[data-project-window] body>.console-project-window{display:grid!important;position:fixed;inset:0;overflow:hidden;margin:0;padding:16px;background:var(--bg,#111314)}
 .console-project header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}.console-project header button{display:grid;place-items:center;width:32px;height:32px;padding:6px;border:0;border-radius:var(--radius-control,8px);background:transparent;color:inherit;cursor:pointer}.console-project header svg{width:20px;height:20px}
 .console-project-content{display:grid;align-content:start;min-height:0;overflow:auto;gap:0}.console-project-path,.console-project-content>a{display:block;overflow-wrap:anywhere;margin-bottom:12px;color:inherit}.console-project-entry{display:block;box-sizing:border-box;width:100%;padding:8px 0;border:0;border-bottom:1px solid var(--line,#ffffff26);border-radius:0;background:transparent;color:inherit;text-align:left;overflow-wrap:anywhere;font:inherit}.console-project button.console-project-entry{cursor:pointer}.console-project button.console-project-entry:hover{background:var(--soft,#394247)}
+
+.console-header-actions{display:flex;align-items:center;gap:4px;flex:none}
+.console-header-actions>.icon-button[hidden]{display:none}
+.context-popover .console-header-actions>.console-close{position:static}

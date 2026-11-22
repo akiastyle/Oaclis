@@ -1,4 +1,4 @@
-// app.js v2.131.1303
+// app.js v2.131.1314
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -131,12 +131,14 @@ async function openConsole(chat,adjacent=false){
  const dialog=document.createElement('dialog');dialog.id='console-picker';dialog.className='voice-dialog';dialog.setAttribute('aria-label',OaclisSettings.text('Affianca chat'));app.append(dialog);
  const panes=[],container=document.getElementById('console-panes'),form=document.getElementById('console-input'),text=form.querySelector('textarea'),keys=document.getElementById('console-keys'),picker=document.getElementById('console-picker');
   let active=null,closed=false,pollTimer=null,queue=Promise.resolve(),pending=null,reading=null,inputBusy=false,polling=false;
- const split=document.createElement('button');split.type='button';split.className='console-split secondary';split.innerHTML=OaclisIcon('split');
  const fitConsole=()=>{const following=panes.filter(pane=>pane.console.follow);document.documentElement.style.setProperty('--console-height',(window.visualViewport?.height??innerHeight)+'px');requestAnimationFrame(()=>{if(!closed)for(const pane of following)if(!pane.closed){pane.console.follow=true;pane.screen.scrollTop=pane.screen.scrollHeight;}});};
  fitConsole();window.visualViewport?.addEventListener('resize',fitConsole);window.addEventListener('resize',fitConsole);
  function layout(){
-  fitConsole();container.dataset.split=String(panes.length===2);panes[0]?.title.append(split);
-  split.setAttribute('aria-pressed',String(panes.length===2));split.title=OaclisSettings.text(panes.length===2?'Chat singola':'Affianca chat');split.setAttribute('aria-label',split.title);
+  fitConsole();container.dataset.split=String(panes.length===2);
+  for(const [index,pane] of panes.entries()){
+   const split=pane.element.querySelector('.console-split');split.hidden=index!==0;
+   split.setAttribute('aria-pressed',String(panes.length===2));split.title=OaclisSettings.text(panes.length===2?'Chat singola':'Affianca chat');split.setAttribute('aria-label',split.title);
+  }
  }
  function remove(pane){saveDraft(pane.chat.id,pane===active?text.value:drafts.get(pane.chat.id)||'');consolePositions.set(pane.chat.id,pane.saved||{top:pane.screen.scrollTop,left:pane.screen.scrollLeft,follow:pane.console.follow});pane.closed=true;pane.console.closed=true;pane.jobsStatus.destroy();pane.element.remove();panes.splice(panes.indexOf(pane),1);}
  function activate(pane){
@@ -148,7 +150,7 @@ async function openConsole(chat,adjacent=false){
   files.paint();bindVoice(pane.chat);form.querySelectorAll('textarea,button').forEach(element=>element.disabled=!pane.ready||pane.console.preparingImage===true);layout();return true;
  }
  function add(selected,index=panes.length){
-  const element=OaclisTerminal.createPane({id:selected.id,name:selected.name,icon:OaclisTerminal.chatIcon(selected)},(action,body)=>action==='project'?runInput(()=>send(pane,'project',body)):action==='stop'?stopConsole(pane):submit(pane,body.key,action==='command'?body:null));
+  const element=OaclisTerminal.createPane({id:selected.id,name:selected.name,icon:OaclisTerminal.chatIcon(selected),onSplit:event=>{event.stopPropagation();toggleSplit();}},(action,body)=>action==='project'?runInput(()=>send(pane,'project',body)):action==='stop'?stopConsole(pane):submit(pane,body.key,action==='command'?body:null));
   const title=element.querySelector('.console-title'),name=element.querySelector('.console-name');
   const saved=consolePositions.get(selected.id),pane={chat:selected,element,title,name,jobsStatus:element.jobsStatus,screen:element.querySelector('pre'),console:element.console,ready:false,closed:false,saved};
   panes.splice(index,0,pane);container.insertBefore(element,container.children[index]||null);
@@ -251,7 +253,6 @@ async function openConsole(chat,adjacent=false){
  closeConsole=()=>{if(closed)return;files.destroy();reading?.abort();if(active)saveDraft(active.chat.id,text.value);for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleWorkspace=null;closeConsole=null;};
  text.addEventListener('input',()=>{if(active)saveDraft(active.chat.id,text.value);});
  document.getElementById('back').onclick=()=>protectedView().catch(()=>location.replace('/auth'));
- split.onclick=event=>{event.stopPropagation();toggleSplit();};
  const resume=()=>{if(closed)return;clearTimeout(pollTimer);if(document.hidden)reading?.abort();else{keepConsoleAwake();poll();}};document.addEventListener('visibilitychange',resume);
  const pane=add(chat);activate(pane);keepConsoleAwake();const ready=await send(pane,'open');schedulePoll(ready?200:1000);
 }

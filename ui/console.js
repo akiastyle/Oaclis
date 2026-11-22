@@ -1,4 +1,4 @@
-// console.js v3.144.2516
+// console.js v3.144.2550
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -199,9 +199,20 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
   panel.setAttribute("role", "dialog");
   panel.setAttribute("aria-label", OaclisSettings.text("Console Codex · ") + deviceName(deviceId));
   const chatIcon=OaclisTerminal.chatIcon({...connection.entry,...appearance(connection.entry),name:chatLabel(connection.entry)});
-  const pane=OaclisTerminal.createPane({id:connection.entry.id,name:chatLabel(connection.entry)+' · '+deviceName(deviceId),icon:chatIcon,openProject:()=>showConsoleProject(panel,connection.entry,deviceId)},(action,body)=>action==='stop'?stopConsole():action==='command'?submit(body.text):Object.hasOwn(body,'text')?submit():send({action,...body}));
+  const windowAction=document.documentElement.dataset.consoleWindow
+    ? {className:'console-dock',label:'Riporta nella pagina',run:()=>{panel.returnRequested=true;try{localStorage.setItem('oaclis-console-mode:'+windowKey,'embedded');}catch{}closeChatTerminal(panel);}}
+    : {className:'console-detach',label:'Apri in una finestra separata',run:()=>{
+      if(submitting||chat.preparingImage)return;
+      const url=new URL(location.pathname,location.origin);url.hash='console='+encodeURIComponent(JSON.stringify({id:connection.entry.id,name:chatLabel(connection.entry),device:deviceId}));
+      let geometry={width:Math.min(window.screen.availWidth,Math.max(480,panel.offsetWidth+16)),height:Math.min(window.screen.availHeight,Math.max(400,panel.offsetHeight+16))};
+      try{const saved=JSON.parse(localStorage.getItem('oaclis-console-window:'+windowKey)||'null');if(saved&&['left','top','width','height'].every(key=>Number.isFinite(saved[key]))&&saved.width>0&&saved.height>0)geometry={...saved,width:saved.width===panel.offsetWidth-20+16?saved.width+20:saved.width};}catch{}
+      const child=window.open(url,'oaclis-console-'+deviceId+'-'+connection.entry.id,'popup=yes,'+Object.entries(geometry).map(([key,value])=>key+'='+Math.round(value)).join(','));
+      if(!child){notice(OaclisSettings.text('Consenti l’apertura della finestra nel browser.'));return;}
+      try{localStorage.setItem('oaclis-console-mode:'+windowKey,'window');}catch{}
+      trackConsoleWindow(child,connection,anchor,deviceId,panel.consoleDraft());child.focus();closeChatTerminal(panel);
+    }};
+  const pane=OaclisTerminal.createPane({id:connection.entry.id,name:chatLabel(connection.entry)+' · '+deviceName(deviceId),icon:chatIcon,windowAction,onClose:()=>closeChatTerminal(panel),openProject:()=>showConsoleProject(panel,connection.entry,deviceId)},(action,body)=>action==='stop'?stopConsole():action==='command'?submit(body.text):Object.hasOwn(body,'text')?submit():send({action,...body}));
   const chat=pane.console;panel.activeConsole=chat;panel.querySelector('.console-panes').append(pane);
-  const close=document.createElement('button');close.type='button';close.className='icon-button popover-close';close.setAttribute('aria-label',OaclisSettings.text('Chiudi chat'));close.innerHTML=OaclisIcon('close');panel.querySelector('h2').append(close);
   document.body.append(panel);
   panel.showPopover();
   if(document.documentElement.dataset.consoleWindow){
@@ -247,25 +258,6 @@ function openChatTerminal(connection, anchor, deviceId, embedded=false) {
     panel.dataset.raised="true";panel.hidePopover();panel.showPopover();
     focus.focus({preventScroll:true});window.OaclisLocalVoice?.activate(panel);
   },true);
-  panel.querySelector(".popover-close").onclick = () => closeChatTerminal(panel);
-  if(!document.documentElement.dataset.consoleWindow){
-    const detach=document.createElement('button');detach.type='button';detach.className='icon-button console-detach';detach.title=OaclisSettings.text('Apri in una finestra separata');detach.setAttribute('aria-label',detach.title);detach.innerHTML=OaclisIcon('externalLink');
-    detach.onclick=()=>{
-      if(submitting||chat.preparingImage)return;
-      const url=new URL(location.pathname,location.origin);url.hash='console='+encodeURIComponent(JSON.stringify({id:connection.entry.id,name:chatLabel(connection.entry),device:deviceId}));
-      let geometry={width:Math.min(window.screen.availWidth,Math.max(480,panel.offsetWidth+16)),height:Math.min(window.screen.availHeight,Math.max(400,panel.offsetHeight+16))};
-      try{const saved=JSON.parse(localStorage.getItem('oaclis-console-window:'+windowKey)||'null');if(saved&&['left','top','width','height'].every(key=>Number.isFinite(saved[key]))&&saved.width>0&&saved.height>0)geometry={...saved,width:saved.width===panel.offsetWidth-20+16?saved.width+20:saved.width};}catch{}
-      const child=window.open(url,'oaclis-console-'+deviceId+'-'+connection.entry.id,'popup=yes,'+Object.entries(geometry).map(([key,value])=>key+'='+Math.round(value)).join(','));
-      if(!child){notice(OaclisSettings.text('Consenti l’apertura della finestra nel browser.'));return;}
-      try{localStorage.setItem('oaclis-console-mode:'+windowKey,'window');}catch{}
-      trackConsoleWindow(child,connection,anchor,deviceId,panel.consoleDraft());child.focus();closeChatTerminal(panel);
-    };
-    panel.querySelector('.popover-close').before(detach);
-  }else{
-    const dock=document.createElement('button');dock.type='button';dock.className='icon-button console-dock';dock.title=OaclisSettings.text('Riporta nella pagina');dock.setAttribute('aria-label',dock.title);dock.innerHTML=OaclisIcon('externalLink');
-    dock.onclick=()=>{panel.returnRequested=true;try{localStorage.setItem('oaclis-console-mode:'+windowKey,'embedded');}catch{}closeChatTerminal(panel);};
-    panel.querySelector('.popover-close').before(dock);
-  }
   const screen = panel.querySelector("pre"), form = panel.querySelector("form");
   const payload = { device_id: deviceId, chat_id: connection.entry.id };
   panel.jobsStatus=pane.jobsStatus;

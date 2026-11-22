@@ -1,4 +1,4 @@
-// terminal-format.js v1.44.404
+// terminal-format.js v1.44.421
 "use strict";
 const OaclisTerminal = (() => {
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
@@ -251,13 +251,24 @@ function consoleScreen(value){
     }
     load();return panel;
   }
-  function createPane({id,name,icon,openProject},transport){
+  function createPane({id,name,icon,openProject,onSplit,windowAction,onClose},transport){
    const pane=document.createElement('article');pane.className='console-pane';pane.setAttribute('aria-label',name);
    pane.innerHTML=OaclisSettings.html('<h2 class="console-title"><span class="console-name"></span></h2><pre class="console-screen" tabindex="0" aria-label="Console">Connessione…</pre>');
    pane.querySelector('.console-name').textContent=name;if(icon)pane.querySelector('h2').prepend(icon);
    const jobs=document.createElement('span');pane.querySelector('h2').append(jobs);pane.jobsStatus=OaclisJobs.inline(jobs);
-   const project=document.createElement('button');project.type='button';project.className='icon-button console-project-button';project.innerHTML=OaclisIcon('folder');project.title=OaclisSettings.text('File del progetto');project.setAttribute('aria-label',project.title);pane.querySelector('h2').append(project);
-   project.onclick=()=>openProject?openProject():projectFiles(transport,{container:pane});
+   const actions=document.createElement('span');actions.className='console-header-actions';pane.querySelector('h2').append(actions);
+   const buttons=[
+    ['console-project-button','folder','File del progetto',openProject||(()=>projectFiles(transport,{container:pane}))],
+    ['console-split secondary','split','Affianca chat',onSplit],
+    ['console-window '+(windowAction?.className||''),'externalLink',windowAction?.label,windowAction?.run],
+    ['console-close popover-close','close','Chiudi chat',onClose],
+   ];
+   for(const [className,icon,label,run] of buttons){
+    if(!run)continue;
+    const button=document.createElement('button');button.type='button';button.className='icon-button '+className;button.innerHTML=OaclisIcon(icon);
+    button.title=OaclisSettings.text(label);button.setAttribute('aria-label',button.title);
+    button.onclick=run;actions.append(button);
+   }
    const screen=pane.querySelector('pre');
    const chat=pane.console={id,send:transport,follow:true,revision:'',image:null,preparingImage:false,closed:false,pendingScreen:null,
     render(result,operation='read',saved=null){
