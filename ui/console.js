@@ -1,4 +1,4 @@
-// console.js v3.144.2550
+// console.js v3.144.2566
 "use strict";
 // Shared controller state and API helpers are defined in app.js.
 const detachedConsoles=new Map(),returnedConsoleWindows=new WeakSet(),consoleWindowStops=new WeakMap();
@@ -167,17 +167,25 @@ function trackConsoleWindow(child,connection,anchor,deviceId,draft,returnRequest
     if(event.data.kind==='oaclis-console-draft'&&event.data.active&&typeof event.data.entry?.id==='string'&&/^[\w-]{1,160}$/.test(event.data.entry.id)){draft=event.data.draft;returnConnection={entry:event.data.entry};}
   };
   window.addEventListener('message',receive);detachedConsoles.set(key,child);
-  const watch=setInterval(()=>{
+  const watch=setInterval(async()=>{
     if(!child.closed)return;
     clearInterval(watch);window.removeEventListener('message',receive);if(detachedConsoles.get(key)===child)detachedConsoles.delete(key);if(consoleWindowStops.get(child)===stopped)consoleWindowStops.delete(child);returnedConsoleWindows.add(child);
     if(!returnConnection||!returnRequested)return;
-    openChatTerminal(returnConnection,anchor?.isConnected?anchor:document.querySelector('#add-device'),deviceId,true);
+    await openChatTerminal(returnConnection,anchor?.isConnected?anchor:document.querySelector('#add-device'),deviceId,true);
     [...document.querySelectorAll('.chat-terminal')].find(panel=>panel.dataset.chatId===returnConnection.entry.id&&panel.dataset.deviceId===deviceId)?.restoreDraft(draft);
   },500);
 }
 
-function openChatTerminal(connection, anchor, deviceId, embedded=false) {
-  const windowKey=JSON.stringify([deviceId,connection.entry.id]),detached=detachedConsoles.get(windowKey);
+async function openChatTerminal(connection, anchor, deviceId, embedded=false) {
+  const windowKey=JSON.stringify([deviceId,connection.entry.id]);
+  if(!document.documentElement.dataset.consoleWindow&&navigator.locks){
+    const {held}=await navigator.locks.query();
+    if(held.some(lock=>lock.name==='oaclis-console:'+windowKey)){
+      detachedConsoles.get(windowKey)?.focus();
+      return;
+    }
+  }
+  const detached=detachedConsoles.get(windowKey);
   if(detached&&!detached.closed){detached.focus();return;}
   const existing = [...document.querySelectorAll(".chat-terminal")].find(p =>
     p.dataset.chatId === connection.entry.id && p.dataset.deviceId === deviceId);

@@ -1,4 +1,4 @@
-// read-aloud.js v1.25.394
+// read-aloud.js v1.25.396
 'use strict';
 window.OaclisReadAloud=(()=>{
  function spokenText(raw){
@@ -7,7 +7,7 @@ window.OaclisReadAloud=(()=>{
    const marker=line.match(/^\s{0,3}(`{3,}|~{3,})/);
    if(marker){if(!fence)fence=marker[1][0];else if(marker[1][0]===fence)fence=null;continue;}
    if(fence||/^(?: {4}|\t)/.test(line))continue;
-   let text=line.replace(/(`+)([\s\S]*?)\1/g,'');
+   let text=line.replace(/(`+)([\s\S]*?)\1/g,'$2');
    const unmatched=text.indexOf('`');if(unmatched>=0)text=text.slice(0,unmatched);
    text=text.replace(/!\[([^\]]*)\]\([^)]*\)/g,'$1').replace(/\[([^\]]+)\]\([^)]*\)/g,'$1')
     .replace(/https?:\/\/\S+/g,'').replace(/<[^>]*>/g,'').replace(/^\s*(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)]\s+)/,'')

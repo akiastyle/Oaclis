@@ -1,4 +1,4 @@
-// app.js v4.167.3239
+// app.js v4.167.3249
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -459,6 +459,16 @@ window.onresize = () => {
   for (const panel of document.querySelectorAll('.context-popover:popover-open')) {if(panel.dataset.snap&&panel.snapConsole)panel.snapConsole(panel.dataset.snap);else positionContext(panel,panel.opener);}
 };
 guard(async () => {
+  if(consoleWindow&&!consoleWindow.project&&navigator.locks){
+    const key='oaclis-console:'+JSON.stringify([consoleWindow.device,consoleWindow.id]);
+    const acquired=await new Promise((resolve,reject)=>{
+      navigator.locks.request(key,{ifAvailable:true},lock=>{
+        resolve(Boolean(lock));
+        if(lock)return new Promise(()=>{});
+      }).catch(reject);
+    });
+    if(!acquired){window.close();return;}
+  }
   data = await api("state");
   if(consoleWindow){
     if(consoleWindow.project===true){openProjectFilesWindow(consoleWindow);return;}
