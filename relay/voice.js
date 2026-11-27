@@ -1,4 +1,4 @@
-// voice.js v2.61.1492
+// voice.js v2.61.1496
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -51,7 +51,9 @@ window.OaclisVoice=(()=>{
    const text=phrase.trim(),currentRevision=phraseRevision;clearPhrase();
    if(!text||currentRevision!==revision||!wanted)return;
    const words=text.split(/\s+/),last=parse(words.at(-1));
-   if(!paused&&words.length>1&&last.type==='command'&&last.id==='send'){
+   if(paused&&locale.language==='it'&&last.id==='resumeRec'&&words.every(word=>['avvia','riprendi'].includes(normalize(word)))){
+    await route(words.at(-1));
+   }else if(!paused&&words.length>1&&last.type==='command'&&last.id==='send'){
     await route(words.slice(0,-1).join(' '),true);await route(words.at(-1));
    }else await route(text);
   }
