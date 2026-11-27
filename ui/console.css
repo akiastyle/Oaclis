@@ -1,4 +1,4 @@
-/* console.css v2.0.1683 */
+/* console.css v2.0.1685 */
 .oaclis-console,.voice-controls,.voice-dialog{--console-ink:var(--ink,var(--text));--console-line:var(--line,#ffffff26);--console-soft:var(--soft,#394247);--console-accent:var(--accent,var(--ink));color:var(--console-ink)}
 .oaclis-console[popover]:not(:popover-open){display:none}
 .oaclis-console{display:grid;grid-template-rows:minmax(0,1fr) auto auto;gap:8px;--console-input-radius:8px;--console-send-background:#54caba;--console-send-ink:#08231f;min-width:0;min-height:0;overflow:hidden}
@@ -21,7 +21,7 @@
 .console-send svg{width:24px;height:24px}
 .terminal-keys{display:flex;flex-wrap:wrap;align-items:center;gap:4px;min-width:0;margin:0}
 .terminal-keys>button,.voice-controls>button{display:grid;place-items:center;flex:0 1 36px;width:36px;min-width:0;height:36px;margin:0;padding:4px;border:1px solid var(--console-line);border-radius:var(--radius-control,8px);background:var(--console-soft);color:var(--console-ink);font-size:13px;line-height:1.2}
-.terminal-keys [data-key="C-c"]{font-size:10px;padding-inline:0}
+.terminal-keys :is([data-key="C-c"],[data-key="C-t"]){font-size:10px;padding-inline:0}
 .voice-controls{display:inline-flex;align-items:center;gap:4px;flex:none}
 .terminal-keys>.voice-controls{margin-left:auto}
 .voice-controls>button{flex:none}

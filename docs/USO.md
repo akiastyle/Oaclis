@@ -56,7 +56,7 @@ la cartella viene ereditata dal contesto della chat da cui si crea.
 | Inviare un messaggio | Pulsante freccia oppure Invio | Il testo viene inviato alla console selezionata. Shift+Invio inserisce un a capo. |
 | Rispondere a una scelta numerata | 1, 2 o 3 | Il tasto viene inoltrato al programma nella console. |
 | Aprire una domanda Codex in attesa | ⇧← | Invia Shift+freccia sinistra, come indicato da Codex con `shift+← to answer`. |
-| Passare fra elementi previsti dal programma | Tab | Invia il tasto Tab alla console. |
+| Mostrare o chiudere il transcript | Ctrl+T | Invia la scorciatoia del transcript alla console. |
 | Richiamare i modelli | Mod | Invia `/model` seguito da Invio. |
 | Interrompere il lavoro corrente | Esc | In Codex invia Escape; in llama.cpp interrompe la generazione. |
 | Terminare la sessione selezionata | Ctrl+C | Ferma la sessione e chiude le sue viste. Lo storico della chat resta disponibile. |

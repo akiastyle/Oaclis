@@ -54,7 +54,7 @@ I comandi rapidi condivisi sono:
 | 1 · 2 · 3 | Risponde alle scelte numerate del programma. |
 | Ctrl+C | Termina la sessione selezionata e chiude le relative viste. |
 | ⇧← | Invia Shift + freccia sinistra per rispondere alle domande in attesa di Codex. |
-| Tab | Invia Tab alla console. |
+| Ctrl+T | Mostra o chiude il transcript di Codex. |
 | Mod | Invia `/model` e Invio per aprire la selezione del modello in Codex. |
 | ⓘ | Apre guida e impostazioni dei comandi vocali. |
 

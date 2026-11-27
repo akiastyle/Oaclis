@@ -1,4 +1,4 @@
-// terminal-format.js v1.44.429
+// terminal-format.js v1.44.433
 "use strict";
 const OaclisTerminal = (() => {
   const chatOrder=new Intl.Collator('it',{numeric:true,sensitivity:'base'});
@@ -201,8 +201,8 @@ function consoleScreen(value){
    const view=document.createElement('section');view.className='oaclis-console';
    view.innerHTML=OaclisSettings.html('<div class="console-panes"></div><form class="terminal-input"><div class="console-draft"><div class="console-attachment" hidden><img alt=""><button type="button" data-console-action="remove-image" aria-label="Rimuovi immagine">'+OaclisIcon('close')+'</button></div><textarea name="text" maxlength="8000" aria-label="Messaggio" rows="2" placeholder="Scrivi un messaggio" disabled></textarea></div><button type="submit" class="console-send icon-button" data-console-action="send" aria-label="Invia messaggio" aria-haspopup="menu" aria-expanded="false" disabled>'+OaclisIcon('arrowUp')+'</button></form><div class="terminal-keys"></div>');
    const keys=view.querySelector('.terminal-keys');
-   for(const [key,label]of [['Escape','Esc'],['1','1'],['2','2'],['3','3'],['C-c','Ctrl+C'],['S-Left','⇧←'],['Tab','Tab'],['/model','Mod'],['clearText','Canc']]){
-    const button=document.createElement('button');button.type='button';button.className='icon-button';button.textContent=label;button.dataset.key=key;button.title=key==='/model'?'/model':key==='S-Left'?'Shift+←':label;button.setAttribute('aria-label',button.title);keys.append(button);
+   for(const [key,label]of [['Escape','Esc'],['1','1'],['2','2'],['3','3'],['C-c','Ctrl+C'],['S-Left','⇧←'],['C-t','Ctrl+T'],['/model','Mod'],['clearText','Canc']]){
+    const button=document.createElement('button');button.type='button';button.className='icon-button';button.textContent=label;button.dataset.key=key;button.title=key==='/model'?'/model':key==='S-Left'?'Shift+←':key==='C-t'?'Ctrl+T · Transcript':label;button.setAttribute('aria-label',button.title);keys.append(button);
    }
    const voice=document.createElement('span');voice.className='voice-controls';keys.append(voice);
    view.command=(action,value,chat=view.activeConsole)=>{
