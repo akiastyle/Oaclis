@@ -1,4 +1,4 @@
-// app.js v2.131.1314
+// app.js v2.131.1319
 'use strict';
 if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
 const app=document.getElementById('app');
@@ -127,7 +127,6 @@ async function openConsole(chat,adjacent=false){
  show('');
  const view=OaclisTerminal.createConsole();app.append(view);
  view.querySelector('.console-panes').id='console-panes';view.querySelector('form').id='console-input';view.querySelector('.console-send').id='console-send';view.querySelector('.terminal-keys').id='console-keys';
- const back=document.createElement('button');back.type='button';back.id='back';back.className='secondary';back.title=OaclisSettings.text('Chat autorizzate');back.setAttribute('aria-label',back.title);back.innerHTML=OaclisIcon('chevronLeft');view.querySelector('.terminal-keys').prepend(back);
  const dialog=document.createElement('dialog');dialog.id='console-picker';dialog.className='voice-dialog';dialog.setAttribute('aria-label',OaclisSettings.text('Affianca chat'));app.append(dialog);
  const panes=[],container=document.getElementById('console-panes'),form=document.getElementById('console-input'),text=form.querySelector('textarea'),keys=document.getElementById('console-keys'),picker=document.getElementById('console-picker');
   let active=null,closed=false,pollTimer=null,queue=Promise.resolve(),pending=null,reading=null,inputBusy=false,polling=false;
@@ -137,6 +136,7 @@ async function openConsole(chat,adjacent=false){
   fitConsole();container.dataset.split=String(panes.length===2);
   for(const [index,pane] of panes.entries()){
    const split=pane.element.querySelector('.console-split');split.hidden=index!==0;
+   pane.element.querySelector('.console-close').hidden=index!==0;
    split.setAttribute('aria-pressed',String(panes.length===2));split.title=OaclisSettings.text(panes.length===2?'Chat singola':'Affianca chat');split.setAttribute('aria-label',split.title);
   }
  }
@@ -150,7 +150,7 @@ async function openConsole(chat,adjacent=false){
   files.paint();bindVoice(pane.chat);form.querySelectorAll('textarea,button').forEach(element=>element.disabled=!pane.ready||pane.console.preparingImage===true);layout();return true;
  }
  function add(selected,index=panes.length){
-  const element=OaclisTerminal.createPane({id:selected.id,name:selected.name,icon:OaclisTerminal.chatIcon(selected),onSplit:event=>{event.stopPropagation();toggleSplit();}},(action,body)=>action==='project'?runInput(()=>send(pane,'project',body)):action==='stop'?stopConsole(pane):submit(pane,body.key,action==='command'?body:null));
+  const element=OaclisTerminal.createPane({id:selected.id,name:selected.name,icon:OaclisTerminal.chatIcon(selected),onSplit:event=>{event.stopPropagation();toggleSplit();},onClose:()=>protectedView().catch(()=>location.replace('/auth'))},(action,body)=>action==='project'?runInput(()=>send(pane,'project',body)):action==='stop'?stopConsole(pane):submit(pane,body.key,action==='command'?body:null));
   const title=element.querySelector('.console-title'),name=element.querySelector('.console-name');
   const saved=consolePositions.get(selected.id),pane={chat:selected,element,title,name,jobsStatus:element.jobsStatus,screen:element.querySelector('pre'),console:element.console,ready:false,closed:false,saved};
   panes.splice(index,0,pane);container.insertBefore(element,container.children[index]||null);
@@ -252,7 +252,6 @@ async function openConsole(chat,adjacent=false){
  },split:()=>panes.length===2,selectPane:position=>activate(panes[['sotto','bottom'].includes(OaclisVoice.normalize(position))?1:0])};
  closeConsole=()=>{if(closed)return;files.destroy();reading?.abort();if(active)saveDraft(active.chat.id,text.value);for(const pane of [...panes])remove(pane);closed=true;clearTimeout(pollTimer);window.visualViewport?.removeEventListener('resize',fitConsole);window.removeEventListener('resize',fitConsole);document.removeEventListener('visibilitychange',resume);document.documentElement.style.removeProperty('--console-height');consoleWorkspace=null;closeConsole=null;};
  text.addEventListener('input',()=>{if(active)saveDraft(active.chat.id,text.value);});
- document.getElementById('back').onclick=()=>protectedView().catch(()=>location.replace('/auth'));
  const resume=()=>{if(closed)return;clearTimeout(pollTimer);if(document.hidden)reading?.abort();else{keepConsoleAwake();poll();}};document.addEventListener('visibilitychange',resume);
  const pane=add(chat);activate(pane);keepConsoleAwake();const ready=await send(pane,'open');schedulePoll(ready?200:1000);
 }

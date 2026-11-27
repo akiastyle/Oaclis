@@ -106,7 +106,7 @@ Desktop e PWA usano lo stesso motore vocale e gli stessi comandi, disponibili in
 
 Fra i comandi disponibili ci sono invio, cambio chat per nome o numero, pausa e ripresa della dettatura. È disponibile anche l’invio automatico dopo il tempo di attesa scelto nelle impostazioni. La guida ⓘ mostra le frasi e le impostazioni disponibili. I comandi vengono interpretati secondo il contesto, evitando di eseguire una parola di comando semplicemente perché compare dentro una frase dettata.
 
-Dopo l'invio la scrittura può restare in pausa mantenendo l'ascolto dei comandi. «Riprendi» riabilita la dettatura. Il riconoscimento e la riproduzione vocale condividono un workflow che distingue dettatura, pausa e lettura delle risposte.
+Dopo l'invio la scrittura può restare in pausa mantenendo l'ascolto dei comandi. «Avvia» riabilita la dettatura. Il riconoscimento e la riproduzione vocale condividono un workflow che distingue dettatura, pausa e lettura delle risposte.
 
 Per usare la voce è richiesto **Google Chrome**. Il riconoscimento usa `SpeechRecognition`/`webkitSpeechRecognition`; la lettura usa le voci esposte da Chrome e dal sistema.
 

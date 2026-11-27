@@ -1,4 +1,4 @@
-// locale.js v1.3.630
+// locale.js v1.3.636
 'use strict';
 window.OaclisSettings=(()=>{
  // Set language to 'it' or 'en' to pin it; 'auto' follows browser preferences.
@@ -417,7 +417,7 @@ window.OaclisSettings=(()=>{
   "Operazione non completata. Riprova.": "Operation incomplete. Try again.",
   "Comando eseguito": "Command completed",
   "Attiva voce": "Enable voice",
-  "Dettatura in pausa · riprendi": "Dictation paused · say resume dictation",
+  "Dettatura in pausa · clic o Avvia": "Dictation paused · click or say Resume",
   "Dettatura attiva · clic per spegnere": "Dictation active · click to turn off",
   "Collegamento o elaborazione vocale · clic per spegnere": "Voice connecting or processing · click to turn off",
   "Ascolto disattivato": "Listening off",
@@ -505,7 +505,7 @@ window.OaclisSettings=(()=>{
    ['clearDraft',['cancella']],
    ['takePhoto',['foto']],['pickImage',['archivio']],['removeImage',['rimuovi immagine']],
    ['readOn',['voce on']],['readOff',['voce off']],['readStop',['voce stop']],
-   ['pauseRec',['pausa']],['resumeRec',['riprendi']],['help',['comandi']],['stop',['spegni']],
+   ['pauseRec',['pausa']],['resumeRec',['avvia']],['help',['comandi']],['stop',['spegni']],
   ]
  };
  const english={
@@ -534,7 +534,7 @@ window.OaclisSettings=(()=>{
  const voice=language==='it'?it:english;
  function text(value){
   if(typeof value!=='string')return value;
-  if(language==='it')return value.replace('start rec per riprendere','pronuncia riprendi').replace('Italiano non disponibile.','Lingua vocale non disponibile.');
+  if(language==='it')return value.replace('start rec per riprendere','pronuncia Avvia').replace('Italiano non disponibile.','Lingua vocale non disponibile.');
   const trimmed=value.trim();
   return Object.hasOwn(en,trimmed)?value.replace(trimmed,en[trimmed]):value;
  }

@@ -122,7 +122,7 @@ attiva la dettatura; il pulsante voce abilita la lettura delle risposte.
 La guida ⓘ elenca comandi vocali e impostazioni, incluse attesa e invio automatico.
 
 - Dettare il testo e usare «Invia» per spedirlo.
-- Se la scrittura è in pausa dopo l'invio, dire «Riprendi» per tornare a dettare.
+- Se la scrittura è in pausa dopo l'invio, dire «Avvia» per tornare a dettare.
 - Usare «Cambia» con il nome o il numero della chat per selezionarla.
 - Spegnere il microfono con il pulsante o il comando previsto dalla guida.
 

@@ -1,4 +1,4 @@
-// voice.js v2.61.1484
+// voice.js v2.61.1492
 'use strict';
 window.OaclisVoice=(()=>{
  const locale=OaclisSettings,grammar=locale.voice;
@@ -66,7 +66,7 @@ window.OaclisVoice=(()=>{
    if(button.disabled){button.dataset.mode='off';button.setAttribute('aria-pressed','false');button.title=locale.text('Voce non disponibile in questo browser.');button.setAttribute('aria-label',button.title);return;}
    const mode=!wanted?'off':state!=='listening'?'busy':paused?'paused':'listening';
    button.dataset.state=state;button.dataset.mode=mode;button.setAttribute('aria-pressed',String(wanted));
-   button.title=locale.text(({off:'Attiva voce',paused:'Dettatura in pausa · riprendi',listening:'Dettatura attiva · clic per spegnere',busy:'Collegamento o elaborazione vocale · clic per spegnere'})[mode]);
+   button.title=locale.text(({off:'Attiva voce',paused:'Dettatura in pausa · clic o Avvia',listening:'Dettatura attiva · clic per spegnere',busy:'Collegamento o elaborazione vocale · clic per spegnere'})[mode]);
    button.setAttribute('aria-label',button.title);
   };
   const clearPending=()=>{clearTimeout(pendingTimer);pending=null;if(options){if(options.open)options.close();options.replaceChildren();}};
@@ -298,7 +298,11 @@ window.OaclisVoice=(()=>{
     help=document.createElement('dialog');help.className='voice-help voice-dialog';help.setAttribute('aria-label',locale.text('Comandi vocali'));
     root.append(status,preview,options,help);
     button=document.createElement('button');button.type='button';button.className='voice-mic secondary icon-button';button.dataset.voiceAction='microphone';button.innerHTML=OaclisIcon('microphone');controls.append(button);
-    button.onclick=()=>setListening(!wanted,false);
+    button.onclick=event=>{
+     if(event.detail>1){stop(false);return;}
+     if(paused){reader?.skip();setPaused(false,true);return;}
+     setListening(!wanted,false);
+    };
     if(!Recognition||!window.isSecureContext){button.disabled=true;feedback('Voce non disponibile in questo browser.');}
     info=document.createElement('button');info.type='button';info.className='voice-info secondary icon-button';info.dataset.voiceAction='commands';info.title=locale.text('Comandi vocali');info.setAttribute('aria-label',info.title);info.innerHTML=OaclisIcon('info');info.onclick=showHelp;controls.append(info);
    }else if(host!==controls){host.replaceWith(controls);}

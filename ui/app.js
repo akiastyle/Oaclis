@@ -1,4 +1,4 @@
-// app.js v4.167.3249
+// app.js v4.167.3253
 "use strict";
 OaclisSettings.translate(document.body);
 let consoleWindow=null;
@@ -242,7 +242,9 @@ $("#close").onclick = closePanel;
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && $("#path-authorization[open]")) return;
   if (e.key === "Escape" && $("#terminal-choice")) { $("#terminal-choice .popover-close").click(); return; }
-  if (e.key === "Escape" && document.activeElement?.closest(".chat-terminal")) { closeChatTerminal(document.activeElement.closest(".chat-terminal")); return; }
+  if(e.key!=='Escape'||e.defaultPrevented||e.isComposing||$('dialog:modal,.console-send-menu:popover-open'))return;
+  const panel=document.activeElement?.closest('.chat-terminal')||$('html[data-console-window] .chat-terminal[data-window-active]');
+  if(panel){e.preventDefault();if(!e.repeat)panel.command('key','Escape');}
 });
 $("#back").onclick = showLibrary;
 async function openDevice(id) {
